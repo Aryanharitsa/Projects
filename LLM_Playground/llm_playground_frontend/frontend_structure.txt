@@ -1,0 +1,29 @@
+.
+├── components.json
+├── eslint.config.js
+├── frontend_structure.txt
+├── index.html
+├── jsconfig.json
+├── package.json
+├── pnpm-lock.yaml
+├── public
+│   ├── favicon.ico
+│   └── vite.svg
+├── src
+│   ├── App.css
+│   ├── App.jsx
+│   ├── assets
+│   │   └── react.svg
+│   ├── components
+│   │   └── ui
+│   ├── hooks
+│   │   └── use-mobile.js
+│   ├── index.css
+│   ├── lib
+│   │   └── utils.js
+│   ├── main.jsx
+│   └── services
+│       └── api.js
+└── vite.config.js
+
+9 directories, 18 files
