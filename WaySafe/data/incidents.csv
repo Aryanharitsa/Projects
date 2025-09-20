@@ -1,0 +1,3 @@
+id,user,lat,lon,category,note,photo_path,sha256,sig,status,created_at
+0864db26-1843-4492-afda-cc09a06935cf,user-c0d5d598,15.55,73.77,accident,two trucks with a head-on collision.,data/uploads/8b8e4b8ca3.jpg,c150ad669834e7038c1a4b744c2fbdc7cdf5008e7545db5d74fa6029fc66a96d,sig-user-c,verified,2025-09-16T10:04:16.564753
+acc465ab-4d2b-4d52-b5ba-7498dd041868,user-35b643ec,15.55,73.77,accident,,data/uploads/089570e630.jpg,5e6c61672482acc02cb0d6d989bd7af3bcdfe636d4d32c62a77b4a0d655b85e8,sig-user-3,verified,2025-09-16T10:39:00.169408

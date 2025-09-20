@@ -1,0 +1,110 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 1,
+        "name": "Baga\u2013Calangute Belt",
+        "ftype": "risk"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.741,
+              15.533
+            ],
+            [
+              73.78,
+              15.533
+            ],
+            [
+              73.78,
+              15.565
+            ],
+            [
+              73.741,
+              15.565
+            ],
+            [
+              73.741,
+              15.533
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 2,
+        "name": "Fort Aguada Cliffs",
+        "ftype": "risk"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              73.77,
+              15.479
+            ],
+            [
+              73.795,
+              15.479
+            ],
+            [
+              73.795,
+              15.505
+            ],
+            [
+              73.77,
+              15.505
+            ],
+            [
+              73.77,
+              15.479
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": 3,
+        "name": "Dudhsagar Approach",
+        "ftype": "risk"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              74.295,
+              15.29
+            ],
+            [
+              74.335,
+              15.29
+            ],
+            [
+              74.335,
+              15.33
+            ],
+            [
+              74.295,
+              15.33
+            ],
+            [
+              74.295,
+              15.29
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
