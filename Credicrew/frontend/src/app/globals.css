@@ -2,3 +2,7 @@
 
 :root { color-scheme: light; }
 html, body { height: 100%; }
+body { 
+  /* base look */
+  font-feature-settings: "rlig" 1, "calt" 1;
+}

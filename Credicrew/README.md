@@ -1,38 +1,74 @@
-Minimal working API for the Credicrew project. Frontend and ML can be added later.
+# 🚀 Credicrew
 
-Minimal working API for the Credicrew project. Frontend and ML can be added later.
+Credicrew is a modern recruitment and talent discovery platform.  
+It helps companies **discover, filter, and manage candidates** with a sleek **Next.js + Tailwind frontend** and a **FastAPI backend**.
 
-1) Create a venv and install deps
-   python3 -m venv Credicrew/backend/.venv
-   source Credicrew/backend/.venv/bin/activate
-   python -m pip install -r Credicrew/backend/requirements.txt
+---
 
-2) Configure env
-   cp Credicrew/.env.example Credicrew/.env
+## ✨ Features
+- 🔎 **Search & Filter** candidates by role, skills, and score  
+- 🌗 **Dark/Light theme toggle**  
+- 💾 **Save candidates** to a pipeline for later  
+- 📄 **View candidate CVs** on a dedicated profile page  
+- ➕ **Submit new candidates** directly via the platform  
 
-3) Start Postgres (Docker)
-   docker run --name credicrew-pg -d -p 5432:5432 \
-     -e POSTGRES_DB=credicrew -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-     ankane/pgvector:0.5.1
+---
 
-4) Run the API
-   cd Credicrew/backend
-   source .venv/bin/activate
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+## 🖼 Screenshots
 
-5) Health check
-   curl http://localhost:8000/health
+### Discover Page
+![Discover](./Credicrew_1.png)
 
+### Pipeline Page
+![Pipeline](./Credicrew_2.png)
 
-## Project Structure
+### Candidate CV Page
+![CV](./Credicrew_3.png)
+
+---
+
+## 🛠 Tech Stack
+- **Frontend:** Next.js 14, TypeScript, TailwindCSS  
+- **Backend:** FastAPI (Python)  
+- **Database:** SQLite / PostgreSQL  
+- **Styling:** TailwindCSS with dark/light theme  
+
+---
+
+## ⚡ Getting Started
+
+```bash
+# Clone the repo
+git clone <your-repo-url>
+cd Credicrew
+
+# --- Backend setup ---
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # (use .venv\Scripts\activate on Windows)
+pip install -r requirements.txt
+uvicorn main:app --reload
+
+# --- Frontend setup ---
+cd ../frontend
+npm install
+npm run dev
+
+📌 Project Structure
 
 Credicrew/
-  backend/        FastAPI app (health endpoint)
-  docs/           Documentation
-  ml/             Notebooks and pipelines (placeholder)
-  .env.example    Example environment file
-  .gitignore
+ ├── backend/      # FastAPI backend
+ ├── frontend/     # Next.js + Tailwind frontend
+ ├── docs/         # Documentation
+ ├── ml/           # Machine learning experiments
+ ├── README.md     # Project readme
+ ├── Credicrew_1.png
+ ├── Credicrew_2.png
+ ├── Credicrew_3.png
 
-## Next
-- Add endpoints for roles, candidates, matching
-- Add seed scripts and tests
+
+🤝 Contributing
+
+Pull requests are welcome! For major changes, open an issue first to discuss what you’d like to change.
+
+MIT License © 2025 Credicrew

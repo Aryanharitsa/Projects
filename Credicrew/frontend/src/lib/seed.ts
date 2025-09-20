@@ -1,0 +1,61 @@
+export type Candidate = {
+  id: string;
+  name: string;
+  title: string;
+  location: string;
+  skills: string[];
+  score: number;
+};
+
+export const candidates: Candidate[] = [
+  { id:"1",  name:"Ananya Rao",     title:"Frontend Engineer",     location:"Bengaluru",         skills:["React","Next.js","Tailwind"],                      score:92 },
+  { id:"2",  name:"Karthik Menon",  title:"Data Engineer",         location:"Hyderabad",         skills:["Python","Airflow","SQL"],                           score:88 },
+  { id:"3",  name:"Riya Shah",      title:"ML Engineer",           location:"Pune",              skills:["PyTorch","Transformers","LLMs"],                    score:85 },
+  { id:"4",  name:"Vikram Iyer",    title:"Backend Engineer",      location:"Remote (IN)",       skills:["FastAPI","PostgreSQL","Docker"],                    score:86 },
+  { id:"5",  name:"Ishita Verma",   title:"Product Designer",      location:"Bengaluru",         skills:["Figma","Design Systems","Prototyping"],             score:83 },
+  { id:"6",  name:"Samar Gupta",    title:"Mobile Engineer",       location:"Delhi NCR",         skills:["Flutter","Kotlin","Firebase"],                      score:80 },
+  { id:"7",  name:"Neha Kulkarni",  title:"DevOps Engineer",       location:"Pune",              skills:["AWS","Terraform","CI/CD"],                          score:89 },
+  { id:"8",  name:"Arun Prasad",    title:"Security Engineer",     location:"Chennai",           skills:["AppSec","OWASP","SAST/DAST"],                       score:78 },
+  { id:"9",  name:"Meera Nair",     title:"Data Scientist",        location:"Remote (IN)",       skills:["Pandas","XGBoost","Experimentation"],               score:84 },
+  { id:"10", name:"Rohan Bhatt",    title:"Full-stack Engineer",   location:"Bengaluru",         skills:["Next.js","Node.js","Prisma"],                       score:90 },
+  { id:"11", name:"Aisha Khan",     title:"QA Automation",         location:"Hyderabad",         skills:["Playwright","Cypress","API Testing"],               score:82 },
+  { id:"12", name:"Dev Patel",      title:"Platform Engineer",     location:"Bengaluru",         skills:["Kubernetes","Kafka","Observability"],               score:87 },
+  { id:"13", name:"Tanvi Joshi",    title:"AI Product Manager",    location:"Mumbai",            skills:["Roadmaps","Prompting","RAG"],                       score:81 },
+  { id:"14", name:"Harsh Vardhan",  title:"SRE",                   location:"Remote (IN)",       skills:["Grafana","Prometheus","On-call"],                   score:79 },
+  { id:"15", name:"Priya Sethi",    title:"NLP Engineer",          location:"Delhi NCR",         skills:["spaCy","HF Transformers","T5"],                     score:88 },
+  { id:"16", name:"Kabir Malhotra", title:"iOS Engineer",          location:"Bengaluru",         skills:["SwiftUI","Combine","XCTest"],                       score:77 },
+  { id:"17", name:"Sneha Desai",    title:"Growth Analyst",        location:"Remote (IN)",       skills:["SQL","Amplitude","Experiment Design"],              score:76 },
+  { id:"18", name:"Aarav Jain",     title:"GenAI Engineer",        location:"Pune",              skills:["LangChain","OpenAI","Vector DBs"],                  score:91 },
+  { id:"19", name:"Nivedita Roy",   title:"Frontend Engineer",     location:"Kolkata",           skills:["Vue","TypeScript","Vitest"],                        score:83 },
+  { id:"20", name:"Aditya Bansal",  title:"Backend Engineer",      location:"Bengaluru",         skills:["Go","gRPC","PostgreSQL"],                            score:86 },
+  { id:"21", name:"Zoya Farooq",    title:"Data Engineer",         location:"Pune",              skills:["Spark","Delta Lake","Databricks"],                  score:84 },
+  { id:"22", name:"Rudra Chawla",   title:"ML Engineer",           location:"Hyderabad",         skills:["TensorFlow","Keras","MLOps"],                      score:82 },
+  { id:"23", name:"Keerthi R",      title:"QA SDET",               location:"Chennai",           skills:["Java","Selenium","Karate"],                         score:80 },
+  { id:"24", name:"Abhay Mehta",    title:"Platform Engineer",     location:"Gurgaon",           skills:["Istio","ArgoCD","Helm"],                             score:85 },
+  { id:"25", name:"Lavanya Iyer",   title:"Product Designer",      location:"Bengaluru",         skills:["UX Research","Handoffs","Tokens"],                  score:82 },
+  { id:"26", name:"Parth Rawat",    title:"Full-stack Engineer",   location:"Remote (IN)",       skills:["Remix","Postgres","Drizzle"],                       score:87 },
+  { id:"27", name:"Kavya Rao",      title:"Frontend Engineer",     location:"Bengaluru",         skills:["Next.js","Tailwind","Framer Motion"],               score:91 },
+  { id:"28", name:"Sameer Khan",    title:"Security Engineer",     location:"Mumbai",            skills:["Threat Modeling","CloudSec","KMS"],                 score:81 },
+  { id:"29", name:"Ritesh J",       title:"SRE",                   location:"Pune",              skills:["SLOs","SRE Playbooks","Keda"],                      score:83 },
+  { id:"30", name:"Mahima Gupta",   title:"GenAI Engineer",        location:"Hyderabad",         skills:["RAG","Embeddings","Guardrails"],                    score:89 },
+  { id:"31", name:"Armaan K",       title:"Data Scientist",        location:"Bengaluru",         skills:["Causal Inference","Uplift Models","A/B"],           score:86 },
+  { id:"32", name:"Nisha Menon",    title:"ML Engineer",           location:"Delhi NCR",         skills:["NVIDIA Triton","ONNX","Quantization"],              score:84 },
+  { id:"33", name:"Hrithik S",      title:"Backend Engineer",      location:"Chennai",           skills:["Rust","Axum","SQLx"],                               score:82 },
+  { id:"34", name:"Akansha P",      title:"Frontend Engineer",     location:"Pune",              skills:["Svelte","TanStack","Auth"],                         score:80 },
+  { id:"35", name:"Soham Deshpande",title:"DevOps Engineer",       location:"Bengaluru",         skills:["GitHub Actions","Ansible","Packer"],                score:88 },
+  { id:"36", name:"Navya R",        title:"QA Automation",         location:"Remote (IN)",       skills:["Playwright","Postman","k6"],                        score:81 },
+  { id:"37", name:"Kiran P",        title:"iOS Engineer",          location:"Hyderabad",         skills:["UIKit","Core Data","Sourcery"],                     score:78 },
+  { id:"38", name:"Pooja V",        title:"Android Engineer",      location:"Bengaluru",         skills:["Jetpack Compose","Hilt","Room"],                    score:82 },
+  { id:"39", name:"Ayaan S",        title:"Full-stack Engineer",   location:"Gurgaon",           skills:["Django","React","Postgres"],                        score:85 },
+  { id:"40", name:"Bhavna K",       title:"NLP Engineer",          location:"Pune",              skills:["Rasa","spaCy","NER"],                                score:83 },
+  { id:"41", name:"Yash V",         title:"Platform Engineer",     location:"Bengaluru",         skills:["eBPF","Cilium","Service Mesh"],                     score:86 },
+  { id:"42", name:"Sana M",         title:"Data Engineer",         location:"Mumbai",            skills:["Flink","Iceberg","Kafka"],                           score:84 },
+  { id:"43", name:"Omkar R",        title:"Frontend Engineer",     location:"Bengaluru",         skills:["Next.js","Chakra UI","RTK Query"],                  score:89 },
+  { id:"44", name:"Vedant K",       title:"GenAI Engineer",        location:"Remote (IN)",       skills:["Function Calling","Agents","Eval"],                 score:90 },
+  { id:"45", name:"Aditi T",        title:"Security Engineer",     location:"Hyderabad",         skills:["SIEM","SOC","Incident Response"],                   score:79 },
+  { id:"46", name:"Farhan A",       title:"SRE",                   location:"Delhi NCR",         skills:["Chaos","Autoscaling","Cost"],                        score:82 },
+  { id:"47", name:"Dhruv P",        title:"Backend Engineer",      location:"Bengaluru",         skills:["Node.js","Express","MongoDB"],                      score:81 },
+  { id:"48", name:"Krupa J",        title:"ML Engineer",           location:"Chennai",           skills:["LLM Finetuning","PEFT","RLHF"],                      score:88 },
+  { id:"49", name:"Jahnavi D",      title:"Frontend Engineer",     location:"Remote (IN)",       skills:["Next.js","Tailwind","Storybook"],                   score:87 },
+  { id:"50", name:"Rudraksh N",     title:"Data Scientist",        location:"Bengaluru",         skills:["Time Series","Prophet","SARIMAX"],                  score:83 },
+];
