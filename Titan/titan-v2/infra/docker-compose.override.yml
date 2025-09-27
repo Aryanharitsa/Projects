@@ -1,0 +1,28 @@
+services:
+  hardhat:
+    # clean reinstall before starting the node to avoid ENOTEMPTY
+    command: >
+      sh -lc "rm -rf node_modules package-lock.json && npm install &&
+              npx hardhat node --hostname 0.0.0.0"
+
+  blockchain_deployer:
+    # talk to hardhat container, not 127.0.0.1
+    environment:
+      - CHAIN_RPC=http://hardhat:8545
+    entrypoint: >
+      sh -lc "
+      echo '[deployer] waiting for Hardhat RPC...';
+      node -e \"
+        const http=require('http');
+        const data=JSON.stringify({jsonrpc:'2.0',method:'web3_clientVersion',params:[],id:1});
+        (function ping(){
+          const req=http.request({host:'hardhat',port:8545,method:'POST',headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(data)}},
+            res=>{process.exit(0);});
+          req.on('error',()=>setTimeout(ping,1000)); req.end(data);
+        })();
+      \" ;
+      echo '[deployer] RPC ready. Deploying...';
+      npm install && npx hardhat run scripts/deploy.ts --network localhost || exit 1;
+      echo '[deployer] Deployed. Sleeping...';
+      sleep 3600
+      "

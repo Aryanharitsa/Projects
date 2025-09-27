@@ -1,0 +1,20 @@
+# Node / Next.js
+apps/frontend/.next/
+apps/frontend/node_modules/
+apps/frontend/.vercel/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+
+# Docker volumes
+infra/ipfs_data/
+infra/ipfs_staging/
+
+# OS files
+.DS_Store
+
+# Environment
+*.env

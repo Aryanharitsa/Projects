@@ -1,0 +1,24 @@
+[
+  {
+    "inputs": [
+      {"internalType":"bytes32","name":"docHash","type":"bytes32"},
+      {"internalType":"address","name":"subject","type":"address"},
+      {"internalType":"string","name":"verifierId","type":"string"}
+    ],
+    "name":"attest",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed":true,"internalType":"bytes32","name":"docHash","type":"bytes32"},
+      {"indexed":true,"internalType":"address","name":"subject","type":"address"},
+      {"indexed":false,"internalType":"string","name":"verifierId","type":"string"},
+      {"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}
+    ],
+    "name":"Attested",
+    "type":"event"
+  }
+]

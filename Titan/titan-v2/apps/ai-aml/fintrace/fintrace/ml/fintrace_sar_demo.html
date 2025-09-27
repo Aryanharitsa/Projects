@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FinTrace — SAR Demo (Gemini)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind for quick styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Generative AI (Gemini) via ESM CDN -->
+  <script type="module">
+    // Loaded later in the page via inline module script
+  </script>
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .card { @apply rounded-2xl shadow p-5 bg-white; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-800">
+  <div class="max-w-5xl mx-auto py-8 px-4">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold">FinTrace — SAR Generator Demo</h1>
+      <p class="text-sm text-slate-600">Cognitive AML meets practical risk scoring. (One-page frontend demo)</p>
+    </header>
+
+    <!-- Input Card -->
+    <section class="card mb-6">
+      <h2 class="text-xl font-semibold mb-4">Inputs</h2>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Gemini API Key</label>
+          <input id="apiKey" type="password" placeholder="AIza... (demo only)"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring focus:ring-indigo-200" />
+          <p class="text-xs text-slate-500 mt-1">For demo use only. Do not use client-side keys in production.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1">Case All-Round Score (0–100)</label>
+          <input id="caseScore" type="number" min="0" max="100" step="0.01" placeholder="e.g., 72.5"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring focus:ring-indigo-200" />
+          <p class="text-xs text-slate-500 mt-1">Override/benchmark score for the case (your aggregate view).</p>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">Node Scorer Output (JSON file)</label>
+          <input id="scoreFile" type="file" accept=".json,application/json"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white focus:outline-none focus:ring focus:ring-indigo-200" />
+          <p class="text-xs text-slate-500 mt-1">
+            Expected: array of numbers <span class="mono">[0.1, 0.9, ...]</span> OR array of objects like
+            <span class="mono">[{ "node":"A", "score":0.83, "reasons":["..."]}, ...]</span>.
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-4 flex gap-3">
+        <button id="previewBtn"
+                class="rounded-lg bg-slate-200 hover:bg-slate-300 px-4 py-2 text-sm font-medium">
+          Preview Scores
+        </button>
+        <button id="generateBtn"
+                class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-semibold">
+          Generate SAR with Gemini
+        </button>
+        <div id="spinner" class="hidden items-center text-sm text-slate-600">
+          <svg class="animate-spin h-5 w-5 mr-2 text-indigo-600" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+            <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          Working...
+        </div>
+      </div>
+      <p id="errorBox" class="mt-3 text-sm text-red-600 hidden"></p>
+    </section>
+
+    <!-- Scores Card -->
+    <section class="card mb-6">
+      <h2 class="text-xl font-semibold mb-3">Risk Scores</h2>
+      <div class="grid md:grid-cols-4 gap-4">
+        <div class="bg-slate-50 rounded-xl p-4">
+          <div class="text-xs uppercase text-slate-500 mb-1">Nodes</div>
+          <div id="nodeCount" class="text-2xl font-bold">0</div>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-4">
+          <div class="text-xs uppercase text-slate-500 mb-1">Computed Aggregate</div>
+          <div id="computedAgg" class="text-2xl font-bold">—</div>
+          <div class="text-xs text-slate-500">Mean of normalized node scores (0–100)</div>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-4">
+          <div class="text-xs uppercase text-slate-500 mb-1">Case All-Round Score</div>
+          <div id="providedAgg" class="text-2xl font-bold">—</div>
+          <div class="text-xs text-slate-500">Your provided overall score (0–100)</div>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-4">
+          <div class="text-xs uppercase text-slate-500 mb-1">Flagged Nodes</div>
+          <div id="flaggedCount" class="text-2xl font-bold">0</div>
+          <div class="text-xs text-slate-500">scoreFile.nodes[].flagged = true</div>
+        </div>
+      </div>
+      <p id="metaLine" class="mt-3 text-sm text-slate-600"></p>
+
+      <div class="mt-5 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-600 border-b">
+              <th class="py-2 pr-3">#</th>
+              <th class="py-2 pr-3">Node</th>
+              <th class="py-2 pr-3">Risk Score (0–100)</th>
+              <th class="py-2 pr-3">Flagged</th>
+              <th class="py-2 pr-3">Reasons / Notes</th>
+            </tr>
+          </thead>
+          <tbody id="scoresTableBody" class="align-top"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SAR Output Card -->
+    <section class="card">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">Suspicious Activity Report (Generated)</h2>
+        <div class="flex gap-2">
+          <button id="copyBtn" class="rounded-lg bg-slate-200 hover:bg-slate-300 px-3 py-2 text-sm">Copy</button>
+          <button id="downloadBtn" class="rounded-lg bg-slate-200 hover:bg-slate-300 px-3 py-2 text-sm">Download .txt</button>
+        </div>
+      </div>
+      <pre id="sarOut" class="mono whitespace-pre-wrap bg-slate-50 rounded-xl p-4 text-sm min-h-[200px]"></pre>
+    </section>
+  </div>
+
+  <script type="module">
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+    const els = {
+      apiKey: document.getElementById('apiKey'),
+      caseScore: document.getElementById('caseScore'),
+      scoreFile: document.getElementById('scoreFile'),
+      previewBtn: document.getElementById('previewBtn'),
+      generateBtn: document.getElementById('generateBtn'),
+      nodeCount: document.getElementById('nodeCount'),
+      computedAgg: document.getElementById('computedAgg'),
+      providedAgg: document.getElementById('providedAgg'),
+      scoresTableBody: document.getElementById('scoresTableBody'),
+      sarOut: document.getElementById('sarOut'),
+      errorBox: document.getElementById('errorBox'),
+      spinner: document.getElementById('spinner'),
+      copyBtn: document.getElementById('copyBtn'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      flaggedCount: document.getElementById('flaggedCount'),
+      metaLine: document.getElementById('metaLine'),
+    };
+
+    let parsedNodes = []; // normalized internal structure: { node, score100, reasons }
+    let meta = { patternType: null, anchorId: null, edgesCount: null };
+
+    function showError(msg) {
+      els.errorBox.textContent = msg;
+      els.errorBox.classList.remove('hidden');
+    }
+    function clearError() {
+      els.errorBox.classList.add('hidden');
+      els.errorBox.textContent = '';
+    }
+    function withSpinner(on) {
+      els.spinner.classList.toggle('hidden', !on);
+      els.generateBtn.disabled = on;
+      els.previewBtn.disabled = on;
+    }
+
+    async function readJSONFile(file) {
+      const text = await file.text();
+      return JSON.parse(text);
+    }
+
+    // Flexible parser for different shapes of node score outputs
+    function normalizeScores(raw) {
+      // Accept:
+      // 1) [0.12, 0.91, ...] (0..1) OR [12, 91, ...] (0..100)
+      // 2) [{score:0.87, node:"A", reasons:[...]} ...]
+      // 3) [{risk: 73}, ...] etc.
+      const arr = Array.isArray(raw) ? raw : (raw?.nodes || raw?.scores || []);
+      if (!Array.isArray(arr)) throw new Error("Invalid score file: expected array or {nodes|scores:[...]}");
+
+      const out = [];
+      arr.forEach((item, idx) => {
+        let nodeName = `Node-${idx+1}`;
+        let reasons = [];
+        let score;
+
+        if (typeof item === 'number') {
+          // Heuristic: if <= 1.5 assume 0..1, else 0..100
+          score = item <= 1.5 ? item * 100 : item;
+        } else if (typeof item === 'object' && item !== null) {
+          // Try common keys
+          const maybe = item.score ?? item.risk ?? item.risk_score ?? item.value ?? item.score100;
+          if (typeof maybe === 'number') {
+            score = maybe <= 1.5 ? maybe * 100 : maybe;
+          } else {
+            throw new Error(`Could not find numeric score in object at index ${idx}`);
+          }
+          nodeName = item.node ?? item.id ?? item.name ?? nodeName;
+          if (Array.isArray(item.reasons)) reasons = item.reasons;
+          else if (item.reason) reasons = [String(item.reason)];
+          else if (item.notes) reasons = [String(item.notes)];
+          const flagged = Boolean(item.flagged);
+          const rawId = item.id !== undefined ? item.id : undefined;
+          if (flagged && reasons.length === 0) {
+            reasons = ["Auto-flagged by scorer"];
+          }
+          out.push({ node: nodeName, id: rawId, score100: Number(score.toFixed(2)), reasons, flagged });
+          return;
+        } else {
+          throw new Error(`Unsupported node entry at index ${idx}`);
+        }
+
+        // Clamp to 0..100
+        score = Math.max(0, Math.min(100, score));
+        out.push({ node: nodeName, score100: Number(score.toFixed(2)), reasons });
+      });
+      return out;
+    }
+
+    function renderScoresTable(nodes) {
+      els.scoresTableBody.innerHTML = '';
+      nodes.forEach((n, i) => {
+        const tr = document.createElement('tr');
+        tr.className = "border-b last:border-b-0";
+        tr.innerHTML = `
+          <td class="py-2 pr-3 text-slate-500">${i+1}</td>
+          <td class="py-2 pr-3">${escapeHtml(n.node)}${n.id!==undefined?` <span class="text-xs text-slate-500">(#${n.id})</span>`:''}</td>
+          <td class="py-2 pr-3 font-semibold">${n.score100.toFixed(2)}</td>
+          <td class="py-2 pr-3">${n.flagged ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800">Yes</span>' : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">No</span>'}</td>
+          <td class="py-2 pr-3 text-slate-600">${escapeHtml((n.reasons||[]).join('; '))}</td>
+        `;
+        els.scoresTableBody.appendChild(tr);
+      });
+    }
+
+    function computeAggregate(nodes) {
+      if (!nodes.length) return null;
+      const mean = nodes.reduce((a,b)=>a+b.score100,0) / nodes.length;
+      return Number(mean.toFixed(2));
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, s => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+      }[s]));
+    }
+
+    function buildSARPrompt({ nodes, aggComputed, aggProvided, meta }) {
+      const flaggedNodes = nodes.filter(n => n.flagged);
+      const flaggedSummary = `Flagged nodes: ${flaggedNodes.length} / ${nodes.length}`;
+      const topFlagged = flaggedNodes
+        .slice()
+        .sort((a,b)=>b.score100 - a.score100)
+        .slice(0, 10)
+        .map(n => `- ${n.node}${n.id!==undefined?` (#${n.id})`:''}: ${n.score100}/100`)
+        .join('\n');
+
+      const metaLines = [
+        meta?.patternType ? `Pattern type: ${meta.patternType}` : null,
+        (meta?.anchorId !== null && meta?.anchorId !== undefined) ? `Anchor alert id: ${meta.anchorId}` : null,
+        (meta?.edgesCount !== null && meta?.edgesCount !== undefined) ? `Edges count: ${meta.edgesCount}` : null,
+      ].filter(Boolean).join('\n');
+
+      // Keep it concise but structured for consistent output
+      const nodeLines = nodes.map(n => `- ${n.node}: ${n.score100}/100${n.reasons?.length ? ` (reasons: ${n.reasons.join("; ")})` : ""}`).join("\n");
+      return `
+You are an AML analyst. Draft a clear, regulator-ready Suspicious Activity Report (SAR) based on the following data.
+Keep it professional, concise, and structured with headings. Avoid hallucinating facts not present in the data. If context is missing, state assumptions explicitly.
+
+=== CONTEXT ===
+Aggregate (computed from node scores): ${aggComputed ?? "N/A"}/100
+Aggregate (provided case all-round score): ${aggProvided ?? "N/A"}/100
+
+Node risk scores:
+${nodeLines}
+
+=== GRAPH CONTEXT ===
+${flaggedSummary}
+Top flagged nodes (up to 10):
+${topFlagged || '(none)'}
+${metaLines ? `\n${metaLines}` : ''}
+
+=== REQUIRED SAR FORMAT ===
+1) Case Summary (3–5 sentences)
+2) Subjects / Entities of Interest (list nodes with notable risk)
+3) Indicators & Red Flags (bullet points, map to provided node reasons where possible)
+4) Transaction/Behavior Patterns (if not available, infer cautiously and label as “pattern hypothesis”)
+5) Risk Assessment (explain how node-level scores ladder up to the aggregate; include both aggregates)
+6) Action & Recommendation (what to do next; e.g., enhanced due diligence, KYC refresh, block, law enforcement referral)
+7) Attachments / Evidence (what's available from this analysis)
+8) Assumptions & Limitations (explicitly list)
+9) Analyst Signature Block (placeholder)
+
+Make the writing specific and defensible but avoid unnecessary fluff. Output plain text.
+      `.trim();
+    }
+
+    async function previewScores() {
+      try {
+        clearError();
+        const file = els.scoreFile.files[0];
+        if (!file) { showError("Please choose a node score JSON file."); return; }
+
+        const raw = await readJSONFile(file);
+        meta = {
+          patternType: raw?.pattern_type ?? null,
+          anchorId: raw?.anchor_alert_id ?? null,
+          edgesCount: Array.isArray(raw?.edges) ? raw.edges.length : null,
+        };
+        parsedNodes = normalizeScores(raw);
+
+        const aggComputed = computeAggregate(parsedNodes);
+        const aggProvided = els.caseScore.value ? Number(els.caseScore.value) : null;
+
+        els.nodeCount.textContent = String(parsedNodes.length);
+        els.computedAgg.textContent = aggComputed!=null ? `${aggComputed}` : "—";
+        els.providedAgg.textContent = (aggProvided!=null && !Number.isNaN(aggProvided)) ? `${aggProvided}` : "—";
+
+        const flaggedCnt = parsedNodes.filter(n => n.flagged).length;
+        els.flaggedCount.textContent = String(flaggedCnt);
+        const parts = [];
+        if (meta.patternType) parts.push(`Pattern: ${meta.patternType}`);
+        if (meta.anchorId !== null && meta.anchorId !== undefined) parts.push(`Anchor Alert ID: ${meta.anchorId}`);
+        if (meta.edgesCount !== null && meta.edgesCount !== undefined) parts.push(`Edges: ${meta.edgesCount}`);
+        els.metaLine.textContent = parts.join('  •  ');
+
+        renderScoresTable(parsedNodes);
+      } catch (e) {
+        console.error(e);
+        showError(e.message || "Failed to parse/preview score file.");
+      }
+    }
+
+    async function generateSAR() {
+      try {
+        clearError();
+        const apiKey = els.apiKey.value.trim();
+        if (!apiKey) { showError("Enter your Gemini API key."); return; }
+        if (!parsedNodes.length) { await previewScores(); if (!parsedNodes.length) return; }
+
+        const aggComputed = computeAggregate(parsedNodes);
+        const aggProvided = els.caseScore.value ? Number(els.caseScore.value) : null;
+        const prompt = buildSARPrompt({ nodes: parsedNodes, aggComputed, aggProvided, meta });
+
+        withSpinner(true);
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        const text = result.response?.text?.() || "(No text received.)";
+        els.sarOut.textContent = text;
+      } catch (e) {
+        console.error(e);
+        showError(e.message || "SAR generation failed.");
+      } finally {
+        withSpinner(false);
+      }
+    }
+
+    // Utility buttons
+    els.copyBtn.addEventListener('click', () => {
+      const txt = els.sarOut.textContent || "";
+      navigator.clipboard.writeText(txt).then(() => {
+        els.copyBtn.textContent = "Copied!";
+        setTimeout(()=> els.copyBtn.textContent = "Copy", 1000);
+      });
+    });
+
+    els.downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([els.sarOut.textContent || ""], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = "fintrace_sar.txt";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    els.previewBtn.addEventListener('click', previewScores);
+    els.generateBtn.addEventListener('click', generateSAR);
+  </script>
+</body>
+</html>

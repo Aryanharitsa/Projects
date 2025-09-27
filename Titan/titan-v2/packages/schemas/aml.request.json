@@ -1,0 +1,6 @@
+{ "type": "array", "items": { "type": "object", "properties": {
+  "account_id": {"type":"string"}, "counterparty":{"type":"string"},
+  "amount":{"type":"number"}, "timestamp":{"type":"string"},
+  "channel":{"type":["string","null"]}, "geo":{"type":["string","null"]},
+  "meta":{"type":"object"}, "subject":{"type":["string","null"]}
+}, "required":["account_id","counterparty","amount","timestamp"] } }

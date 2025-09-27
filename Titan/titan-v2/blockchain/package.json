@@ -1,0 +1,14 @@
+{
+  "name": "titan-blockchain",
+  "private": true,
+  "scripts": {
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  }
+}

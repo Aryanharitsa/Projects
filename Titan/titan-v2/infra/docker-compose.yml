@@ -1,0 +1,74 @@
+services:
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: titan-ipfs
+    ports: ["5001:5001","8080:8080"]
+    volumes:
+      - ipfs_staging:/export
+      - ipfs_data:/data/ipfs
+
+  redis:
+    image: redis:7-alpine
+    container_name: titan-redis
+    ports: ["6379:6379"]
+
+  hardhat:
+    image: node:22-alpine
+    container_name: titan-hardhat
+    working_dir: /app
+    volumes:
+      - ../blockchain:/app
+    command: sh -lc "npm install && npx hardhat node --hostname 0.0.0.0"
+    ports: ["8545:8545"]
+
+  blockchain_deployer:
+    image: node:22-alpine
+    container_name: titan-deployer
+    depends_on: [hardhat]
+    working_dir: /app
+    volumes:
+      - ../blockchain:/app
+    entrypoint: sh -lc "npm install && npx hardhat run scripts/deploy.ts --network localhost && sleep 3600"
+
+  ai-ocr:
+    build:
+      context: ../apps/ai-ocr
+    container_name: titan-ai-ocr
+    environment:
+      - IPFS_API=http://ipfs:5001
+    ports: ["8001:8001"]
+    depends_on: [ipfs]
+
+  ai-aml:
+    build:
+      context: ../apps/ai-aml
+    container_name: titan-ai-aml
+    ports: ["8002:8002"]
+
+  api:
+    build:
+      context: ../apps/api
+    container_name: titan-api
+    environment:
+      - KYC_SVC=http://ai-ocr:8001
+      - AML_SVC=http://ai-aml:8002
+      - CHAIN_RPC=http://hardhat:8545
+      - ATTESTER_PRIV_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+      - REGISTRY_ADDRESS_FILE=/blk/registry_address.txt
+    volumes:
+      - ../blockchain:/blk
+    ports: ["8000:8000"]
+    depends_on: [ai-ocr, ai-aml, blockchain_deployer]
+
+  frontend:
+    build:
+      context: ../apps/frontend
+    container_name: titan-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+volumes:
+  ipfs_staging: {}
+  ipfs_data: {}

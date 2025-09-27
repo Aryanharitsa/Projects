@@ -1,0 +1,1 @@
+{ "type": "object", "properties": { "subject_wallet": { "type": "string" } }, "required": ["subject_wallet"] }
