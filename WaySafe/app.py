@@ -7,11 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image
 from utils import haversine_km, point_in_polygon, sha256_hex, build_merkle
+from safety import compute_safety, heatmap_points
+from theme import inject_theme, render_brand, render_score_card, band_color
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 
-st.set_page_config(page_title="Smart Tourism POC", layout="wide")
+st.set_page_config(page_title="WaySafe — Smart Tourism Safety", layout="wide", page_icon="🚦")
+inject_theme()
 
 with open(DATA / "goa_geofences.geojson") as f:
     GEOFENCES = json.load(f)
@@ -39,17 +42,23 @@ if "sos_active" not in st.session_state:
 if "current_loc" not in st.session_state:
     st.session_state.current_loc = {"lat": 15.55, "lon": 73.77}
 
-st.sidebar.title("Smart Tourism POC")
-role = st.sidebar.radio("Choose view", ["Tourist App", "Authority Dashboard", "Merkle Auditor"])
-st.sidebar.write(f"Session user: **{st.session_state.user}**")
+with st.sidebar:
+    render_brand()
+role = st.sidebar.radio("View", ["Tourist App", "Authority Dashboard", "Merkle Auditor"], label_visibility="collapsed")
+st.sidebar.caption(f"Session user · `{st.session_state.user}`")
 
-with st.sidebar.expander("Demo Controls"):
+with st.sidebar.expander("Location & Demo Controls", expanded=True):
     st.session_state.offline = st.checkbox("Offline mode (simulate no network)", value=st.session_state.offline)
     lat = st.number_input("Your lat", value=float(st.session_state.current_loc["lat"]), format="%.6f")
     lon = st.number_input("Your lon", value=float(st.session_state.current_loc["lon"]), format="%.6f")
-    if st.button("Update location"):
+    if st.button("Update location", type="primary", use_container_width=True):
         st.session_state.current_loc = {"lat": lat, "lon": lon}
-    st.caption("Tip: 15.55,73.76 (Baga) | 15.49,73.78 (Aguada).")
+    st.caption("Tip: 15.55,73.76 (Baga) · 15.49,73.78 (Aguada)")
+
+with st.sidebar.expander("Map Options"):
+    if "show_heatmap" not in st.session_state:
+        st.session_state.show_heatmap = True
+    st.session_state.show_heatmap = st.checkbox("Incident risk heatmap", value=st.session_state.show_heatmap)
 
 def geofence_hits(lat, lon):
     zones = []
@@ -77,36 +86,114 @@ def push_outbox():
     save_csv(inc_local, "incidents.csv")
     return applied
 
-def draw_map_layers(incidents, broadcasts, pois, user_loc):
+def draw_map_layers(incidents, broadcasts, pois, user_loc, *, show_heatmap=True):
     layers = []
     for feat in GEOFENCES["features"]:
         coords = feat["geometry"]["coordinates"][0]
-        layers.append(pdk.Layer("PolygonLayer", data=[{"polygon": coords}], get_polygon="polygon",
-                                get_fill_color=[255,140,0,40], get_line_color=[255,140,0], line_width_min_pixels=1))
+        name = feat.get("properties", {}).get("name", "Risk zone")
+        layers.append(pdk.Layer(
+            "PolygonLayer",
+            data=[{"polygon": coords, "name": name}],
+            get_polygon="polygon",
+            get_fill_color=[255, 106, 61, 45],
+            get_line_color=[255, 106, 61, 220],
+            line_width_min_pixels=1,
+            pickable=True,
+        ))
+
+    if show_heatmap and not incidents.empty:
+        pts = heatmap_points(incidents.to_dict("records"))
+        if pts:
+            layers.append(pdk.Layer(
+                "HeatmapLayer",
+                data=pts,
+                get_position='[lon, lat]',
+                get_weight='weight',
+                aggregation='SUM',
+                radius_pixels=60,
+                opacity=0.55,
+            ))
+
     if not incidents.empty:
-        layers.append(pdk.Layer("ScatterplotLayer", data=incidents.assign(size=75),
-                                get_position='[lon, lat]', get_fill_color='[status=="verified" ? 255 : 200, 0, 0]', get_radius=30))
+        inc_viz = incidents.copy()
+        inc_viz["color"] = inc_viz["status"].map(
+            lambda s: [255, 61, 96] if s == "verified" else [249, 196, 64]
+        )
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=inc_viz,
+            get_position='[lon, lat]',
+            get_fill_color='color',
+            get_radius=45,
+            pickable=True,
+        ))
+
     if not broadcasts.empty:
-        bc = broadcasts.copy(); bc["radius"] = broadcasts["radius_km"] * 1000
-        layers.append(pdk.Layer("ScatterplotLayer", data=bc, get_position='[lon, lat]',
-                                get_fill_color='[0,120,255,60]', get_radius='radius'))
+        bc = broadcasts.copy()
+        bc["radius"] = broadcasts["radius_km"] * 1000
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=bc,
+            get_position='[lon, lat]',
+            get_fill_color=[61, 169, 252, 55],
+            get_line_color=[61, 169, 252, 200],
+            stroked=True,
+            get_radius='radius',
+            line_width_min_pixels=1,
+        ))
+
     if not pois.empty:
-        layers.append(pdk.Layer("ScatterplotLayer", data=pois.assign(size=50),
-                                get_position='[lon, lat]', get_fill_color='[0,150,0]', get_radius=20))
-    layers.append(pdk.Layer("ScatterplotLayer", data=pd.DataFrame([{"lat": user_loc["lat"], "lon": user_loc["lon"]}]),
-                            get_position='[lon, lat]', get_fill_color='[255,255,0]', get_radius=35))
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=pois.assign(size=50),
+            get_position='[lon, lat]',
+            get_fill_color=[83, 227, 166],
+            get_radius=35,
+            pickable=True,
+        ))
+
+    layers.append(pdk.Layer(
+        "ScatterplotLayer",
+        data=pd.DataFrame([{"lat": user_loc["lat"], "lon": user_loc["lon"]}]),
+        get_position='[lon, lat]',
+        get_fill_color=[249, 196, 64],
+        get_line_color=[14, 17, 23],
+        stroked=True,
+        get_radius=60,
+        line_width_min_pixels=2,
+    ))
+
     view_state = pdk.ViewState(latitude=user_loc["lat"], longitude=user_loc["lon"], zoom=12)
-    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state, map_style=None))
+    tooltip = {
+        "html": "<b>{name}</b>{category}{ptype}",
+        "style": {"backgroundColor": "#161A23", "color": "#fff", "fontSize": "12px"},
+    }
+    st.pydeck_chart(pdk.Deck(
+        layers=layers,
+        initial_view_state=view_state,
+        map_style=None,
+        tooltip=tooltip,
+    ))
 
 if role == "Tourist App":
-    st.title("Tourist App (Prototype)")
-    hits = geofence_hits(st.session_state.current_loc["lat"], st.session_state.current_loc["lon"])
-    if hits: st.warning("⚠️ Risk zone ahead: " + ", ".join([h["name"] for h in hits]))
+    st.title("Tourist App")
+    my = st.session_state.current_loc
+
+    safety = compute_safety(
+        my["lat"], my["lon"],
+        incidents=inc_df.to_dict("records") if not inc_df.empty else [],
+        geofences=GEOFENCES,
+        pois=poi_df.to_dict("records") if not poi_df.empty else [],
+    )
+    render_score_card(safety)
+    if safety.band in ("High Risk", "Danger"):
+        st.warning(f"⚠️ {safety.band} zone — review factors above and consider an alternate route.")
 
     tabs = st.tabs(["Map", "Report Hazard", "Alerts", "SOS", "Trip Report"])
 
     with tabs[0]:
-        draw_map_layers(inc_df, bcast_df, poi_df, st.session_state.current_loc)
+        draw_map_layers(inc_df, bcast_df, poi_df, my, show_heatmap=st.session_state.show_heatmap)
+        st.caption("🔴 verified incident · 🟡 pending · 🟢 help POI · 🟠 risk zone · 🔵 active broadcast")
 
     with tabs[1]:
         st.subheader("Report a Hazard")
@@ -203,13 +290,35 @@ if role == "Tourist App":
             st.markdown(f'<a download="trip_report.pdf" href="data:application/pdf;base64,{b64}">Download Trip PDF</a>', unsafe_allow_html=True)
 
 elif role == "Authority Dashboard":
-    st.title("Authority Dashboard (Prototype)")
-    colA,colB,colC = st.columns(3)
+    st.title("Authority Dashboard")
+    verified_n = int((inc_df["status"] == "verified").sum()) if not inc_df.empty else 0
+    pending_n = int((inc_df["status"] == "pending").sum()) if not inc_df.empty else 0
+    active_sos = len(sos_df[sos_df["active"] == True]) if not sos_df.empty else 0
+    colA, colB, colC, colD = st.columns(4)
     colA.metric("Incidents", len(inc_df))
-    colB.metric("Verified", int((inc_df["status"]=="verified").sum()) if not inc_df.empty else 0)
-    colC.metric("Active SOS", len(sos_df[sos_df["active"]==True]) if not sos_df.empty else 0)
+    colB.metric("Verified", verified_n)
+    colC.metric("Pending", pending_n)
+    colD.metric("Active SOS", active_sos)
 
-    st.subheader("Map"); draw_map_layers(inc_df, bcast_df, poi_df, {"lat":15.51,"lon":73.83})
+    if not inc_df.empty:
+        left, right = st.columns([1, 1])
+        with left:
+            st.markdown('<div class="ws-kicker">Incidents by category</div>', unsafe_allow_html=True)
+            st.bar_chart(inc_df["category"].value_counts(), height=220)
+        with right:
+            st.markdown('<div class="ws-kicker">Incidents over time</div>', unsafe_allow_html=True)
+            try:
+                ts = pd.to_datetime(inc_df["created_at"], errors="coerce").dropna()
+                if not ts.empty:
+                    daily = ts.dt.floor("D").value_counts().sort_index()
+                    st.line_chart(daily, height=220)
+                else:
+                    st.caption("No timestamps available.")
+            except Exception:
+                st.caption("No timestamps available.")
+
+    st.subheader("Operational Map")
+    draw_map_layers(inc_df, bcast_df, poi_df, {"lat": 15.51, "lon": 73.83}, show_heatmap=True)
 
     st.subheader("Pending Incidents")
     pending = inc_df[inc_df["status"]=="pending"]
@@ -236,7 +345,7 @@ elif role == "Authority Dashboard":
     st.subheader("SOS Monitor"); st.dataframe(sos_df.tail(10))
 
 elif role == "Merkle Auditor":
-    st.title("Merkle Rollup Auditor (POC)")
+    st.title("Merkle Rollup Auditor")
     st.caption("Build a Merkle root from current incident hashes to prove tamper-evidence.")
     if st.button("Build Merkle Now"):
         leaves = inc_df["sha256"].dropna().tolist() if not inc_df.empty else []
