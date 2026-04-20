@@ -112,6 +112,15 @@ class ApiService {
     return this.request('/health');
   }
 
+  // Side-by-side comparison — runs N (provider, model) combos in parallel.
+  // Returns { success, results: [...], summary: { cheapest_index, fastest_index, total_cost_usd, wall_clock_sec } }
+  async compareRun({ system_prompt = '', messages = [], runs = [] } = {}) {
+    return this.request('/compare', {
+      method: 'POST',
+      body: JSON.stringify({ system_prompt, messages, runs }),
+    });
+  }
+
   // Get masked key status and "active" flag for all API keys
   async getKeyStatus() {
     return this.request('/key-status');

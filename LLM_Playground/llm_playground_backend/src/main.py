@@ -10,6 +10,7 @@ from src.models.user import db
 from src.routes.user import user_bp
 from src.routes.llm import llm_bp
 from src.routes.keys import bp as keys_bp
+from src.routes.compare import compare_bp
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -31,6 +32,7 @@ CORS(
 # Register blueprints
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(llm_bp, url_prefix='/api')
+app.register_blueprint(compare_bp, url_prefix='/api')
 app.register_blueprint(keys_bp)
 
 @app.route('/api/health')
