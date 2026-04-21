@@ -15,11 +15,11 @@ class ApiService {
     try {
       const response = await fetch(url, config);
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'API request failed');
       }
-      
+
       return data;
     } catch (error) {
       console.error('API request error:', error);
@@ -45,14 +45,12 @@ class ApiService {
 
   // Send chat request and extract debug_info
   async sendChat(chatData) {
-    // Send request to backend
     const data = await this.request('/chat', {
       method: 'POST',
       body: JSON.stringify(chatData),
     });
     console.log('[ApiService] raw /chat payload:', data);
 
-    // If the backend returned structured debug_info, use it directly
     const dbg = data.debug_info || {};
     const inputTokens  = dbg.input_tokens  ?? 0;
     const outputTokens = dbg.output_tokens ?? 0;
@@ -63,14 +61,12 @@ class ApiService {
 
     const isAugust = chatData.pkey != null;
 
-    // Return assistant content and structured debug info
     return {
       success: data.success ?? true,
       content: data.response,
       debug_info: {
         provider:      dbg.provider     ?? chatData.provider,
         model:         dbg.model        ?? chatData.model,
-        // August mode fields
         ...(isAugust && {
           pkey:        chatData.pkey,
           pvariables:  chatData.pvariables
@@ -91,10 +87,10 @@ class ApiService {
   async uploadAugustJson(file) {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     return this.request('/august/upload', {
       method: 'POST',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
+      headers: {},
       body: formData,
     });
   }
@@ -105,6 +101,18 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(chatData),
     });
+  }
+
+  // LLM Bench — run one prompt across multiple provider/model targets in parallel
+  async compareModels({ prompt, system_prompt = '', models, params = {} }) {
+    return this.request('/compare', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, system_prompt, models, params }),
+    });
+  }
+
+  async getPricing() {
+    return this.request('/pricing');
   }
 
   // Health check
