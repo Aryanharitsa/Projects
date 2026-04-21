@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: #05060f;
+  color: #e5e7eb;
+  font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Inter",
+               "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* gentle ambient background visible on every page */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(129,140,248,0.18), transparent 55%),
+    radial-gradient(circle at 85% 20%, rgba(244,114,182,0.12), transparent 55%),
+    radial-gradient(circle at 50% 110%, rgba(56,189,248,0.14), transparent 55%);
+  pointer-events: none;
+}
+
+/* animated slow pulse for the hero glyph */
+@keyframes pulseGlow {
+  0%,100% { filter: drop-shadow(0 0 12px rgba(167,139,250,0.6)); }
+  50%     { filter: drop-shadow(0 0 28px rgba(167,139,250,0.9)); }
+}
+.glyph-pulse { animation: pulseGlow 4s ease-in-out infinite; }
+
+/* scrollbar */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+*::-webkit-scrollbar-track { background: transparent; }
