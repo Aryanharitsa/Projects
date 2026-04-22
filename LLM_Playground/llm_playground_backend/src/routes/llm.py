@@ -1,15 +1,16 @@
 from flask import Blueprint, request, jsonify
 from flask import current_app
 import os, json, uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Dict, Any, List
 import traceback  # Add this import at the top if not already present
 import requests
-from datetime import datetime
 
 #
 from src.models.user import User
 from src.providers.provider_factory import ProviderFactory
+from src.pricing import estimate_cost, get_pricing_table
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -157,16 +158,19 @@ def chat():
         # Calculate metrics
         latency = (end_time - start_time).total_seconds()
 
+        in_tok  = response.get('input_tokens', 0) or 0
+        out_tok = response.get('output_tokens', 0) or 0
         return jsonify({
             'success': True,
             'response': response.get('content', ''),
             'debug_info': {
                 'provider': provider_name,
                 'model': model,
-                'input_tokens': response.get('input_tokens', 0),
-                'output_tokens': response.get('output_tokens', 0),
-                'total_tokens': response.get('input_tokens', 0) + response.get('output_tokens', 0),
+                'input_tokens': in_tok,
+                'output_tokens': out_tok,
+                'total_tokens': in_tok + out_tok,
                 'latency': round(latency, 3),
+                'cost_usd': estimate_cost(model, in_tok, out_tok),
                 'timestamp': end_time.isoformat(),
                 'request_id': str(uuid.uuid4()),
                 'status': response.get('status', 'success'),
@@ -174,7 +178,6 @@ def chat():
             },
             'raw_response': response
         })
-        current_app.logger.debug(f"Chat response raw: {response}")
         
     except Exception as e:
         traceback_str = traceback.format_exc()
@@ -184,6 +187,146 @@ def chat():
             'error': str(e),
             'traceback': traceback_str
         }), 500
+
+@llm_bp.route('/pricing', methods=['GET'])
+def get_pricing():
+    """Expose the per-1M-token pricing table consumed by the Arena UI."""
+    return jsonify({'success': True, 'pricing': get_pricing_table()})
+
+
+def _run_candidate(candidate: Dict[str, Any],
+                   messages: List[Dict[str, Any]],
+                   system_prompt: str) -> Dict[str, Any]:
+    """Execute a single candidate run for /compare and normalise its result."""
+    provider_name = candidate.get('provider') or ''
+    model = candidate.get('model') or ''
+    started = datetime.now()
+    try:
+        provider_instance = provider_factory.create_provider(provider_name)
+        if not provider_instance:
+            raise ValueError(f'Provider {provider_name} not available')
+
+        msgs = messages[:]
+        if system_prompt:
+            msgs = [{"role": "system", "content": system_prompt}] + msgs
+
+        resp = provider_instance.make_request(model, msgs)
+        latency = (datetime.now() - started).total_seconds()
+
+        in_tok  = resp.get('input_tokens', 0) or 0
+        out_tok = resp.get('output_tokens', 0) or 0
+        status  = resp.get('status', 'success')
+        error   = resp.get('error')
+        # Some providers return {"error": {...}} when the call fails upstream.
+        if status != 'success' or (isinstance(error, dict) and error):
+            err_msg = (
+                error.get('message') if isinstance(error, dict)
+                else (error or 'Upstream provider error')
+            )
+            return {
+                'provider': provider_name,
+                'model': model,
+                'status': 'error',
+                'error': err_msg,
+                'response': '',
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'total_tokens': 0,
+                'latency': round(latency, 3),
+                'cost_usd': 0.0,
+                'model_version': model,
+            }
+
+        return {
+            'provider': provider_name,
+            'model': model,
+            'status': 'success',
+            'error': None,
+            'response': resp.get('content', ''),
+            'input_tokens': in_tok,
+            'output_tokens': out_tok,
+            'total_tokens': in_tok + out_tok,
+            'latency': round(latency, 3),
+            'cost_usd': estimate_cost(model, in_tok, out_tok),
+            'model_version': resp.get('model_version', model),
+        }
+    except Exception as e:  # noqa: BLE001 — surface as a typed result, don't crash siblings
+        latency = (datetime.now() - started).total_seconds()
+        return {
+            'provider': provider_name,
+            'model': model,
+            'status': 'error',
+            'error': str(e),
+            'response': '',
+            'input_tokens': 0,
+            'output_tokens': 0,
+            'total_tokens': 0,
+            'latency': round(latency, 3),
+            'cost_usd': 0.0,
+            'model_version': model,
+        }
+
+
+@llm_bp.route('/compare', methods=['POST'])
+def compare():
+    """Fan-out the same prompt to multiple provider/model candidates in parallel.
+
+    Request body:
+        {
+          "candidates": [ {"provider": "OpenAI", "model": "gpt-4o"}, ... ],
+          "messages":   [ {"role": "user", "content": "..."}, ... ],
+          "system_prompt": "optional",
+          "params": { ... unused for now, reserved }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        candidates = data.get('candidates') or []
+        messages   = data.get('messages') or []
+        system_prompt = data.get('system_prompt', '') or ''
+
+        if not candidates:
+            return jsonify({'success': False, 'error': 'No candidates provided'}), 400
+        if not messages:
+            return jsonify({'success': False, 'error': 'No messages provided'}), 400
+        # Sanity cap — parallelism is cheap, but keep rogue payloads in check.
+        if len(candidates) > 8:
+            return jsonify({'success': False, 'error': 'Too many candidates (max 8)'}), 400
+
+        # Preserve only role/content for downstream providers.
+        clean_messages = [
+            {'role': m.get('role', 'user'), 'content': m.get('content', '')}
+            for m in messages
+            if m.get('enabled', True)
+        ]
+
+        started = datetime.now()
+        with ThreadPoolExecutor(max_workers=min(len(candidates), 8)) as pool:
+            results = list(pool.map(
+                lambda c: _run_candidate(c, clean_messages, system_prompt),
+                candidates,
+            ))
+        total_latency = round((datetime.now() - started).total_seconds(), 3)
+
+        successes = [r for r in results if r['status'] == 'success']
+        winners = {}
+        if successes:
+            winners['fastest']     = min(successes, key=lambda r: r['latency'])['model']
+            winners['cheapest']    = min(successes, key=lambda r: r['cost_usd'])['model']
+            winners['most_verbose'] = max(successes, key=lambda r: r['output_tokens'])['model']
+
+        return jsonify({
+            'success': True,
+            'results': results,
+            'winners': winners,
+            'wall_latency': total_latency,
+            'request_id': str(uuid.uuid4()),
+            'timestamp': datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @llm_bp.route('/august/upload', methods=['POST'])
 def upload_august_json():

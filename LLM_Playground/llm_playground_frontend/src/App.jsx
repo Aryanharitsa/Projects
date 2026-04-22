@@ -17,15 +17,15 @@ import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Settings, 
-  MessageSquarePlus, 
-  Bot, 
-  User, 
-  Download, 
-  Upload, 
-  Play, 
-  Trash2, 
+import {
+  Settings,
+  MessageSquarePlus,
+  Bot,
+  User,
+  Download,
+  Upload,
+  Play,
+  Trash2,
   Copy,
   MoreVertical,
   ChevronUp,
@@ -33,7 +33,14 @@ import {
   Eye,
   EyeOff,
   Sparkles,
-  Zap
+  Zap,
+  Swords,
+  Trophy,
+  Timer,
+  DollarSign,
+  Hash,
+  Plus,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -89,6 +96,20 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState(null);
+
+  // --- Arena Mode State ---
+  const PROVIDER_COLORS = {
+    OpenAI:    { bg: 'bg-emerald-100', text: 'text-emerald-800', ring: 'ring-emerald-200', dot: 'bg-emerald-500' },
+    Anthropic: { bg: 'bg-amber-100',   text: 'text-amber-800',   ring: 'ring-amber-200',   dot: 'bg-amber-500'   },
+    Google:    { bg: 'bg-sky-100',     text: 'text-sky-800',     ring: 'ring-sky-200',     dot: 'bg-sky-500'     },
+  };
+  const [candidates, setCandidates] = useState([
+    { id: 'c1', provider: 'OpenAI',    model: 'gpt-4o-mini' },
+    { id: 'c2', provider: 'Anthropic', model: 'claude-3-5-haiku-20241022' },
+  ]);
+  const [arenaPrompt, setArenaPrompt] = useState('');
+  const [arenaRunning, setArenaRunning] = useState(false);
+  const [arenaResults, setArenaResults] = useState(null); // { results, winners, wall_latency }
 
   // --- Settings Modal State ---
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -563,6 +584,73 @@ const App = () => {
     toast.success("Chat downloaded as JSON");
   };
 
+  // --- Arena handlers ---
+  const addCandidate = () => {
+    if (candidates.length >= 6) {
+      toast.error("Maximum of 6 candidates");
+      return;
+    }
+    setCandidates(prev => [
+      ...prev,
+      { id: `c${Date.now()}`, provider: 'OpenAI', model: 'gpt-4o-mini' },
+    ]);
+  };
+  const removeCandidate = (id) => {
+    setCandidates(prev => prev.filter(c => c.id !== id));
+  };
+  const updateCandidate = (id, patch) => {
+    setCandidates(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
+  };
+
+  const runArena = async () => {
+    if (!arenaPrompt.trim()) {
+      toast.error("Enter a prompt for the arena");
+      return;
+    }
+    const ready = candidates.filter(c => c.provider && c.model);
+    if (ready.length < 2) {
+      toast.error("Add at least 2 candidates");
+      return;
+    }
+    setArenaRunning(true);
+    setArenaResults(null);
+    try {
+      const payload = {
+        candidates: ready.map(c => ({ provider: c.provider, model: c.model })),
+        system_prompt: systemPrompt,
+        messages: [{ role: 'user', content: arenaPrompt, enabled: true }],
+        params,
+      };
+      const res = await ApiService.compare(payload);
+      if (!res.success) throw new Error(res.error || 'Arena request failed');
+      setArenaResults(res);
+      const ok = res.results.filter(r => r.status === 'success').length;
+      toast.success(`Arena complete — ${ok}/${res.results.length} models responded`);
+    } catch (e) {
+      toast.error(`Arena error: ${e.message}`);
+    } finally {
+      setArenaRunning(false);
+    }
+  };
+
+  const downloadArena = () => {
+    if (!arenaResults) return;
+    const blob = new Blob(
+      [JSON.stringify({ prompt: arenaPrompt, system_prompt: systemPrompt, ...arenaResults }, null, 2)],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `arena_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Arena results exported");
+  };
+
+  const formatCost = (c) =>
+    c == null ? '—' : c < 0.0001 ? `$${(c * 1000).toFixed(3)}m` : `$${c.toFixed(4)}`;
+
   const enabledCount = messages.filter(msg => msg.enabled).length;
 
   // Filtered models for suggestions
@@ -609,9 +697,10 @@ const App = () => {
                 onClick={downloadChat}
                 variant="outline"
                 className="gap-2 hover:bg-blue-50 hover:border-blue-300"
+                title="Export the current chat as JSON"
               >
                 <Download className="w-4 h-4" />
-                Deploy
+                Export
               </Button>
               <Button
                 onClick={() => setSettingsOpen(true)}
@@ -653,6 +742,13 @@ const App = () => {
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="august" id="august" />
                       <Label htmlFor="august" className="cursor-pointer">August Service</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="arena" id="arena" />
+                      <Label htmlFor="arena" className="cursor-pointer flex items-center gap-1">
+                        <Swords className="w-3.5 h-3.5 text-purple-600" />
+                        Arena <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-blue-600 to-purple-600 text-white px-1.5 py-0.5 rounded">new</span>
+                      </Label>
                     </div>
                   </RadioGroup>
                 </div>
@@ -823,6 +919,65 @@ const App = () => {
                   </>
                 )}
 
+                {/* Arena Mode: candidate roster */}
+                {selectedMode === 'arena' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                        <Swords className="w-4 h-4 text-purple-600" />
+                        Candidates
+                      </Label>
+                      <Button onClick={addCandidate} size="sm" variant="outline" className="gap-1 h-7">
+                        <Plus className="w-3 h-3" /> Add
+                      </Button>
+                    </div>
+                    <div className="text-xs text-gray-500 -mt-2">
+                      Same prompt fans out to every candidate in parallel. Up to 6.
+                    </div>
+                    <div className="space-y-2">
+                      {candidates.map((c, i) => {
+                        const colors = PROVIDER_COLORS[c.provider] || PROVIDER_COLORS.OpenAI;
+                        return (
+                          <div key={c.id} className={`p-2 rounded-lg border bg-white/80 ring-1 ${colors.ring}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+                                <span className="text-[11px] font-semibold text-gray-600">#{i + 1}</span>
+                              </div>
+                              {candidates.length > 1 && (
+                                <Button
+                                  onClick={() => removeCandidate(c.id)}
+                                  size="sm" variant="ghost"
+                                  className="h-6 p-1 text-red-500 hover:text-red-600"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                            <Select
+                              value={c.provider}
+                              onValueChange={v => updateCandidate(c.id, { provider: v })}
+                            >
+                              <SelectTrigger className="h-8 text-xs bg-white"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="OpenAI">OpenAI</SelectItem>
+                                <SelectItem value="Anthropic">Anthropic</SelectItem>
+                                <SelectItem value="Google">Google</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              value={c.model}
+                              onChange={e => updateCandidate(c.id, { model: e.target.value })}
+                              placeholder="model id…"
+                              className="h-8 mt-1 text-xs"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* August Mode: Only pkey/pvariables */}
                 {selectedMode === 'august' && (
                   <div className="space-y-4">
@@ -858,6 +1013,199 @@ const App = () => {
             </Card>
           </div>
 
+          {/* Main + Response swap out for the Arena panel when arena mode is active */}
+          {selectedMode === 'arena' ? (
+            <div className="lg:col-span-3">
+              <Card className="shadow-lg border-0 bg-white/60 backdrop-blur-sm">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Swords className="w-5 h-5 text-purple-600" />
+                      Arena
+                      <span className="text-xs font-normal text-gray-500">
+                        — {candidates.length} candidate{candidates.length === 1 ? '' : 's'} · parallel fan‑out
+                      </span>
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      {arenaResults && (
+                        <Button onClick={downloadArena} size="sm" variant="outline" className="gap-1">
+                          <Download className="w-4 h-4" /> Export JSON
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {/* Prompt + run */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">Prompt</Label>
+                    <Textarea
+                      value={arenaPrompt}
+                      onChange={e => setArenaPrompt(e.target.value)}
+                      rows={4}
+                      placeholder="Ask every selected model the same thing…"
+                      className="bg-white"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runArena();
+                      }}
+                    />
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-xs text-gray-500">
+                        Tip: <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border text-[10px]">⌘/Ctrl ↵</kbd> to run.
+                        System prompt + parameters from the sidebar apply to every candidate.
+                      </div>
+                      <Button
+                        onClick={runArena}
+                        disabled={arenaRunning || !arenaPrompt.trim() || candidates.length < 2}
+                        className="bg-gradient-to-r from-blue-600 via-purple-600 to-fuchsia-600 hover:opacity-90 gap-2"
+                      >
+                        {arenaRunning ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Running {candidates.length} models…
+                          </>
+                        ) : (
+                          <>
+                            <Swords className="w-4 h-4" />
+                            Run Arena
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Results grid */}
+                  {!arenaResults && !arenaRunning && (
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl text-center text-gray-500 py-16">
+                      <Trophy className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium">Enter a prompt and hit <em>Run Arena</em>.</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Results appear side‑by‑side with latency, tokens, and $ cost per model.
+                      </p>
+                    </div>
+                  )}
+
+                  {arenaResults && (
+                    <>
+                      {/* Headline metrics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
+                          <div className="text-[11px] uppercase tracking-wide text-blue-700 font-semibold">Models</div>
+                          <div className="text-xl font-bold text-blue-900">{arenaResults.results.length}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 border border-emerald-100">
+                          <div className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">Succeeded</div>
+                          <div className="text-xl font-bold text-emerald-900">
+                            {arenaResults.results.filter(r => r.status === 'success').length}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-yellow-50 to-orange-50 border border-orange-100">
+                          <div className="text-[11px] uppercase tracking-wide text-orange-700 font-semibold">Wall time</div>
+                          <div className="text-xl font-bold text-orange-900">{arenaResults.wall_latency}s</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-purple-50 to-fuchsia-50 border border-purple-100">
+                          <div className="text-[11px] uppercase tracking-wide text-purple-700 font-semibold">Total $</div>
+                          <div className="text-xl font-bold text-purple-900">
+                            {formatCost(arenaResults.results.reduce((s, r) => s + (r.cost_usd || 0), 0))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {arenaResults.results.map((r, i) => {
+                          const colors = PROVIDER_COLORS[r.provider] || { bg: 'bg-gray-100', text: 'text-gray-700', ring: 'ring-gray-200', dot: 'bg-gray-400' };
+                          const isError = r.status !== 'success';
+                          const isFastest = arenaResults.winners?.fastest === r.model;
+                          const isCheapest = arenaResults.winners?.cheapest === r.model;
+                          const isVerbose = arenaResults.winners?.most_verbose === r.model;
+                          return (
+                            <div
+                              key={i}
+                              className={`relative rounded-xl border bg-white shadow-sm overflow-hidden flex flex-col
+                                ${isError ? 'border-red-200' : `ring-1 ${colors.ring}`}`}
+                            >
+                              {/* Header */}
+                              <div className={`flex items-center justify-between px-3 py-2 border-b ${isError ? 'bg-red-50' : colors.bg}`}>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`w-2 h-2 rounded-full ${isError ? 'bg-red-500' : colors.dot}`} />
+                                  <span className={`text-[11px] font-semibold ${isError ? 'text-red-700' : colors.text}`}>
+                                    {r.provider}
+                                  </span>
+                                  <span className="text-xs font-mono text-gray-700 truncate" title={r.model}>
+                                    {r.model}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {isFastest && !isError && (
+                                    <Badge className="bg-orange-500 text-white gap-1 text-[10px]">
+                                      <Timer className="w-3 h-3" /> fastest
+                                    </Badge>
+                                  )}
+                                  {isCheapest && !isError && (
+                                    <Badge className="bg-emerald-500 text-white gap-1 text-[10px]">
+                                      <DollarSign className="w-3 h-3" /> cheapest
+                                    </Badge>
+                                  )}
+                                  {isVerbose && !isError && (
+                                    <Badge className="bg-purple-500 text-white gap-1 text-[10px]">
+                                      <Trophy className="w-3 h-3" /> verbose
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Body */}
+                              <div className="p-3 text-sm text-gray-800 flex-1">
+                                {isError ? (
+                                  <div className="flex items-start gap-2 text-red-600">
+                                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                                    <div className="text-xs break-words">{r.error || 'Request failed'}</div>
+                                  </div>
+                                ) : (
+                                  <div className="whitespace-pre-wrap max-h-64 overflow-auto pr-1">
+                                    {r.response || <span className="text-gray-400 italic">empty response</span>}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Footer metrics */}
+                              <div className="px-3 py-2 border-t bg-gray-50/70 grid grid-cols-3 gap-1 text-[11px]">
+                                <div className="flex items-center gap-1 text-gray-600">
+                                  <Timer className="w-3 h-3" /> {r.latency}s
+                                </div>
+                                <div className="flex items-center gap-1 text-gray-600">
+                                  <Hash className="w-3 h-3" /> {r.total_tokens ?? 0}
+                                </div>
+                                <div className="flex items-center gap-1 text-gray-600">
+                                  <DollarSign className="w-3 h-3" /> {formatCost(r.cost_usd)}
+                                </div>
+                              </div>
+
+                              {!isError && (
+                                <Button
+                                  onClick={() => {
+                                    navigator.clipboard?.writeText(r.response || '');
+                                    toast.success(`Copied ${r.model}`);
+                                  }}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="absolute top-1.5 right-1.5 h-6 w-6 p-0 opacity-0 hover:opacity-100 focus:opacity-100 transition"
+                                  title="Copy response"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+          <>
           {/* Main Content */}
           <div className="lg:col-span-2">
             {/* Conversation Section */}
@@ -1140,6 +1488,8 @@ const App = () => {
               </CardContent>
             </Card>
           </div>
+          </>
+          )}
         </div>
       </div>
     {/* Settings Modal */}

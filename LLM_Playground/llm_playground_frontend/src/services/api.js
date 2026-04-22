@@ -87,6 +87,21 @@ class ApiService {
     };
   }
 
+  // Run the same prompt against N {provider, model} candidates in parallel.
+  // Returns { success, results: [...], winners: { fastest, cheapest, most_verbose }, wall_latency }.
+  async compare(payload) {
+    return this.request('/compare', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // Published per-1M-token pricing for each supported model family.
+  async getPricing() {
+    const res = await this.request('/pricing');
+    return res.pricing || {};
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();
