@@ -1,0 +1,22 @@
+# deps
+node_modules/
+.pnp/
+.pnp.js
+
+# build
+.next/
+out/
+dist/
+build/
+
+# runtime
+.env*.local
+*.log
+.DS_Store
+
+# types
+next-env.d.ts
+
+# ide
+.vscode/
+.idea/

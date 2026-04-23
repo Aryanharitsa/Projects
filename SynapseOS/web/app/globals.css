@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #05060d;
+  color: #f5f7ff;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassy surface used across panels */
+.surface {
+  background: linear-gradient(180deg, rgba(21, 24, 49, 0.7) 0%, rgba(10, 11, 20, 0.75) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(14px);
+}
+
+.surface-hover:hover {
+  border-color: rgba(34, 228, 255, 0.35);
+  box-shadow: 0 0 30px -10px rgba(34, 228, 255, 0.35);
+}
+
+/* Thin neon divider */
+.divider-neon {
+  background: linear-gradient(90deg, transparent, rgba(34, 228, 255, 0.35), rgba(154, 91, 255, 0.35), transparent);
+  height: 1px;
+}
+
+/* Scrollbar theming */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(154, 91, 255, 0.25);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(154, 91, 255, 0.45);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Wikilink tokens inside preview */
+.wikilink {
+  color: #22e4ff;
+  background: rgba(34, 228, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(34, 228, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.wikilink:hover {
+  background: rgba(34, 228, 255, 0.18);
+  border-color: rgba(34, 228, 255, 0.6);
+}
+.wikilink.dangling {
+  color: #ff4fd8;
+  background: rgba(255, 79, 216, 0.08);
+  border-color: rgba(255, 79, 216, 0.35);
+  border-style: dashed;
+}
+
+/* Prose styles for the rendered markdown preview */
+.prose-synapse {
+  color: #d6dbf0;
+  line-height: 1.65;
+}
+.prose-synapse h1 {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #f5f7ff;
+  margin: 0.2rem 0 0.75rem;
+  letter-spacing: -0.01em;
+}
+.prose-synapse h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #f5f7ff;
+  margin: 1.25rem 0 0.5rem;
+}
+.prose-synapse h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #f5f7ff;
+  margin: 1rem 0 0.4rem;
+}
+.prose-synapse p {
+  margin: 0.5rem 0;
+}
+.prose-synapse a {
+  color: #22e4ff;
+}
+.prose-synapse code {
+  background: rgba(154, 91, 255, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.88em;
+  color: #d1c4ff;
+}
+.prose-synapse pre {
+  background: #0a0b14;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+}
+.prose-synapse pre code {
+  background: transparent;
+  padding: 0;
+  color: #d6dbf0;
+}
+.prose-synapse ul,
+.prose-synapse ol {
+  padding-left: 1.25rem;
+  margin: 0.4rem 0;
+}
+.prose-synapse li {
+  margin: 0.2rem 0;
+}
+.prose-synapse blockquote {
+  border-left: 3px solid rgba(154, 91, 255, 0.5);
+  background: rgba(154, 91, 255, 0.06);
+  padding: 6px 12px;
+  margin: 0.5rem 0;
+  color: #d6dbf0;
+  border-radius: 0 6px 6px 0;
+}
+.prose-synapse hr {
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 1rem 0;
+}
+.prose-synapse .tag {
+  display: inline-block;
+  background: rgba(255, 181, 71, 0.1);
+  border: 1px solid rgba(255, 181, 71, 0.3);
+  color: #ffcc7a;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  margin-right: 4px;
+}
+
+/* Animated ambient synapse dots on landing */
+.bg-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bg-ambient::before,
+.bg-ambient::after {
+  content: "";
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.55;
+}
+.bg-ambient::before {
+  background: #22e4ff;
+  top: -180px;
+  left: -120px;
+  animation: pulse 7s ease-in-out infinite;
+}
+.bg-ambient::after {
+  background: #9a5bff;
+  bottom: -200px;
+  right: -120px;
+  animation: pulse 9s ease-in-out infinite;
+}
+
+/* Focus ring */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(34, 228, 255, 0.5);
+}
