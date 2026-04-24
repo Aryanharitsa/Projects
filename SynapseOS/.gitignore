@@ -1,0 +1,24 @@
+# Backend
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.sqlite3
+*.db
+backend/data/*.db
+backend/data/*.sqlite3
+
+# Frontend
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
