@@ -2,4 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light dark; }
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: #070b14;
+}
+
+body {
+  background-image:
+    radial-gradient(1100px 700px at 88% -10%, rgba(45, 225, 194, 0.10), transparent 60%),
+    radial-gradient(900px 600px at -10% 12%, rgba(110, 91, 255, 0.10), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(45, 225, 194, 0.06), transparent 70%),
+    linear-gradient(180deg, #070b14 0%, #050810 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  color: #e6edf6;
+  font-feature-settings: "ss01", "cv05";
+}
+
+/* Subtle film grain to prevent dead-flat dark areas */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 3px 3px;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+}
+
+@layer components {
+  .glass {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md;
+  }
+  .glass-strong {
+    @apply rounded-2xl border border-white/12 bg-white/[0.05] backdrop-blur-xl;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+      0 12px 40px -16px rgba(0, 0, 0, 0.6);
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] uppercase tracking-wider text-white/70;
+  }
+  .pill-ok    { @apply border-teal-400/30 bg-teal-500/10 text-teal-400; }
+  .pill-warn  { @apply border-amber-400/30 bg-amber-500/10 text-amber-300; }
+  .pill-bad   { @apply border-rose-400/30 bg-rose-500/10 text-rose-300; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10
+           bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/85 transition
+           hover:border-white/20 hover:bg-white/[0.07] active:translate-y-[1px];
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold
+           text-ink-950 transition active:translate-y-[1px];
+    background: linear-gradient(135deg, #2DE1C2 0%, #6E5BFF 100%);
+    box-shadow: 0 8px 30px -8px rgba(45, 225, 194, 0.45), inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .btn-primary:hover { filter: brightness(1.07); }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm
+           text-white/70 transition hover:bg-white/[0.04];
+  }
+  .input {
+    @apply w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm
+           text-white placeholder:text-white/30 outline-none transition
+           focus:border-teal-400/50 focus:bg-black/40;
+  }
+  .label {
+    @apply mb-1.5 block text-[11px] uppercase tracking-wider text-white/50;
+  }
+  .grad-text {
+    background: linear-gradient(135deg, #2DE1C2 0%, #B5A6FF 60%, #6E5BFF 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Custom scroll, but only on dark scrollables we opt-into */
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+/* Drop-zone state */
+.dropzone {
+  border: 1.5px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color .2s, background .2s, transform .2s;
+}
+.dropzone-active {
+  border-color: rgba(45, 225, 194, 0.55);
+  background: rgba(45, 225, 194, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Risk band background fills */
+.band-low      { background: linear-gradient(135deg, rgba(34,211,168,0.18), rgba(34,211,168,0.04)); border-color: rgba(34,211,168,0.35); }
+.band-medium   { background: linear-gradient(135deg, rgba(251,191,36,0.18), rgba(251,191,36,0.04)); border-color: rgba(251,191,36,0.40); }
+.band-high     { background: linear-gradient(135deg, rgba(251,146,60,0.20), rgba(251,146,60,0.05)); border-color: rgba(251,146,60,0.45); }
+.band-critical { background: linear-gradient(135deg, rgba(239,68,68,0.22), rgba(239,68,68,0.05)); border-color: rgba(239,68,68,0.55); }
+
+/* Score-ring conic gradient is generated inline in components */

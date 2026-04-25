@@ -1,61 +1,88 @@
-from fastapi import FastAPI, Body
-from pydantic import BaseModel
-from typing import List, Optional
-import importlib.util, json, os
-from pathlib import Path
+"""TITAN AML service.
 
-app = FastAPI(title="Fintrace AML (TITAN)")
+Replaces the prior fintrace-shim with a self-contained, deterministic,
+explainable risk engine. Runs offline, has no external ML dependencies,
+and exposes a small, well-shaped HTTP surface.
 
-# --- Dynamic import of Fintrace scorer if present ---
-ROOT = Path(__file__).resolve().parent
-FINTRACE_DIR = ROOT / "fintrace"
-score_case = None
-try:
-    score_path = FINTRACE_DIR / "ml" / "score_case.py"
-    if score_path.exists():
-        spec = importlib.util.spec_from_file_location("score_case", score_path)
-        score_case = importlib.util.module_from_spec(spec); spec.loader.exec_module(score_case)
-except Exception as e:
-    score_case = None
+Endpoints
+---------
+GET  /healthz           liveness + engine version
+GET  /aml/rules         current rule weights / thresholds (auditor-facing)
+POST /aml/score         score a batch of transactions → per-account reports
+POST /aml/sar           generate a SAR draft from one account report
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+import risk as risk_engine
+import sar as sar_engine
+
+ENGINE_VERSION = "titan-aml/1.0.0"
+
+app = FastAPI(
+    title="TITAN AML",
+    description=(
+        "Deterministic, explainable AML scoring for KYC-verified subjects. "
+        "Every rule and threshold is exposed at /aml/rules so reports can be "
+        "audited end-to-end."
+    ),
+    version=ENGINE_VERSION,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class Tx(BaseModel):
     account_id: str
     counterparty: str
-    amount: float
+    amount: float = Field(gt=0)
     timestamp: str
-    channel: str
-    geo: Optional[str] = None
-    meta: Optional[dict] = None
-    subject: Optional[str] = None
+    channel: Optional[str] = ""
+    geo: Optional[str] = ""
+    subject: Optional[str] = ""
+    meta: Optional[Dict[str, Any]] = None
+
 
 class ScoreReq(BaseModel):
     transactions: List[Tx]
-    pattern_type: Optional[str] = "cycle"
+
+
+class SARReq(BaseModel):
+    account_report: Dict[str, Any]
+    analyst: Optional[str] = "TITAN-AUTOMATED"
+
 
 @app.get("/healthz")
-def health():
-    return {"ok": True, "engine": "fintrace", "scorer_loaded": bool(score_case)}
+def healthz() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION}
+
+
+@app.get("/aml/rules")
+def rules() -> Dict[str, Any]:
+    return risk_engine.get_rules()
+
 
 @app.post("/aml/score")
-def aml_score(req: ScoreReq = Body(...)):
-    # If fintrace scorer exists and exposes score_case(case), try to call it.
-    if score_case and hasattr(score_case, "score_case"):
-        # Minimal graph case: nodes = unique accounts; edges = transfers
-        acct = sorted({t.account_id for t in req.transactions} | {t.counterparty for t in req.transactions})
-        idx = {a:i for i,a in enumerate(acct)}
-        case = {
-            "pattern_type": req.pattern_type,
-            "nodes": [{"id": str(i)} for i,_ in enumerate(acct)],
-            "edges": [{"source": str(idx[t.account_id]), "target": str(idx[t.counterparty])} for t in req.transactions]
-        }
-        try:
-            result = score_case.score_case(case)
-            return {"ok": True, "engine": "fintrace", "mode": "scorer", "node_map": acct, "result": result}
-        except Exception as e:
-            return {"ok": False, "engine": "fintrace", "mode": "scorer", "error": str(e)}
+def score(req: ScoreReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    return {"ok": True, "engine": ENGINE_VERSION, **risk_engine.score_accounts(rows)}
 
-    # Fallback stub so the endpoint works today without the ML deps
-    acct = sorted({t.account_id for t in req.transactions} | {t.counterparty for t in req.transactions})
-    edges = [{"source": t.account_id, "target": t.counterparty, "amount": t.amount} for t in req.transactions]
-    nodes = [{"id": a, "risk": (1.0 if any(x["amount"]>=100000 for x in edges if x["source"]==a) else 0.1)} for a in acct]
-    return {"ok": True, "engine": "fintrace", "mode": "stub", "nodes": nodes, "edges": edges}
+
+@app.post("/aml/sar")
+def sar(req: SARReq = Body(...)) -> Dict[str, Any]:
+    if "account_id" not in req.account_report:
+        raise HTTPException(status_code=400, detail="account_report.account_id required")
+    return sar_engine.render_sar(req.account_report, analyst=req.analyst or "TITAN-AUTOMATED")
