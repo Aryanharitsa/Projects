@@ -1,3 +1,9 @@
 id,user,lat,lon,category,note,photo_path,sha256,sig,status,created_at
 0864db26-1843-4492-afda-cc09a06935cf,user-c0d5d598,15.55,73.77,accident,two trucks with a head-on collision.,data/uploads/8b8e4b8ca3.jpg,c150ad669834e7038c1a4b744c2fbdc7cdf5008e7545db5d74fa6029fc66a96d,sig-user-c,verified,2025-09-16T10:04:16.564753
 acc465ab-4d2b-4d52-b5ba-7498dd041868,user-35b643ec,15.55,73.77,accident,,data/uploads/089570e630.jpg,5e6c61672482acc02cb0d6d989bd7af3bcdfe636d4d32c62a77b4a0d655b85e8,sig-user-3,verified,2025-09-16T10:39:00.169408
+8c1f2b3a-0001-4f00-9000-000000000001,seed-corridor,15.4925,73.7825,landslide,loose rocks reported on cliff road,,7c1f2b3a000100,sig-seed-1,verified,2026-04-25T18:14:00
+8c1f2b3a-0002-4f00-9000-000000000002,seed-corridor,15.5005,73.7905,roadblock,debris partially blocking lane,,7c1f2b3a000200,sig-seed-2,verified,2026-04-26T01:30:00
+8c1f2b3a-0003-4f00-9000-000000000003,seed-corridor,15.4870,73.7770,accident,two-wheeler skid in wet conditions,,7c1f2b3a000300,sig-seed-3,pending,2026-04-25T22:10:00
+8c1f2b3a-0004-4f00-9000-000000000004,seed-corridor,15.5160,73.8120,flooding,knee-deep water at junction,,7c1f2b3a000400,sig-seed-4,verified,2026-04-25T07:22:00
+8c1f2b3a-0005-4f00-9000-000000000005,seed-corridor,15.5430,73.7720,accident,scooter and taxi side-swipe,,7c1f2b3a000500,sig-seed-5,verified,2026-04-25T20:48:00
+8c1f2b3a-0006-4f00-9000-000000000006,seed-corridor,15.4750,73.8000,roadblock,construction barriers on coastal road,,7c1f2b3a000600,sig-seed-6,verified,2026-04-26T02:05:00

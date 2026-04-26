@@ -64,6 +64,58 @@ def _band(score: int) -> str:
     return "Danger"
 
 
+def point_risk(
+    lat: float,
+    lon: float,
+    incidents: Sequence[Mapping],
+    geofences: Mapping,
+    pois: Sequence[Mapping],
+    now: datetime | None = None,
+) -> float:
+    """Cheap 0..1 risk score for one point — used by the route planner.
+
+    Same physics as `compute_safety` (geofence + recency/severity-decayed
+    incidents + late-night) but returns a normalised risk so it can be
+    folded straight into an A* edge cost. Help-POI bonus is folded in as
+    a small risk-reduction so detours toward hospitals/police are rewarded.
+    """
+    now = now or datetime.utcnow()
+    penalty = 0.0
+    for feat in geofences.get("features", []):
+        if point_in_polygon(lat, lon, feat["geometry"]["coordinates"][0]):
+            penalty += 38.0
+            break
+    for r in incidents:
+        try:
+            ilat = float(r.get("lat")); ilon = float(r.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        d = haversine_km(lat, lon, ilat, ilon)
+        if d > INCIDENT_RADIUS_KM:
+            continue
+        sev = CATEGORY_SEVERITY.get(str(r.get("category", "other")).lower(), 2)
+        rec = _recency_weight(str(r.get("created_at", "")), now)
+        dist_w = _distance_weight(d, INCIDENT_RADIUS_KM)
+        verified = 1.5 if str(r.get("status")) == "verified" else 1.0
+        penalty += sev * rec * dist_w * verified * 1.6
+    if now.hour >= 22 or now.hour < 5:
+        penalty += 4.0
+    help_bonus = 0.0
+    for poi in pois:
+        try:
+            plat = float(poi.get("lat")); plon = float(poi.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        if str(poi.get("ptype", "")).lower() not in HELP_POI_TYPES:
+            continue
+        d = haversine_km(lat, lon, plat, plon)
+        if d <= POI_RADIUS_KM:
+            help_bonus += 1.5
+    penalty -= min(help_bonus, 6.0)
+    penalty = max(0.0, min(70.0, penalty))
+    return penalty / 70.0
+
+
 def compute_safety(
     lat: float,
     lon: float,
