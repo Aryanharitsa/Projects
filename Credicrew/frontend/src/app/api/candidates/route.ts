@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       title: String(title).trim(),
       location: String(location || 'Unknown'),
       score: Math.max(0, Math.min(100, Number(score ?? 70))),
-      skills: Array.isArray(skills) ? skills.map((s: any) => String(s)) :
+      skills: Array.isArray(skills) ? skills.map((s: unknown) => String(s)) :
               String(skills || '').split(',').map(s => s.trim()).filter(Boolean),
     };
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     await fs.writeFile(filePath, JSON.stringify(current, null, 2), 'utf8');
 
     return NextResponse.json({ ok: true, id: parsed.id });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'failed to save' }, { status: 500 });
   }
 }

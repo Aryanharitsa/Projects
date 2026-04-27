@@ -5,8 +5,9 @@ from app.routers.health import router as health_router
 from app.routers.candidates import router as candidates_router
 from app.routers.roles import router as roles_router
 from app.routers.match import router as match_router
+from app.routers.outreach import router as outreach_router
 
-app = FastAPI(title="Credicrew API", version="0.2.0")
+app = FastAPI(title="Credicrew API", version="0.3.0")
 
 # Allow local dev UI
 app.add_middleware(
@@ -21,6 +22,7 @@ app.include_router(health_router)
 app.include_router(candidates_router)
 app.include_router(roles_router)
 app.include_router(match_router)
+app.include_router(outreach_router)
 
 
 @app.get("/")
@@ -29,5 +31,6 @@ async def root() -> dict[str, str]:
         "message": "Welcome to Credicrew API",
         "health": "/health",
         "match": "POST /match",
+        "outreach": "POST /outreach",
         "docs": "/docs",
     }

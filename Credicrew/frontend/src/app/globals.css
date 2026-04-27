@@ -1,8 +1,30 @@
 @import "tailwindcss";
 
-:root { color-scheme: light; }
+:root { color-scheme: dark; }
+
 html, body { height: 100%; }
-body { 
-  /* base look */
+
+body {
   font-feature-settings: "rlig" 1, "calt" 1;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(99,102,241,0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(139,92,246,0.08), transparent 55%),
+    linear-gradient(#0b0b12, #000);
+  background-attachment: fixed;
 }
+
+/* Subtle film-grain to lift large dark surfaces. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  z-index: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.6) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: screen;
+}
+
+/* Make selection visible on dark surfaces. */
+::selection { background: rgba(129,140,248,0.35); color: white; }
