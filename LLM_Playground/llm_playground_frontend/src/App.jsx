@@ -40,7 +40,13 @@ import {
   DollarSign,
   Hash,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  Gavel,
+  Award,
+  ListOrdered,
+  ChevronRight,
+  Wand2,
+  RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -110,6 +116,24 @@ const App = () => {
   const [arenaPrompt, setArenaPrompt] = useState('');
   const [arenaRunning, setArenaRunning] = useState(false);
   const [arenaResults, setArenaResults] = useState(null); // { results, winners, wall_latency }
+
+  // --- LLM-as-Judge state ---
+  // Defaults are a snapshot of backend's DEFAULT_RUBRIC; the live copy is
+  // refreshed on first arena render so weights stay in lockstep.
+  const FALLBACK_RUBRIC = [
+    { name: "Correctness",  description: "Are the claims, code, or reasoning factually right and free of fabrication?", weight: 0.35 },
+    { name: "Completeness", description: "Does the response cover every part of what the prompt asks for?",            weight: 0.20 },
+    { name: "Clarity",      description: "Is it well-structured, easy to follow, and free of jargon-soup?",            weight: 0.15 },
+    { name: "Conciseness",  description: "No padding, repetition, or filler — every sentence earns its place.",        weight: 0.15 },
+    { name: "Format",       description: "Adheres to the prompt's requested format / tone / language.",                weight: 0.15 },
+  ];
+  const [rubric, setRubric] = useState(FALLBACK_RUBRIC);
+  const [rubricEditorOpen, setRubricEditorOpen] = useState(false);
+  const [judgeProvider, setJudgeProvider] = useState('Anthropic');
+  const [judgeModel, setJudgeModel] = useState('claude-3-5-sonnet-latest');
+  const [judging, setJudging] = useState(false);
+  const [judgeResults, setJudgeResults] = useState(null); // { rubric, verdicts, leaderboard, winner, judge }
+  const [judgeError, setJudgeError] = useState('');
 
   // --- Settings Modal State ---
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -614,6 +638,8 @@ const App = () => {
     }
     setArenaRunning(true);
     setArenaResults(null);
+    setJudgeResults(null);
+    setJudgeError('');
     try {
       const payload = {
         candidates: ready.map(c => ({ provider: c.provider, model: c.model })),
@@ -633,10 +659,86 @@ const App = () => {
     }
   };
 
+  // --- Judge handlers ---
+  // Lazy-load the canonical rubric the first time Arena renders; keeps weights
+  // identical to the backend default and survives schema changes there.
+  const rubricLoadedRef = useRef(false);
+  useEffect(() => {
+    if (selectedMode !== 'arena' || rubricLoadedRef.current) return;
+    rubricLoadedRef.current = true;
+    ApiService.getRubric()
+      .then(r => { if (Array.isArray(r) && r.length) setRubric(r); })
+      .catch(() => { /* offline-OK: fall back to FALLBACK_RUBRIC */ });
+  }, [selectedMode]);
+
+  const updateRubricCriterion = (i, patch) => {
+    setRubric(prev => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  };
+  const removeRubricCriterion = (i) => {
+    setRubric(prev => prev.filter((_, idx) => idx !== i));
+  };
+  const addRubricCriterion = () => {
+    setRubric(prev => [...prev, { name: `Criterion ${prev.length + 1}`, description: "", weight: 0.1 }]);
+  };
+  const resetRubric = () => {
+    rubricLoadedRef.current = false;
+    ApiService.getRubric()
+      .then(r => setRubric(Array.isArray(r) && r.length ? r : FALLBACK_RUBRIC))
+      .catch(() => setRubric(FALLBACK_RUBRIC));
+    toast.success("Rubric reset to defaults");
+  };
+
+  const runJudge = async () => {
+    if (!arenaResults) return;
+    if (!judgeProvider || !judgeModel.trim()) {
+      toast.error("Pick a judge provider and model");
+      return;
+    }
+    if (rubric.length === 0) {
+      toast.error("Rubric is empty");
+      return;
+    }
+    setJudging(true);
+    setJudgeError('');
+    setJudgeResults(null);
+    try {
+      const payload = {
+        prompt: arenaPrompt,
+        system_prompt: systemPrompt,
+        candidates: arenaResults.results.map(r => ({
+          provider: r.provider,
+          model:    r.model,
+          response: r.response,
+          status:   r.status,
+        })),
+        judge:  { provider: judgeProvider, model: judgeModel.trim() },
+        rubric: rubric.map(r => ({ name: r.name, description: r.description, weight: Number(r.weight) || 0 })),
+      };
+      const res = await ApiService.judge(payload);
+      if (!res.success) throw new Error(res.error || 'Judge call failed');
+      setJudgeResults(res);
+      const winnerName = res.leaderboard?.[0]?.model || '—';
+      toast.success(`Judge complete — top: ${winnerName}`);
+    } catch (e) {
+      setJudgeError(e.message);
+      toast.error(`Judge error: ${e.message}`);
+    } finally {
+      setJudging(false);
+    }
+  };
+
+  // Sum of rubric weights as displayed (handy live-feedback in the editor).
+  const rubricWeightTotal = rubric.reduce((s, r) => s + (Number(r.weight) || 0), 0);
+
   const downloadArena = () => {
     if (!arenaResults) return;
     const blob = new Blob(
-      [JSON.stringify({ prompt: arenaPrompt, system_prompt: systemPrompt, ...arenaResults }, null, 2)],
+      [JSON.stringify({
+        prompt: arenaPrompt,
+        system_prompt: systemPrompt,
+        ...arenaResults,
+        judge: judgeResults || undefined,
+      }, null, 2)],
       { type: 'application/json' },
     );
     const url = URL.createObjectURL(blob);
@@ -650,6 +752,73 @@ const App = () => {
 
   const formatCost = (c) =>
     c == null ? '—' : c < 0.0001 ? `$${(c * 1000).toFixed(3)}m` : `$${c.toFixed(4)}`;
+
+  // Build a verdict-by-candidate-index map for fast lookups in the Arena cards.
+  const verdictByCandidate = (() => {
+    if (!judgeResults?.verdicts) return {};
+    const m = {};
+    judgeResults.verdicts.forEach(v => { m[v.candidate] = v; });
+    return m;
+  })();
+
+  // ScoreRing — conic-gradient ring rendering 0-100 composite score.
+  const ScoreRing = ({ value = 0, size = 56, label = "", trophy = false }) => {
+    const v = Math.max(0, Math.min(100, Math.round(value)));
+    // Hue ramps red→amber→emerald
+    const hue = Math.round(v * 1.2); // 0=red, 120=green
+    const ringColor = `hsl(${hue} 80% 50%)`;
+    return (
+      <div
+        className="relative inline-flex items-center justify-center shrink-0"
+        style={{
+          width: size, height: size,
+          borderRadius: '9999px',
+          background: `conic-gradient(${ringColor} ${v * 3.6}deg, #e5e7eb ${v * 3.6}deg)`,
+        }}
+      >
+        <div
+          className="bg-white rounded-full flex flex-col items-center justify-center shadow-inner"
+          style={{ width: size - 8, height: size - 8 }}
+        >
+          <div className="text-sm font-bold leading-none" style={{ color: ringColor }}>{v}</div>
+          {label && <div className="text-[8px] uppercase tracking-wide text-gray-400 mt-0.5">{label}</div>}
+        </div>
+        {trophy && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-white grid place-items-center shadow ring-2 ring-white">
+            <Trophy className="w-3 h-3" />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ScoreBars — five horizontal mini-bars (one per criterion), labelled.
+  const ScoreBars = ({ scores, rubric: rb }) => {
+    if (!scores || !rb) return null;
+    return (
+      <div className="space-y-1">
+        {rb.map((r) => {
+          const s = Math.max(1, Math.min(5, Number(scores[r.name] ?? 1)));
+          const pct = ((s - 1) / 4) * 100;
+          const hue = Math.round(((s - 1) / 4) * 120);
+          return (
+            <div key={r.name} className="flex items-center gap-2">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 w-[88px] truncate" title={r.description}>
+                {r.name}
+              </div>
+              <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${pct}%`, background: `hsl(${hue} 80% 50%)` }}
+                />
+              </div>
+              <div className="text-[10px] font-mono tabular-nums w-4 text-right text-gray-700">{s}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const enabledCount = messages.filter(msg => msg.enabled).length;
 
@@ -1026,7 +1195,40 @@ const App = () => {
                         — {candidates.length} candidate{candidates.length === 1 ? '' : 's'} · parallel fan‑out
                       </span>
                     </CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {arenaResults && (
+                        <Button
+                          onClick={() => setRubricEditorOpen(v => !v)}
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          title="Edit rubric criteria & weights"
+                        >
+                          <Wand2 className="w-4 h-4" />
+                          {rubricEditorOpen ? 'Hide rubric' : 'Edit rubric'}
+                        </Button>
+                      )}
+                      {arenaResults && (
+                        <Button
+                          onClick={runJudge}
+                          disabled={judging || arenaResults.results.every(r => r.status !== 'success')}
+                          size="sm"
+                          className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:opacity-90 gap-1"
+                          title="Score every candidate with an LLM judge"
+                        >
+                          {judging ? (
+                            <>
+                              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Scoring…
+                            </>
+                          ) : (
+                            <>
+                              <Gavel className="w-4 h-4" />
+                              {judgeResults ? 'Re-judge' : 'Judge responses'}
+                            </>
+                          )}
+                        </Button>
+                      )}
                       {arenaResults && (
                         <Button onClick={downloadArena} size="sm" variant="outline" className="gap-1">
                           <Download className="w-4 h-4" /> Export JSON
@@ -1087,6 +1289,157 @@ const App = () => {
 
                   {arenaResults && (
                     <>
+                      {/* Judge configuration + rubric editor (collapsible) */}
+                      {rubricEditorOpen && (
+                        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-orange-50/70 p-4 space-y-4">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <Gavel className="w-4 h-4 text-amber-700" />
+                              <Label className="text-sm font-semibold text-amber-900">Judge configuration</Label>
+                            </div>
+                            <Button onClick={resetRubric} size="sm" variant="ghost" className="h-7 gap-1 text-amber-700 hover:bg-amber-100">
+                              <RotateCcw className="w-3 h-3" /> Reset rubric
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">Judge provider</Label>
+                              <Select value={judgeProvider} onValueChange={setJudgeProvider}>
+                                <SelectTrigger className="h-8 mt-1 bg-white"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="OpenAI">OpenAI</SelectItem>
+                                  <SelectItem value="Anthropic">Anthropic</SelectItem>
+                                  <SelectItem value="Google">Google</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">Judge model</Label>
+                              <Input
+                                value={judgeModel}
+                                onChange={e => setJudgeModel(e.target.value)}
+                                placeholder="e.g. claude-3-5-sonnet-latest"
+                                className="h-8 mt-1 bg-white text-xs"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">
+                                Rubric criteria — weights renormalised at scoring time
+                              </Label>
+                              <span
+                                className={`text-[10px] font-mono px-1.5 py-0.5 rounded
+                                  ${Math.abs(rubricWeightTotal - 1) < 0.001 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}
+                                title="Sum of weights as you've entered them"
+                              >
+                                Σ {rubricWeightTotal.toFixed(2)}
+                              </span>
+                            </div>
+                            {rubric.map((r, i) => (
+                              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-white/80 rounded-lg p-2 border border-amber-100">
+                                <Input
+                                  value={r.name}
+                                  onChange={e => updateRubricCriterion(i, { name: e.target.value })}
+                                  className="col-span-3 h-7 text-xs"
+                                  placeholder="Name"
+                                />
+                                <Input
+                                  value={r.description}
+                                  onChange={e => updateRubricCriterion(i, { description: e.target.value })}
+                                  className="col-span-7 h-7 text-xs"
+                                  placeholder="One-line description shown to the judge"
+                                />
+                                <Input
+                                  type="number"
+                                  step="0.05"
+                                  min="0"
+                                  max="1"
+                                  value={r.weight}
+                                  onChange={e => updateRubricCriterion(i, { weight: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                  className="col-span-1 h-7 text-xs font-mono"
+                                  title="Weight (0–1)"
+                                />
+                                <Button
+                                  onClick={() => removeRubricCriterion(i)}
+                                  size="sm" variant="ghost"
+                                  className="col-span-1 h-7 p-1 text-red-500 hover:text-red-600"
+                                  disabled={rubric.length <= 1}
+                                  title="Remove criterion"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button
+                              onClick={addRubricCriterion}
+                              size="sm" variant="outline"
+                              className="h-7 gap-1 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                            >
+                              <Plus className="w-3 h-3" /> Add criterion
+                            </Button>
+                          </div>
+
+                          {judgeError && (
+                            <div className="text-xs text-red-600 flex items-start gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 mt-0.5" />
+                              {judgeError}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Judge leaderboard */}
+                      {judgeResults && judgeResults.leaderboard?.length > 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50/60 to-yellow-50 p-4 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <ListOrdered className="w-4 h-4 text-amber-700" />
+                              <span className="text-sm font-semibold text-amber-900">Leaderboard</span>
+                              <span className="text-[11px] text-amber-700/80">
+                                judged by {judgeResults.judge?.provider} · {judgeResults.judge?.model}
+                                {' · '}{judgeResults.judge?.latency}s · {formatCost(judgeResults.judge?.cost_usd)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {judgeResults.leaderboard.map((row, rank) => {
+                              const v = verdictByCandidate[row.candidate];
+                              const colors = PROVIDER_COLORS[row.provider] || { dot: 'bg-gray-400', text: 'text-gray-700' };
+                              return (
+                                <div key={row.candidate} className="grid grid-cols-12 items-center gap-2 bg-white/80 rounded-lg px-3 py-2 ring-1 ring-amber-100">
+                                  <div className="col-span-1 text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                                    {rank === 0 ? <Award className="w-3.5 h-3.5 text-amber-500" /> : <span className="w-3.5 inline-block text-center">#{rank+1}</span>}
+                                  </div>
+                                  <div className="col-span-4 flex items-center gap-2 min-w-0">
+                                    <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                                    <span className={`text-[11px] font-semibold ${colors.text}`}>{row.provider}</span>
+                                    <span className="text-xs font-mono text-gray-700 truncate" title={row.model}>{row.model}</span>
+                                  </div>
+                                  <div className="col-span-5 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${row.composite}%`,
+                                        background: `hsl(${Math.round(row.composite * 1.2)} 80% 50%)`,
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="col-span-2 flex items-center justify-end gap-2 text-xs">
+                                    <span className="font-mono tabular-nums text-gray-800">{row.composite}</span>
+                                    {v?.rationale && (
+                                      <ChevronRight className="w-3 h-3 text-gray-400" title={v.rationale} />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Headline metrics */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
@@ -1118,11 +1471,15 @@ const App = () => {
                           const isFastest = arenaResults.winners?.fastest === r.model;
                           const isCheapest = arenaResults.winners?.cheapest === r.model;
                           const isVerbose = arenaResults.winners?.most_verbose === r.model;
+                          const verdict = verdictByCandidate[i];
+                          const isJudgeWinner = judgeResults?.winner === i;
                           return (
                             <div
                               key={i}
                               className={`relative rounded-xl border bg-white shadow-sm overflow-hidden flex flex-col
-                                ${isError ? 'border-red-200' : `ring-1 ${colors.ring}`}`}
+                                ${isError ? 'border-red-200'
+                                  : isJudgeWinner ? 'ring-2 ring-amber-400 shadow-amber-200/40 shadow-lg'
+                                  : `ring-1 ${colors.ring}`}`}
                             >
                               {/* Header */}
                               <div className={`flex items-center justify-between px-3 py-2 border-b ${isError ? 'bg-red-50' : colors.bg}`}>
@@ -1135,7 +1492,12 @@ const App = () => {
                                     {r.model}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 flex-wrap justify-end">
+                                  {isJudgeWinner && (
+                                    <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1 text-[10px]">
+                                      <Award className="w-3 h-3" /> judge pick
+                                    </Badge>
+                                  )}
                                   {isFastest && !isError && (
                                     <Badge className="bg-orange-500 text-white gap-1 text-[10px]">
                                       <Timer className="w-3 h-3" /> fastest
@@ -1153,6 +1515,26 @@ const App = () => {
                                   )}
                                 </div>
                               </div>
+
+                              {/* Judge score panel — shown only after a judge run */}
+                              {verdict && (
+                                <div className="px-3 py-2 border-b bg-gradient-to-r from-amber-50/60 via-white to-orange-50/40 flex items-center gap-3">
+                                  <ScoreRing
+                                    value={verdict.composite}
+                                    size={52}
+                                    label="score"
+                                    trophy={isJudgeWinner}
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <ScoreBars scores={verdict.scores} rubric={judgeResults.rubric} />
+                                    {verdict.rationale && (
+                                      <div className="mt-1.5 text-[11px] italic text-gray-600 leading-snug line-clamp-2" title={verdict.rationale}>
+                                        “{verdict.rationale}”
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Body */}
                               <div className="p-3 text-sm text-gray-800 flex-1">

@@ -102,6 +102,22 @@ class ApiService {
     return res.pricing || {};
   }
 
+  // Default LLM-as-judge rubric (criteria + weights).
+  async getRubric() {
+    const res = await this.request('/rubric');
+    return res.rubric || [];
+  }
+
+  // Score a finished Arena run with an LLM judge.
+  // Payload: { prompt, system_prompt, candidates:[{provider,model,response,status}],
+  //            judge:{provider,model}, rubric:[{name,description,weight}] }
+  async judge(payload) {
+    return this.request('/judge', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();

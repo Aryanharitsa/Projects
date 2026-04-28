@@ -11,6 +11,7 @@ import requests
 from src.models.user import User
 from src.providers.provider_factory import ProviderFactory
 from src.pricing import estimate_cost, get_pricing_table
+from src.judge import DEFAULT_RUBRIC, judge_compare
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -324,6 +325,70 @@ def compare():
             'timestamp': datetime.utcnow().isoformat(),
         })
     except Exception as e:
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/rubric', methods=['GET'])
+def get_default_rubric():
+    """Expose the default judge rubric so the UI can pre-populate its editor."""
+    return jsonify({'success': True, 'rubric': DEFAULT_RUBRIC})
+
+
+@llm_bp.route('/judge', methods=['POST'])
+def judge():
+    """Score a set of Arena responses with an LLM-as-judge.
+
+    Request body:
+        {
+          "prompt":        "<user prompt that produced the responses>",
+          "system_prompt": "<optional original system prompt>",
+          "candidates":    [ {provider, model, response, status?}, ... ],
+          "judge":         { "provider": "Anthropic", "model": "claude-..." },
+          "rubric":        [ {name, description, weight}, ... ]   # optional
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        prompt = (data.get('prompt') or '').strip()
+        system_prompt = data.get('system_prompt') or ''
+        candidates = data.get('candidates') or []
+        rubric = data.get('rubric')
+        judge_cfg = data.get('judge') or {}
+
+        # Only score successful candidates against their actual response;
+        # surface failed ones with an empty body so they appear in the verdict
+        # list (and naturally land at the bottom of the leaderboard).
+        scoreable = []
+        for c in candidates:
+            if not isinstance(c, dict):
+                continue
+            scoreable.append({
+                'provider': c.get('provider', ''),
+                'model':    c.get('model', ''),
+                'response': c.get('response', '') if c.get('status', 'success') == 'success' else '',
+                'status':   c.get('status', 'success'),
+            })
+
+        if len(scoreable) < 1:
+            return jsonify({'success': False, 'error': 'No candidates provided'}), 400
+
+        judge_provider = (judge_cfg.get('provider') or '').strip()
+        judge_model = (judge_cfg.get('model') or '').strip()
+        if not judge_provider or not judge_model:
+            return jsonify({'success': False, 'error': 'judge.provider and judge.model are required'}), 400
+
+        payload, status = judge_compare(
+            user_prompt=prompt,
+            system_prompt=system_prompt,
+            candidates=scoreable,
+            judge_provider_name=judge_provider,
+            judge_model=judge_model,
+            rubric=rubric,
+            provider_factory=provider_factory,
+        )
+        return jsonify(payload), status
+    except Exception as e:  # noqa: BLE001
         current_app.logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 
