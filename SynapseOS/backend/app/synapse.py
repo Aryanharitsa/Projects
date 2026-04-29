@@ -20,7 +20,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from heapq import heappop, heappush
 
-from . import store
+from . import community, store
 from .embed import cosine, embed
 
 # Defaults chosen to look good on the seed graph; `/graph` accepts
@@ -65,7 +65,11 @@ def compute_graph(
 ) -> ComputedGraph:
     notes = store.all_notes()
     if not notes:
-        return ComputedGraph(nodes=[], edges=[], stats={"nodes": 0, "edges": 0, "avg_degree": 0.0})
+        return ComputedGraph(
+            nodes=[],
+            edges=[],
+            stats={"nodes": 0, "edges": 0, "avg_degree": 0.0, "communities": 0},
+        )
 
     embeddings = store.all_embeddings()
     neighbors = _neighbors_of(embeddings, threshold, top_k)
@@ -89,9 +93,15 @@ def compute_graph(
     max_pull = max(pull.values()) if pull else 1.0
     max_pull = max_pull or 1.0
 
+    # Community detection runs over the materialized undirected edges.
+    node_ids = [n["id"] for n in notes]
+    raw_edges = [(u, v, s) for (u, v), s in undirected.items()]
+    cmap = community.detect_communities(node_ids, raw_edges)
+
     nodes_out = []
     for n in notes:
         nid = n["id"]
+        cid = cmap.get(nid, 0)
         nodes_out.append(
             {
                 "id": nid,
@@ -100,6 +110,8 @@ def compute_graph(
                 "tags": n["tags"],
                 "degree": degree.get(nid, 0),
                 "weight": round(pull.get(nid, 0.0) / max_pull, 4),
+                "community": cid,
+                "community_color": community.color_for(cid),
             }
         )
 
@@ -109,12 +121,14 @@ def compute_graph(
     ]
 
     avg_degree = (2 * len(edges_out) / len(nodes_out)) if nodes_out else 0.0
+    n_communities = len(set(cmap.values())) if cmap else 0
     stats = {
         "nodes": len(nodes_out),
         "edges": len(edges_out),
         "avg_degree": round(avg_degree, 2),
         "threshold": threshold,
         "top_k": top_k,
+        "communities": n_communities,
     }
     return ComputedGraph(nodes=nodes_out, edges=edges_out, stats=stats)
 

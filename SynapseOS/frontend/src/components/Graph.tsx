@@ -11,6 +11,10 @@ type Props = {
   data: GraphT | null;
   selectedId: number | null;
   highlightPath: Set<string> | null; // edge keys "u-v" with u<v
+  // When non-null, nodes outside this community are dimmed and edges
+  // crossing the boundary are faded. The graph still renders everything,
+  // it just lets the user mentally "lift" one cluster out of the rest.
+  isolatedCommunity: number | null;
   onSelect: (node: GraphNode) => void;
 };
 
@@ -19,7 +23,17 @@ type FGLink = { source: number | FGNode; target: number | FGNode; strength: numb
 
 const edgeKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
-export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
+// The default node fill when the backend hasn't provided a community
+// color (e.g. an empty graph).
+const DEFAULT_FILL = "#7c6cf0";
+
+export function Graph({
+  data,
+  selectedId,
+  highlightPath,
+  isolatedCommunity,
+  onSelect,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
 
@@ -34,6 +48,14 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
       })) as FGLink[],
     };
   }, [data]);
+
+  // Quick lookup so the link-painter can ask "are both endpoints in the
+  // isolated community?" without scanning the node list every frame.
+  const communityById = useMemo(() => {
+    const m = new Map<number, number | null | undefined>();
+    for (const n of fgData.nodes) m.set(n.id, n.community ?? null);
+    return m;
+  }, [fgData.nodes]);
 
   // Cold-start zoom to fit once nodes are laid out
   useEffect(() => {
@@ -79,8 +101,23 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
           linkColor={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
             if (highlightPath?.has(k)) return "rgba(251,191,36,0.95)";
-            const alpha = 0.25 + l.strength * 0.55;
-            return `rgba(168,85,247,${alpha})`;
+            const su = linkId(l.source);
+            const tu = linkId(l.target);
+            const ca = communityById.get(su);
+            const cb = communityById.get(tu);
+            const isolatedHit =
+              isolatedCommunity == null ||
+              (ca === isolatedCommunity && cb === isolatedCommunity);
+            const baseAlpha = 0.25 + l.strength * 0.55;
+            const alpha = isolatedHit ? baseAlpha : baseAlpha * 0.18;
+            // Edges within a community pick up that community's color;
+            // cross-community edges stay neutral violet so they don't
+            // shout over the cluster colors.
+            const sameComm = ca != null && ca === cb;
+            const colorHex = sameComm
+              ? (fgData.nodes.find((n) => n.id === su)?.community_color ?? "#a855f7")
+              : "#a855f7";
+            return hexToRgba(colorHex, alpha);
           }}
           linkDirectionalParticles={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
@@ -93,6 +130,10 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
             const n = node as FGNode;
             const radius = 5 + Math.min(8, n.degree * 0.8) + n.weight * 4;
             const isSelected = n.id === selectedId;
+            const fill = n.community_color ?? DEFAULT_FILL;
+            const isolated =
+              isolatedCommunity != null && (n.community ?? -2) !== isolatedCommunity;
+            const alpha = isolated ? 0.18 : 1.0;
 
             // Glow halo
             const grad = ctx.createRadialGradient(
@@ -103,9 +144,8 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
               n.y!,
               radius * 2.6,
             );
-            const hue = hueForWeight(n.weight);
-            grad.addColorStop(0, `${hue}AA`);
-            grad.addColorStop(1, `${hue}00`);
+            grad.addColorStop(0, hexToRgba(fill, 0.55 * alpha));
+            grad.addColorStop(1, hexToRgba(fill, 0));
             ctx.beginPath();
             ctx.fillStyle = grad;
             ctx.arc(n.x!, n.y!, radius * 2.6, 0, 2 * Math.PI, false);
@@ -113,9 +153,20 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
 
             // Core
             ctx.beginPath();
-            ctx.fillStyle = hue;
+            ctx.fillStyle = hexToRgba(fill, alpha);
             ctx.arc(n.x!, n.y!, radius, 0, 2 * Math.PI, false);
             ctx.fill();
+
+            // Centrality ring — high-weight nodes get a thin inner stroke
+            // matching their community color so "this is a hub" reads
+            // visually even before you mouse over.
+            if (n.weight > 0.55) {
+              ctx.beginPath();
+              ctx.strokeStyle = hexToRgba("#ffffff", 0.65 * alpha);
+              ctx.lineWidth = 1 / scale;
+              ctx.arc(n.x!, n.y!, radius - 1.5 / scale, 0, 2 * Math.PI, false);
+              ctx.stroke();
+            }
 
             // Ring for selection
             if (isSelected) {
@@ -128,7 +179,7 @@ export function Graph({ data, selectedId, highlightPath, onSelect }: Props) {
 
             // Label (only above a certain zoom, and always for the selected one)
             const labelOn = scale > 1.3 || isSelected || n.weight > 0.75;
-            if (labelOn) {
+            if (labelOn && !isolated) {
               const label = n.title.length > 32 ? n.title.slice(0, 29) + "…" : n.title;
               const fontSize = 12 / scale;
               ctx.font = `${fontSize}px ui-sans-serif, system-ui`;
@@ -164,10 +215,18 @@ function linkId(side: number | FGNode): number {
   return typeof side === "number" ? side : side.id;
 }
 
-function hueForWeight(w: number): string {
-  // low weight = cool cyan, high weight = hot violet/pink
-  if (w > 0.75) return "#ec4899";
-  if (w > 0.5) return "#a855f7";
-  if (w > 0.25) return "#7c6cf0";
-  return "#22d3ee";
+function hexToRgba(hex: string, alpha: number): string {
+  // Accept #RGB, #RRGGBB, or rgba(...) passthrough.
+  if (hex.startsWith("rgba") || hex.startsWith("rgb")) return hex;
+  let h = hex.replace("#", "");
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
 }

@@ -34,6 +34,12 @@ class Node(BaseModel):
     degree: int
     # visual hint for the frontend: 0..1 importance score
     weight: float
+    # Community membership (label-propagation cluster id) and the
+    # palette color the frontend should paint this node with. Optional
+    # because non-graph endpoints (search, neighbors) construct lighter
+    # Node payloads without the cluster pass.
+    community: int | None = None
+    community_color: str | None = None
 
 
 class Edge(BaseModel):
@@ -68,3 +74,21 @@ class PathResult(BaseModel):
     found: bool
     path: list[PathStep]
     cost: float  # sum of (1 - strength) across path edges; lower = stronger
+
+
+class CommunityOut(BaseModel):
+    id: int
+    name: str
+    color: str
+    size: int
+    terms: list[str]
+    member_ids: list[int]
+
+
+class OrphanOut(BaseModel):
+    note_id: int
+    title: str
+    suggested_id: int | None
+    suggested_title: str | None
+    suggested_strength: float
+    suggested_threshold: float

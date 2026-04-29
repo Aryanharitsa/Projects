@@ -5,13 +5,23 @@ import { Graph } from "@/components/Graph";
 import { Header } from "@/components/Header";
 import { Inspector } from "@/components/Inspector";
 import { NoteComposer } from "@/components/NoteComposer";
+import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { SearchBar } from "@/components/SearchBar";
+import { TopicPalette } from "@/components/TopicPalette";
 import { api } from "@/lib/api";
-import type { Graph as GraphT, GraphNode } from "@/lib/types";
+import type {
+  Community,
+  Graph as GraphT,
+  GraphNode,
+  OrphanSuggestion,
+} from "@/lib/types";
 
 export default function Page() {
   const [graph, setGraph] = useState<GraphT | null>(null);
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [orphans, setOrphans] = useState<OrphanSuggestion[]>([]);
+  const [isolated, setIsolated] = useState<number | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [pathEdges, setPathEdges] = useState<Set<string> | null>(null);
@@ -19,15 +29,27 @@ export default function Page() {
 
   const refreshGraph = useCallback(async () => {
     try {
-      const g = await api.graph();
+      // Three calls in parallel — they all read the same in-memory state
+      // on the backend but each is cheap and independent.
+      const [g, cs, os] = await Promise.all([
+        api.graph(),
+        api.communities(),
+        api.orphans(),
+      ]);
       setGraph(g);
+      setCommunities(cs);
+      setOrphans(os);
       setApiOk(true);
       setError(null);
-      // Keep the selected node in sync with the latest server state
       setSelected((prev) => {
         if (!prev) return prev;
         return g.nodes.find((n) => n.id === prev.id) ?? null;
       });
+      // If the user had isolated a community that no longer exists,
+      // clear the isolation so the canvas isn't stuck blank.
+      setIsolated((prev) =>
+        prev !== null && cs.some((c) => c.id === prev) ? prev : null,
+      );
     } catch (e) {
       setApiOk(false);
       setError(e instanceof Error ? e.message : "failed to load graph");
@@ -75,6 +97,12 @@ export default function Page() {
         <aside className="col-span-12 lg:col-span-3 space-y-5">
           <NoteComposer onCreate={handleCreate} />
           <SearchBar onSelect={setSelected} />
+          <TopicPalette
+            communities={communities}
+            isolated={isolated}
+            onIsolate={setIsolated}
+          />
+          <OrphanRescue orphans={orphans} nodes={nodes} onSelect={setSelected} />
           <PathFinder
             nodes={nodes}
             onHighlight={(keys, path) => {
@@ -91,6 +119,7 @@ export default function Page() {
               data={graph}
               selectedId={selected?.id ?? null}
               highlightPath={pathEdges}
+              isolatedCommunity={isolated}
               onSelect={(n) => setSelected(n)}
             />
           </div>
@@ -114,11 +143,10 @@ export default function Page() {
       <footer className="mx-auto w-full max-w-[1600px] px-6 pb-6 text-[11px] font-mono text-ink-400 flex items-center justify-between">
         <span>
           synapse := cosine(embedding<sub>a</sub>, embedding<sub>b</sub>) ≥ τ
-          ∧ topK
+          ∧ topK · clusters via greedy modularity
         </span>
         <span>
-          built by <span className="text-ink-200">aryan</span> · day 4 of the
-          projects rotation
+          built by <span className="text-ink-200">aryan</span> · projects rotation
         </span>
       </footer>
     </main>
@@ -132,12 +160,15 @@ function HelpCard() {
         how it works
       </div>
       <ol className="space-y-1.5 list-decimal list-inside marker:text-synapse-violet">
-        <li>Write an atomic thought. No folders, no hierarchy.</li>
+        <li>Write atomic thoughts. No folders, no hierarchy.</li>
         <li>
-          SynapseOS embeds it and links to the most similar existing notes —
+          SynapseOS embeds each note and links it to its closest neighbors —
           your synapses.
         </li>
-        <li>Drag, zoom, search, and trace paths between ideas.</li>
+        <li>
+          Clusters and their names emerge automatically; isolated thoughts
+          surface as &quot;orphans&quot; you can rescue.
+        </li>
       </ol>
     </div>
   );

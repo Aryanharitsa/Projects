@@ -29,6 +29,9 @@ export function Header({ stats, apiOk }: Props) {
             <>
               <Pill label="nodes" value={stats.nodes} color="violet" />
               <Pill label="synapses" value={stats.edges} color="cyan" />
+              {stats.communities !== undefined && (
+                <Pill label="clusters" value={stats.communities} color="pink" />
+              )}
               <Pill
                 label="avg deg"
                 value={stats.avg_degree.toFixed(1)}
@@ -85,13 +88,14 @@ function Pill({
 }: {
   label: string;
   value: string | number;
-  color: "violet" | "cyan" | "lime" | "amber";
+  color: "violet" | "cyan" | "lime" | "amber" | "pink";
 }) {
   const ring = {
     violet: "ring-synapse-violet/40 text-synapse-violet",
     cyan: "ring-synapse-cyan/40 text-synapse-cyan",
     lime: "ring-synapse-lime/40 text-synapse-lime",
     amber: "ring-synapse-amber/40 text-synapse-amber",
+    pink: "ring-synapse-pink/40 text-synapse-pink",
   }[color];
   return (
     <span

@@ -1,4 +1,12 @@
-import type { Graph, Neighbor, Note, PathResult, SearchHit } from "./types";
+import type {
+  Community,
+  Graph,
+  Neighbor,
+  Note,
+  OrphanSuggestion,
+  PathResult,
+  SearchHit,
+} from "./types";
 
 const BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ?? "http://localhost:8000";
@@ -43,4 +51,20 @@ export const api = {
 
   path: (src: number, dst: number) =>
     j<PathResult>(`/path?src=${src}&dst=${dst}`),
+
+  communities: (opts?: { threshold?: number; topK?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    const qs = q.toString();
+    return j<Community[]>(`/communities${qs ? `?${qs}` : ""}`);
+  },
+
+  orphans: (opts?: { threshold?: number; topK?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    const qs = q.toString();
+    return j<OrphanSuggestion[]>(`/orphans${qs ? `?${qs}` : ""}`);
+  },
 };
