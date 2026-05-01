@@ -1,0 +1,308 @@
+{
+  "version": "titan-watchlist/1.0.0",
+  "source": "demo-fictional",
+  "note": "Illustrative watchlist for local demo. Production deployments should plug in OFAC SDN, UN-1267, EU CFSP, UK OFSI, and FIU-IND feeds.",
+  "issued": "2026-04-30",
+  "entries": [
+    {
+      "id": "SDN-001",
+      "name": "TRIDENT EXPORT GROUP LIMITED",
+      "type": "entity",
+      "aliases": ["Trident Exports", "Trident Group", "TEG", "Trident Export GP"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2024-03-12",
+      "reason": "Trade-control evasion via shell-company chain"
+    },
+    {
+      "id": "SDN-002",
+      "name": "MARITIME CRESCENT LLC",
+      "type": "entity",
+      "aliases": ["Maritime Crescent", "Crescent Maritime", "MCRES"],
+      "jurisdiction": "IR",
+      "list": "OFAC-SDN",
+      "added": "2023-09-04",
+      "reason": "Vessel operations linked to sanctioned petroleum trade"
+    },
+    {
+      "id": "SDN-003",
+      "name": "ALIEKSEI VOLKOV-BARANOV",
+      "type": "individual",
+      "aliases": ["Alex Volkov", "A. Volkov", "Aliekseii Volkov", "Aleksei Baranov"],
+      "jurisdiction": "BY",
+      "list": "OFAC-SDN",
+      "added": "2025-01-22",
+      "reason": "PEP — designated official linked to procurement networks"
+    },
+    {
+      "id": "SDN-004",
+      "name": "GOLDEN ORYX TRADING FZE",
+      "type": "entity",
+      "aliases": ["Golden Oryx", "Oryx Trading", "GOX FZE"],
+      "jurisdiction": "AE",
+      "list": "OFAC-SDN",
+      "added": "2024-11-30",
+      "reason": "Free-zone front for sanctioned end-user diversion"
+    },
+    {
+      "id": "SDN-005",
+      "name": "PYONGYANG NEW HORIZON COOPERATIVE",
+      "type": "entity",
+      "aliases": ["Pyongyang Horizon", "PNH Cooperative", "New Horizon DPRK"],
+      "jurisdiction": "KP",
+      "list": "UN-1718",
+      "added": "2022-06-01",
+      "reason": "Designated under UNSC Resolution 1718 (DPRK)"
+    },
+    {
+      "id": "SDN-006",
+      "name": "VIKTOR PETROVITCH IVANSKY",
+      "type": "individual",
+      "aliases": ["Viktor Ivansky", "V. P. Ivansky", "Viktor Petrovich"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2025-04-08",
+      "reason": "PEP — sanctioned for sanctions-evasion facilitation"
+    },
+    {
+      "id": "SDN-007",
+      "name": "AURELIA SHELL CO. LIMITED",
+      "type": "entity",
+      "aliases": ["Aurelia Shell", "Aurelia Shell Limited", "ASCL"],
+      "jurisdiction": "CY",
+      "list": "EU-CFSP",
+      "added": "2024-07-18",
+      "reason": "Layered ownership shell flagged in CFSP listing"
+    },
+    {
+      "id": "SDN-008",
+      "name": "DAMASCUS METALWORKS JSC",
+      "type": "entity",
+      "aliases": ["Damascus Metal", "DMW JSC", "Damascus Metalworks"],
+      "jurisdiction": "SY",
+      "list": "OFAC-SDN",
+      "added": "2021-11-10",
+      "reason": "Designated Syrian state-linked dual-use metals supplier"
+    },
+    {
+      "id": "SDN-009",
+      "name": "FARZAD HOSSEINI-NEJAD",
+      "type": "individual",
+      "aliases": ["Farzad Hosseini", "F. Nejad", "Farzad H. Nejad"],
+      "jurisdiction": "IR",
+      "list": "OFAC-SDN",
+      "added": "2023-02-14",
+      "reason": "PEP — IRGC-linked procurement official"
+    },
+    {
+      "id": "SDN-010",
+      "name": "NORDIC HARBOUR LOGISTICS AS",
+      "type": "entity",
+      "aliases": ["Nordic Harbour", "NHL AS", "Nordic Harbour Logistics"],
+      "jurisdiction": "RU",
+      "list": "EU-CFSP",
+      "added": "2024-12-01",
+      "reason": "Cargo broker linked to sanctioned shipping fleet"
+    },
+    {
+      "id": "SDN-011",
+      "name": "KYAW MIN AUNG",
+      "type": "individual",
+      "aliases": ["Kyaw Aung", "K. M. Aung", "Kyaw M. Aung"],
+      "jurisdiction": "MM",
+      "list": "EU-CFSP",
+      "added": "2023-08-22",
+      "reason": "PEP — Myanmar military-linked official"
+    },
+    {
+      "id": "SDN-012",
+      "name": "ZENITH CIRCLE FINANCIAL HOLDINGS",
+      "type": "entity",
+      "aliases": ["Zenith Circle", "Zenith Holdings", "ZCFH"],
+      "jurisdiction": "BY",
+      "list": "OFAC-SDN",
+      "added": "2025-03-19",
+      "reason": "Shell holding facilitating sanctions-evading transfers"
+    },
+    {
+      "id": "SDN-013",
+      "name": "SAFIA BINT KHALIFAH",
+      "type": "individual",
+      "aliases": ["Safia Khalifah", "S. Khalifah", "Safia Bint Khalif"],
+      "jurisdiction": "SY",
+      "list": "UK-OFSI",
+      "added": "2024-05-04",
+      "reason": "PEP — designated for asset-management of sanctioned officials"
+    },
+    {
+      "id": "SDN-014",
+      "name": "ARGENTUM HORIZON GMBH",
+      "type": "entity",
+      "aliases": ["Argentum Horizon", "AH GmbH", "Argentum HZ"],
+      "jurisdiction": "RU",
+      "list": "EU-CFSP",
+      "added": "2024-02-29",
+      "reason": "Shell GmbH facilitating sanctioned dual-use re-exports"
+    },
+    {
+      "id": "SDN-015",
+      "name": "SARGON IRRIGATION COOPERATIVE",
+      "type": "entity",
+      "aliases": ["Sargon Coop", "Sargon Irrigation", "SIC"],
+      "jurisdiction": "IR",
+      "list": "OFAC-SDN",
+      "added": "2022-04-11",
+      "reason": "Front for designated paramilitary procurement"
+    },
+    {
+      "id": "SDN-016",
+      "name": "HABIBOLLAH RAFSANJANI",
+      "type": "individual",
+      "aliases": ["Habib Rafsanjani", "H. Rafsanjani", "Habibollah Rafsani"],
+      "jurisdiction": "IR",
+      "list": "OFAC-SDN",
+      "added": "2023-12-09",
+      "reason": "PEP — designated MOIS-linked operative"
+    },
+    {
+      "id": "SDN-017",
+      "name": "BLACK SEA NAVTECH PRIVATE LIMITED",
+      "type": "entity",
+      "aliases": ["Black Sea Navtech", "BSN Pvt", "Navtech BS"],
+      "jurisdiction": "RU",
+      "list": "UK-OFSI",
+      "added": "2025-02-17",
+      "reason": "Maritime navigation tech listed for shadow-fleet support"
+    },
+    {
+      "id": "SDN-018",
+      "name": "OBSIDIAN GULF MERCANTILE",
+      "type": "entity",
+      "aliases": ["Obsidian Gulf", "OG Mercantile", "OBGM"],
+      "jurisdiction": "AE",
+      "list": "OFAC-SDN",
+      "added": "2024-09-09",
+      "reason": "Trading shell tied to sanctioned end-users"
+    },
+    {
+      "id": "SDN-019",
+      "name": "CHEN WEILIN INDUSTRIAL EQUIPMENT",
+      "type": "entity",
+      "aliases": ["Chen Weilin Industrial", "CWIE", "Chen Weilin Equipment"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2025-01-30",
+      "reason": "Diversion of dual-use industrial equipment"
+    },
+    {
+      "id": "SDN-020",
+      "name": "TBILISI ATLAS CONSULTANCY",
+      "type": "entity",
+      "aliases": ["Tbilisi Atlas", "Atlas Consultancy GE", "TAC"],
+      "jurisdiction": "RU",
+      "list": "EU-CFSP",
+      "added": "2024-10-12",
+      "reason": "Consulting front for sanctioned procurement networks"
+    },
+    {
+      "id": "SDN-021",
+      "name": "ZAINAB MOHAMMED AL-SHARIF",
+      "type": "individual",
+      "aliases": ["Zainab Al-Sharif", "Z. Al-Sharif", "Zainab M. Sharif"],
+      "jurisdiction": "SY",
+      "list": "UN-1267",
+      "added": "2021-01-25",
+      "reason": "Designated under UN-1267 finance facilitator listing"
+    },
+    {
+      "id": "SDN-022",
+      "name": "PHOENIX DELTA SHIPPING SDN BHD",
+      "type": "entity",
+      "aliases": ["Phoenix Delta Shipping", "PDS Sdn Bhd", "Delta Phoenix"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2024-06-20",
+      "reason": "Shadow-fleet operator under SDN designation"
+    },
+    {
+      "id": "SDN-023",
+      "name": "DMITRI SOROKIN",
+      "type": "individual",
+      "aliases": ["D. Sorokin", "Dmitri A. Sorokin", "Dmitry Sorokin"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2024-08-15",
+      "reason": "PEP — sanctioned procurement-network operative"
+    },
+    {
+      "id": "SDN-024",
+      "name": "EMERALD CRESCENT BANK PJSC",
+      "type": "entity",
+      "aliases": ["Emerald Crescent Bank", "ECB PJSC", "Crescent Emerald Bank"],
+      "jurisdiction": "IR",
+      "list": "OFAC-SDN",
+      "added": "2022-12-06",
+      "reason": "Banking entity facilitating designated transactions"
+    },
+    {
+      "id": "SDN-025",
+      "name": "CASSIOPEIA TRADE FZCO",
+      "type": "entity",
+      "aliases": ["Cassiopeia Trade", "CTF FZCO", "Cassio Trade"],
+      "jurisdiction": "AE",
+      "list": "EU-CFSP",
+      "added": "2025-02-04",
+      "reason": "Free-zone trade conduit for sanctioned imports"
+    },
+    {
+      "id": "SDN-026",
+      "name": "RANIA EL-MASRI",
+      "type": "individual",
+      "aliases": ["Rania Masri", "R. El Masri", "Rania al-Masri"],
+      "jurisdiction": "SY",
+      "list": "UK-OFSI",
+      "added": "2023-07-29",
+      "reason": "PEP — financial fixer for designated officials"
+    },
+    {
+      "id": "SDN-027",
+      "name": "SILVERLINE CARGO HOLDINGS",
+      "type": "entity",
+      "aliases": ["Silverline Cargo", "SLC Holdings", "Silver Line Cargo"],
+      "jurisdiction": "BY",
+      "list": "EU-CFSP",
+      "added": "2024-04-19",
+      "reason": "Shell logistics holding flagged for export-control breaches"
+    },
+    {
+      "id": "SDN-028",
+      "name": "TASHKENT META MINERALS",
+      "type": "entity",
+      "aliases": ["Tashkent Meta", "TMM", "Meta Minerals Tashkent"],
+      "jurisdiction": "RU",
+      "list": "OFAC-SDN",
+      "added": "2025-03-02",
+      "reason": "Materials supplier listed for diversion to sanctioned end-user"
+    },
+    {
+      "id": "SDN-029",
+      "name": "OUMAR DIALLO-CONTÉ",
+      "type": "individual",
+      "aliases": ["Oumar Diallo", "O. Diallo Conte", "Oumar D. Conté"],
+      "jurisdiction": "MM",
+      "list": "UK-OFSI",
+      "added": "2023-10-31",
+      "reason": "PEP — military-linked finance operative"
+    },
+    {
+      "id": "SDN-030",
+      "name": "INDIGO PEAK CAPITAL PARTNERS",
+      "type": "entity",
+      "aliases": ["Indigo Peak Capital", "IPCP", "Indigo Peak"],
+      "jurisdiction": "AE",
+      "list": "OFAC-SDN",
+      "added": "2025-04-01",
+      "reason": "Investment shell tied to designated procurement networks"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ export const metadata = {
 const NAV = [
   { href: "/", label: "Overview" },
   { href: "/aml", label: "AML Console" },
+  { href: "/watchlist", label: "Watchlist" },
   { href: "/kyc", label: "KYC Pipeline" },
   { href: "/attestations", label: "Attestations" },
 ];

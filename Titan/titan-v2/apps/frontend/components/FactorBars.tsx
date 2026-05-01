@@ -4,6 +4,7 @@ const PRETTY: Record<string, string> = {
   structuring: "Structuring",
   velocity_spike: "Velocity Spike",
   round_trip: "Round-Trip Cycle",
+  sanctions_hit: "Sanctions Hit",
   fan_in: "Fan-in",
   fan_out: "Fan-out",
   high_risk_geo: "High-Risk Geo",

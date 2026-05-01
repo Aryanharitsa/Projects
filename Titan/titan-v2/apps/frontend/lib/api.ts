@@ -14,6 +14,8 @@ export type Tx = {
   channel?: string;
   geo?: string;
   subject?: string;
+  subject_name?: string;
+  counterparty_name?: string;
 };
 
 export type Factor = {
@@ -24,8 +26,33 @@ export type Factor = {
   evidence?: any[];
 };
 
+export type SanctionsHit = {
+  entity_id: string;
+  name: string;
+  type: "entity" | "individual";
+  matched_alias: string;
+  alias_index: number;
+  jurisdiction: string;
+  list: string;
+  added: string;
+  reason: string;
+  similarity: number;
+  grade: "exact" | "strong" | "medium" | "weak" | "none";
+  components: {
+    token_set: number;
+    ngram: number;
+    contain: number;
+    blended: number;
+    jurisdiction_bonus?: number;
+  };
+  queried_name?: string;
+  queried_party?: string;
+  queried_role?: "subject" | "counterparty";
+};
+
 export type AccountReport = {
   account_id: string;
+  display_name?: string;
   risk_score: number;
   band: "low" | "medium" | "high" | "critical";
   factors: Factor[];
@@ -33,7 +60,20 @@ export type AccountReport = {
   counterparty_count: number;
   inbound_total: number;
   outbound_total: number;
+  sanctions_hits: SanctionsHit[];
 };
+
+export type WeightOverrides = Partial<Record<
+  | "structuring"
+  | "velocity_spike"
+  | "round_trip"
+  | "sanctions_hit"
+  | "fan_in"
+  | "fan_out"
+  | "high_risk_geo"
+  | "round_amount",
+  number
+>>;
 
 export type ScoreResponse = {
   ok: boolean;
@@ -43,10 +83,62 @@ export type ScoreResponse = {
     total_transactions: number;
     total_accounts: number;
     alerted: number;
+    sanctions_alerted?: number;
     highest_score: number;
     average_score: number;
   };
+  effective_weights: Record<string, number>;
+  sanctions_threshold: number;
   rules_version: string;
+};
+
+export type ScreenResult = {
+  query: string;
+  normalized?: string;
+  threshold: number;
+  matches: SanctionsHit[];
+  best: SanctionsHit | null;
+  graded: "exact" | "strong" | "medium" | "weak" | "none";
+};
+
+export type ScreenResponse = {
+  ok: boolean;
+  engine: string;
+  watchlist: WatchlistMeta;
+  queried: number;
+  matched: number;
+  by_grade: Record<string, number>;
+  results: ScreenResult[];
+};
+
+export type WatchlistMeta = {
+  version: string;
+  source?: string;
+  note?: string;
+  issued?: string;
+  size: number;
+  by_list: Record<string, number>;
+  by_jurisdiction: Record<string, number>;
+  by_type: Record<string, number>;
+  weights: {
+    token_set: number;
+    ngram: number;
+    contain: number;
+    ngram_n: number;
+    jurisdiction_bonus: number;
+  };
+  grades: { min: number; label: string }[];
+};
+
+export type WatchlistEntry = {
+  id: string;
+  name: string;
+  type: "entity" | "individual";
+  aliases: string[];
+  jurisdiction: string;
+  list: string;
+  added: string;
+  reason: string;
 };
 
 export type Attestation = {
@@ -77,11 +169,43 @@ export async function health() {
   return jsonOrThrow(r);
 }
 
-export async function score(transactions: Tx[]): Promise<ScoreResponse> {
+export async function score(
+  transactions: Tx[],
+  opts: { weights?: WeightOverrides; sanctionsThreshold?: number } = {},
+): Promise<ScoreResponse> {
+  const body: any = { transactions };
+  if (opts.weights && Object.keys(opts.weights).length) body.weights = opts.weights;
+  if (typeof opts.sanctionsThreshold === "number")
+    body.sanctions_threshold = opts.sanctionsThreshold;
   const r = await fetch(`${API_BASE}/aml/score`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transactions }),
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function screenSanctions(
+  names: string[],
+  opts: { jurisdiction?: string; threshold?: number; topK?: number } = {},
+): Promise<ScreenResponse> {
+  const body: any = { names };
+  if (opts.jurisdiction) body.jurisdiction = opts.jurisdiction;
+  if (typeof opts.threshold === "number") body.threshold = opts.threshold;
+  if (typeof opts.topK === "number") body.top_k = opts.topK;
+  const r = await fetch(`${API_BASE}/aml/sanctions/screen`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function listWatchlist(
+  limit = 50,
+): Promise<{ ok: boolean; watchlist: WatchlistMeta; entries: WatchlistEntry[] }> {
+  const r = await fetch(`${API_BASE}/aml/sanctions/list?limit=${limit}`, {
+    cache: "no-store",
   });
   return jsonOrThrow(r);
 }

@@ -2,20 +2,28 @@ import Link from "next/link";
 
 const FEATURES = [
   {
+    href: "/aml",
+    title: "AML Console",
+    eyebrow: "Risk",
+    body: "A deterministic, explainable rule engine. Eight detectors — structuring, velocity, round-trip cycles, sanctions hits, fan-in/-out, geo, round amounts — plus a what-if simulator that re-scores live as you re-tune weights.",
+    accent: "from-violet-500/30 to-violet-500/0",
+    cta: "Score transactions",
+  },
+  {
+    href: "/watchlist",
+    title: "Sanctions Watchlist",
+    eyebrow: "Screening",
+    body: "Fuzzy-match names against the bundled OFAC/UN/EU/UK-style watchlist. Every score is a transparent blend of token-set, char-3gram, and substring containment — with a jurisdiction prior on top.",
+    accent: "from-rose-400/25 via-amber-400/15 to-transparent",
+    cta: "Screen names",
+  },
+  {
     href: "/kyc",
     title: "KYC Pipeline",
     eyebrow: "Identity",
     body: "Upload a PAN PDF. We hash it locally, pin the artefact to IPFS, then write the hash + verifier + subject wallet to the AttestationRegistry contract on-chain.",
     accent: "from-teal-400/30 to-teal-400/0",
     cta: "Run a verification",
-  },
-  {
-    href: "/aml",
-    title: "AML Console",
-    eyebrow: "Risk",
-    body: "A deterministic, explainable rule engine. Detects structuring, velocity spikes, round-trip cycles, fan-in/-out, high-risk geos, and rounded large transfers. Every score is auditable.",
-    accent: "from-violet-500/30 to-violet-500/0",
-    cta: "Score transactions",
   },
   {
     href: "/attestations",
@@ -28,10 +36,10 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { label: "Pattern detectors", value: "7" },
+  { label: "Pattern detectors", value: "8" },
+  { label: "Watchlist entries", value: "30" },
   { label: "On-chain attestations", value: "live" },
   { label: "External ML deps", value: "0" },
-  { label: "Avg. score latency", value: "<60ms" },
 ];
 
 export default function Home() {
@@ -91,7 +99,7 @@ export default function Home() {
       </section>
 
       {/* Feature cards */}
-      <section className="grid gap-5 md:grid-cols-3">
+      <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         {FEATURES.map((f) => (
           <Link
             key={f.href}

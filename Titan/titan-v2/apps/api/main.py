@@ -245,3 +245,19 @@ async def aml_rules() -> Dict[str, Any]:
         r = await client.get(f"{AML_SVC}/aml/rules")
         r.raise_for_status()
         return r.json()
+
+
+@app.post("/aml/sanctions/screen")
+async def aml_sanctions_screen(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/sanctions/screen", json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/sanctions/list")
+async def aml_sanctions_list(limit: int = 50) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/sanctions/list", params={"limit": limit})
+        r.raise_for_status()
+        return r.json()
