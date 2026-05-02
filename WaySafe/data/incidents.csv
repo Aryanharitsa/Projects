@@ -7,3 +7,33 @@ acc465ab-4d2b-4d52-b5ba-7498dd041868,user-35b643ec,15.55,73.77,accident,,data/up
 8c1f2b3a-0004-4f00-9000-000000000004,seed-corridor,15.5160,73.8120,flooding,knee-deep water at junction,,7c1f2b3a000400,sig-seed-4,verified,2026-04-25T07:22:00
 8c1f2b3a-0005-4f00-9000-000000000005,seed-corridor,15.5430,73.7720,accident,scooter and taxi side-swipe,,7c1f2b3a000500,sig-seed-5,verified,2026-04-25T20:48:00
 8c1f2b3a-0006-4f00-9000-000000000006,seed-corridor,15.4750,73.8000,roadblock,construction barriers on coastal road,,7c1f2b3a000600,sig-seed-6,verified,2026-04-26T02:05:00
+9d2a4c5b-1001-4f00-9000-000000001001,seed-baga,15.5482,73.7708,accident,bike skid near Tito's Lane,,9d2a000001,sig-baga-1,verified,2026-04-17T22:35:00
+9d2a4c5b-1002-4f00-9000-000000001002,seed-baga,15.5497,73.7691,accident,taxi-bike collision,,9d2a000002,sig-baga-2,verified,2026-04-18T23:50:00
+9d2a4c5b-1003-4f00-9000-000000001003,seed-baga,15.5475,73.7715,roadblock,cabs blocking Tito's exit,,9d2a000003,sig-baga-3,verified,2026-04-24T23:05:00
+9d2a4c5b-1004-4f00-9000-000000001004,seed-baga,15.5489,73.7702,accident,two-wheeler clipped by SUV,,9d2a000004,sig-baga-4,verified,2026-04-25T22:18:00
+9d2a4c5b-1005-4f00-9000-000000001005,seed-baga,15.5494,73.7714,roadblock,broken-down bus on bridge,,9d2a000005,sig-baga-5,pending,2026-04-26T21:42:00
+9d2a4c5b-1006-4f00-9000-000000001006,seed-baga,15.5478,73.7689,accident,head-on near Britto's,,9d2a000006,sig-baga-6,verified,2026-05-01T00:15:00
+9d2a4c5b-1007-4f00-9000-000000001007,seed-baga,15.5512,73.7723,accident,scooter slide,,9d2a000007,sig-baga-7,verified,2026-04-19T01:20:00
+a4e8c910-2001-4f00-9000-000000002001,seed-aguada,15.4912,73.7822,landslide,loose boulders after light rain,,a4e8000001,sig-aguada-1,verified,2026-04-15T08:05:00
+a4e8c910-2002-4f00-9000-000000002002,seed-aguada,15.4936,73.7811,landslide,small rockslide on bend,,a4e8000002,sig-aguada-2,verified,2026-04-22T07:48:00
+a4e8c910-2003-4f00-9000-000000002003,seed-aguada,15.4901,73.7837,accident,car off the cliff side rail,,a4e8000003,sig-aguada-3,verified,2026-04-23T18:55:00
+a4e8c910-2004-4f00-9000-000000002004,seed-aguada,15.4920,73.7818,landslide,fresh debris on cliff approach,,a4e8000004,sig-aguada-4,pending,2026-04-29T08:32:00
+a4e8c910-2005-4f00-9000-000000002005,seed-aguada,15.4929,73.7805,accident,low-light skid into shoulder,,a4e8000005,sig-aguada-5,verified,2026-04-30T19:10:00
+a4e8c910-2006-4f00-9000-000000002006,seed-aguada,15.4915,73.7826,landslide,monsoon-loosened slope,,a4e8000006,sig-aguada-6,verified,2026-05-01T07:55:00
+b7f2e631-3001-4f00-9000-000000003001,seed-panaji,15.4985,73.8278,accident,rush-hour fender bender,,b7f2000001,sig-panaji-1,verified,2026-04-20T18:22:00
+b7f2e631-3002-4f00-9000-000000003002,seed-panaji,15.4992,73.8255,accident,bus clipped pedestrian crossing,,b7f2000002,sig-panaji-2,verified,2026-04-21T17:48:00
+b7f2e631-3003-4f00-9000-000000003003,seed-panaji,15.5004,73.8290,roadblock,signal failure at junction,,b7f2000003,sig-panaji-3,verified,2026-04-23T18:05:00
+b7f2e631-3004-4f00-9000-000000003004,seed-panaji,15.4978,73.8262,accident,multi-vehicle pile-up,,b7f2000004,sig-panaji-4,verified,2026-04-28T17:35:00
+b7f2e631-3005-4f00-9000-000000003005,seed-panaji,15.4998,73.8281,accident,scooter into kerb,,b7f2000005,sig-panaji-5,pending,2026-04-30T18:12:00
+b7f2e631-3006-4f00-9000-000000003006,seed-panaji,15.4990,73.8274,roadblock,water-tanker breakdown,,b7f2000006,sig-panaji-6,verified,2026-05-01T17:55:00
+c1d4a8e2-4001-4f00-9000-000000004001,seed-calangute,15.5395,73.7616,roadblock,beach-shack delivery vans blocking lane,,c1d4000001,sig-calangute-1,verified,2026-04-19T16:40:00
+c1d4a8e2-4002-4f00-9000-000000004002,seed-calangute,15.5408,73.7634,accident,parked-cab dooring,,c1d4000002,sig-calangute-2,verified,2026-04-21T15:55:00
+c1d4a8e2-4003-4f00-9000-000000004003,seed-calangute,15.5388,73.7621,roadblock,festival procession on main road,,c1d4000003,sig-calangute-3,pending,2026-04-25T16:20:00
+c1d4a8e2-4004-4f00-9000-000000004004,seed-calangute,15.5402,73.7628,accident,two-wheeler vs auto-rickshaw,,c1d4000004,sig-calangute-4,verified,2026-04-29T17:08:00
+d3a7b912-5001-4f00-9000-000000005001,seed-mapusa,15.5934,73.8159,roadblock,market-day traffic snarl,,d3a7000001,sig-mapusa-1,verified,2026-04-22T11:15:00
+d3a7b912-5002-4f00-9000-000000005002,seed-mapusa,15.5921,73.8170,accident,bike-truck near terminus,,d3a7000002,sig-mapusa-2,verified,2026-04-26T12:30:00
+d3a7b912-5003-4f00-9000-000000005003,seed-mapusa,15.5945,73.8147,flooding,clogged drain spillover,,d3a7000003,sig-mapusa-3,pending,2026-04-30T09:48:00
+e8c6d214-6001-4f00-9000-000000006001,seed-margao,15.2758,73.9618,accident,minor pile-up on KTC junction,,e8c6000001,sig-margao-1,verified,2026-04-24T19:22:00
+e8c6d214-6002-4f00-9000-000000006002,seed-margao,15.2769,73.9605,roadblock,bus terminus overflow,,e8c6000002,sig-margao-2,verified,2026-04-28T20:08:00
+f5b2a317-7001-4f00-9000-000000007001,seed-dudhsagar,15.305,74.315,landslide,monsoon erosion on access,,f5b2000001,sig-dudhsagar-1,verified,2026-04-18T13:42:00
+f5b2a317-7002-4f00-9000-000000007002,seed-dudhsagar,15.305,74.315,landslide,fallen tree on access road,,f5b2000002,sig-dudhsagar-2,verified,2026-04-27T14:55:00

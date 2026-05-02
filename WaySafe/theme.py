@@ -152,6 +152,65 @@ def inject_theme() -> None:
             .ws-route-grid {{ grid-template-columns: 1fr; }}
             .ws-route-stats {{ grid-template-columns: repeat(2, 1fr); }}
         }}
+        .ws-fc-card {{
+            background: linear-gradient(135deg, rgba(167,139,250,0.10) 0%, rgba(94,234,212,0.06) 100%);
+            border: 1px solid rgba(167,139,250,0.28);
+            border-radius: 14px; padding: 16px 18px; margin-bottom: 12px;
+            display:flex; gap:18px; align-items:center;
+        }}
+        .ws-fc-ring {{
+            width:104px; height:104px; border-radius:50%; flex-shrink:0;
+            background: conic-gradient(var(--ring) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+            display:flex; align-items:center; justify-content:center; position: relative;
+        }}
+        .ws-fc-ring::after {{ content:""; position:absolute; inset:8px; background:#181b29; border-radius:50%; }}
+        .ws-fc-ring-inner {{ position:relative; z-index:1; text-align:center; }}
+        .ws-fc-ring-val   {{ font-size:1.8rem; font-weight:800; line-height:1; color: var(--ring); }}
+        .ws-fc-ring-band  {{ font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:{MUTED}; margin-top:3px; font-weight:700; }}
+        .ws-fc-meta-label {{ font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:{MUTED}; font-weight:700; }}
+        .ws-fc-meta-val   {{ font-size:1.05rem; font-weight:700; }}
+        .ws-fc-pill {{
+            display:inline-block; padding:3px 10px; border-radius:999px;
+            font-size:.7rem; font-weight:700; letter-spacing:.04em; margin-right:6px;
+        }}
+        .ws-fc-pill.high   {{ background:rgba(255,61,96,0.16);  color:#FF6680; border:1px solid rgba(255,61,96,0.36); }}
+        .ws-fc-pill.medium {{ background:rgba(249,196,64,0.16); color:#F9D87A; border:1px solid rgba(249,196,64,0.36); }}
+        .ws-fc-pill.low    {{ background:rgba(83,227,166,0.14); color:#7BE7C2; border:1px solid rgba(83,227,166,0.34); }}
+        .ws-fc-pill.cat    {{ background:rgba(167,139,250,0.14); color:#C8B8FF; border:1px solid rgba(167,139,250,0.34); }}
+        .ws-fc-bars {{ display:flex; align-items:flex-end; gap:3px; height:74px; padding:6px 4px; background: rgba(255,255,255,0.03); border-radius:10px; border:1px solid rgba(255,255,255,0.05); }}
+        .ws-fc-bar {{ flex:1; min-width:6px; background: var(--bar, {FORECAST_PRIMARY}); border-radius:3px 3px 0 0; transition: height .4s ease, background .4s ease; opacity:.92; }}
+        .ws-fc-bar.peak {{ box-shadow: 0 0 12px var(--bar); opacity:1; }}
+        .ws-fc-axis {{ display:flex; justify-content:space-between; font-size:.6rem; color:{MUTED}; margin-top:4px; letter-spacing:.06em; }}
+        .ws-fc-cat {{ display:flex; align-items:center; gap:8px; margin: 4px 0; }}
+        .ws-fc-cat-name {{ width:80px; font-size:.78rem; color:#D4DAEA; font-weight:600; text-transform:capitalize; }}
+        .ws-fc-cat-bar  {{ flex:1; height:6px; background: rgba(255,255,255,0.06); border-radius:999px; overflow:hidden; }}
+        .ws-fc-cat-fill {{ height:100%; background: linear-gradient(90deg, {FORECAST_PRIMARY}, {FORECAST_SECONDARY}); border-radius:999px; }}
+        .ws-fc-cat-pct  {{ width:38px; text-align:right; font-size:.72rem; color:{MUTED}; font-variant-numeric: tabular-nums; }}
+        .ws-fc-window {{
+            background: linear-gradient(135deg, rgba(94,234,212,0.10) 0%, rgba(167,139,250,0.10) 100%);
+            border: 1px solid rgba(94,234,212,0.30);
+            border-radius: 14px; padding: 14px 18px; margin-bottom: 12px;
+        }}
+        .ws-fc-window-row {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }}
+        .ws-fc-window-row:last-child {{ border-bottom: none; }}
+        .ws-fc-window-time {{ font-size:1.0rem; font-weight:800; color:#5EEAD4; }}
+        .ws-fc-window-meta {{ font-size:.78rem; color:{MUTED}; }}
+        .ws-fc-window-tag  {{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:.62rem; font-weight:700; letter-spacing:.06em; }}
+        .ws-fc-window-tag.best {{ background:rgba(83,227,166,0.18); color:#7BE7C2; }}
+        .ws-fc-window-tag.your {{ background:rgba(249,196,64,0.18); color:#F9D87A; }}
+        .ws-hotspot-row {{
+            display:grid; grid-template-columns: 56px 1fr auto; gap:14px; align-items:center;
+            background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05);
+            border-radius:12px; padding: 10px 14px; margin-bottom: 8px;
+        }}
+        .ws-hotspot-rank {{
+            display:flex; align-items:center; justify-content:center; width:40px; height:40px;
+            border-radius: 12px; font-weight:800; color:#0E1117;
+            background: linear-gradient(135deg, {FORECAST_PRIMARY}, {FORECAST_SECONDARY});
+        }}
+        .ws-hotspot-coord {{ font-size:.8rem; color:#D4DAEA; font-variant-numeric: tabular-nums; }}
+        .ws-hotspot-meta  {{ font-size:.7rem; color:{MUTED}; }}
+        .ws-hotspot-risk  {{ font-size:1.2rem; font-weight:800; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -174,9 +233,23 @@ def render_brand(subtitle: str = "Smart Tourism · Safety Intelligence") -> None
 
 
 ROUTE_ACCENT = {
-    "fastest": "#F9C440",
-    "safest":  "#3DA9FC",
+    "fastest":          "#F9C440",
+    "safest":           "#3DA9FC",
+    "forecast-safest":  "#A78BFA",   # purple — "predicted-safest"
 }
+
+FORECAST_RAMP = ("#53E3A6", "#F9C440", "#FF6A3D", "#FF3D60")  # safe → danger
+FORECAST_PRIMARY = "#A78BFA"
+FORECAST_SECONDARY = "#5EEAD4"
+
+
+def forecast_color(risk: float) -> str:
+    """0..1 → ramp colour."""
+    r = max(0.0, min(1.0, risk))
+    if r < 0.25:  return FORECAST_RAMP[0]
+    if r < 0.50:  return FORECAST_RAMP[1]
+    if r < 0.75:  return FORECAST_RAMP[2]
+    return FORECAST_RAMP[3]
 
 
 def _route_card_html(route, accent: str) -> str:
@@ -263,6 +336,186 @@ def render_route_summary(safest, fastest) -> None:
           </div>
         </div>
         """,
+        unsafe_allow_html=True,
+    )
+
+
+_DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def render_forecast_card(forecast, when, *, location_label: str = "your location") -> None:
+    """Headline forecast card: risk gauge + confidence + top categories + WHY chips.
+
+    `forecast` is a `forecast.ForecastResult`. `when` is a datetime.
+    """
+    risk_pct = int(round(max(0.0, min(1.0, forecast.risk)) * 100))
+    color = forecast_color(forecast.risk)
+    conf_cls = forecast.confidence  # "low" | "medium" | "high"
+    cats = "".join(
+        f'<span class="ws-fc-pill cat">{c} · {p:.0%}</span>'
+        for c, p in forecast.top_categories[:3]
+    )
+    when_str = f"{_DOW_NAMES[when.weekday()]} {when.strftime('%H:%M')}"
+    explain = (
+        " · ".join(forecast.explain) if forecast.explain else
+        f"Forecast for {location_label} at {when_str}"
+    )
+    st.markdown(
+        f"""
+        <div class="ws-fc-card">
+          <div class="ws-fc-ring" style="--pct:{risk_pct}; --ring:{color};">
+            <div class="ws-fc-ring-inner">
+              <div class="ws-fc-ring-val">{risk_pct}</div>
+              <div class="ws-fc-ring-band">forecast risk</div>
+            </div>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div class="ws-fc-meta-label">Forecast for {location_label} · {when_str}</div>
+            <div class="ws-fc-meta-val" style="margin: 4px 0 8px;">
+              <span class="ws-fc-pill {conf_cls}">{conf_cls.upper()} CONFIDENCE</span>
+              <span style="color:#D4DAEA; font-weight:600; font-size:.85rem;">
+                λ̂ = {forecast.expected_count:.2f} · cell obs {forecast.cell_obs:.1f}
+              </span>
+            </div>
+            <div style="margin-bottom: 8px;">{cats}</div>
+            <div style="font-size:.78rem; color:#8892A6; line-height:1.4;">{explain}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_24h_curve(curve, *, peak_color: str | None = None, label: str = "") -> None:
+    """24-bar mini chart driven by 24 risk values in [0,1]."""
+    if not curve:
+        return
+    peak = max(curve)
+    if peak <= 0:
+        peak = 1.0
+    peak_idx = curve.index(peak) if peak > 0 else -1
+    bars = []
+    for h, r in enumerate(curve):
+        height = max(2, int(round((r / peak) * 70))) if peak > 0 else 2
+        col = forecast_color(r)
+        cls = "ws-fc-bar peak" if h == peak_idx else "ws-fc-bar"
+        bars.append(
+            f'<div class="{cls}" style="height:{height}px; --bar:{col};" title="{h:02d}:00 — risk {r:.2f}"></div>'
+        )
+    label_html = f'<div class="ws-fc-meta-label" style="margin-bottom:6px;">{label}</div>' if label else ""
+    st.markdown(
+        label_html
+        + f'<div class="ws-fc-bars">{"".join(bars)}</div>'
+        + '<div class="ws-fc-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_category_bars(top_cats, label: str = "Expected categories") -> None:
+    if not top_cats:
+        return
+    rows = []
+    for c, p in top_cats[:3]:
+        pct = max(0.0, min(1.0, p))
+        rows.append(
+            f"""
+            <div class="ws-fc-cat">
+              <div class="ws-fc-cat-name">{c}</div>
+              <div class="ws-fc-cat-bar"><div class="ws-fc-cat-fill" style="width:{pct*100:.0f}%;"></div></div>
+              <div class="ws-fc-cat-pct">{pct*100:.0f}%</div>
+            </div>
+            """
+        )
+    st.markdown(
+        f'<div class="ws-fc-meta-label" style="margin-bottom:6px;">{label}</div>'
+        + "".join(rows),
+        unsafe_allow_html=True,
+    )
+
+
+def render_best_window(windows, your_time, *, top_k: int = 4) -> None:
+    """Recommendation card.
+
+    `windows` is the list returned by `find_best_departure` already sorted
+    by safety descending: List[(datetime, RouteResult)].
+    `your_time` is the user-chosen departure datetime.
+    """
+    if not windows:
+        return
+    your_match = next((r for t, r in windows if abs((t - your_time).total_seconds()) < 60), None)
+    rows_html = []
+    for i, (t, r) in enumerate(windows[:top_k]):
+        delta_min = int(round((t - your_time).total_seconds() / 60))
+        sign = "+" if delta_min >= 0 else ""
+        is_best = (i == 0)
+        is_yours = your_match is not None and abs((t - your_time).total_seconds()) < 60
+        tag = (
+            '<span class="ws-fc-window-tag best">SAFEST</span>'
+            if is_best else
+            '<span class="ws-fc-window-tag your">YOUR PICK</span>' if is_yours else ""
+        )
+        rows_html.append(
+            f"""
+            <div class="ws-fc-window-row">
+              <div>
+                <div class="ws-fc-window-time">{t.strftime('%a %H:%M')} {tag}</div>
+                <div class="ws-fc-window-meta">{sign}{delta_min} min vs your time · safety {r.avg_safety} · min {r.min_safety} · {r.max_risk_segment_km:.1f} risk-km</div>
+              </div>
+              <div class="ws-route-mini-ring" style="--pct:{r.avg_safety}; --accent:{ROUTE_ACCENT['forecast-safest']};">
+                <span>{r.avg_safety}</span>
+              </div>
+            </div>
+            """
+        )
+    headline = ""
+    if your_match is not None:
+        gain = windows[0][1].avg_safety - your_match.avg_safety
+        if gain >= 4:
+            best_t = windows[0][0]
+            delta = int(round((best_t - your_time).total_seconds() / 60))
+            headline = (
+                f'<div style="font-size:.95rem; font-weight:700; color:#5EEAD4; margin-bottom:8px;">'
+                f'⏱ Shift departure to {best_t.strftime("%H:%M")} ({"+%d" % delta if delta >= 0 else delta} min) for +{gain} safety pts</div>'
+            )
+        else:
+            headline = (
+                '<div style="font-size:.85rem; color:#8892A6; margin-bottom:8px;">'
+                'Your chosen time is already near-optimal — within 4 safety points of the best window.</div>'
+            )
+    st.markdown(
+        f"""
+        <div class="ws-fc-window">
+          <div class="ws-fc-meta-label" style="margin-bottom:8px;">Best departure window</div>
+          {headline}
+          {''.join(rows_html)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hotspots(hotspots, *, label: str = "Forecasted hotspots") -> None:
+    if not hotspots:
+        return
+    rows = []
+    for i, h in enumerate(hotspots, start=1):
+        risk = h["risk"]
+        col = forecast_color(risk)
+        rows.append(
+            f"""
+            <div class="ws-hotspot-row">
+              <div class="ws-hotspot-rank">{i}</div>
+              <div>
+                <div class="ws-hotspot-coord">{h['lat']:.4f}, {h['lon']:.4f}</div>
+                <div class="ws-hotspot-meta">top hazard: <b style="color:#C8B8FF; text-transform:capitalize;">{h['top_category']}</b> · {h['incidents']} historic · weight {h['observed_weight']}</div>
+              </div>
+              <div class="ws-hotspot-risk" style="color:{col};">{risk*100:.0f}</div>
+            </div>
+            """
+        )
+    st.markdown(
+        f'<div class="ws-fc-meta-label" style="margin-bottom:8px;">{label}</div>'
+        + "".join(rows),
         unsafe_allow_html=True,
     )
 
