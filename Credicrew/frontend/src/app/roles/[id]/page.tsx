@@ -24,6 +24,15 @@ import {
 import { StatusPill, StatusSelect } from '@/components/StatusPill';
 import OutreachModal from '@/components/OutreachModal';
 import DiversityCard from '@/components/DiversityCard';
+import {
+  RECOMMENDATION_LABEL,
+  RECOMMENDATION_TONE,
+  listInterviewsForRole,
+  summarise,
+  type InterviewRecord,
+  type ScorecardSummary,
+} from '@/lib/interview';
+import { downloadFile, toCsv } from '@/lib/csv';
 
 const TONE_BG: Record<string, string> = {
   sky: 'bg-sky-400',
@@ -32,6 +41,14 @@ const TONE_BG: Record<string, string> = {
   amber: 'bg-amber-400',
   emerald: 'bg-emerald-400',
   rose: 'bg-rose-400',
+};
+
+const TONE_RING: Record<string, string> = {
+  rose: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
+  amber: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+  sky: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
+  indigo: 'border-indigo-400/30 bg-indigo-400/10 text-indigo-200',
+  emerald: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
 };
 
 export default function RoleDetail() {
@@ -48,6 +65,7 @@ export default function RoleDetail() {
   const [nameDraft, setNameDraft] = useState('');
   const [jdDraft, setJdDraft] = useState('');
   const [editingJd, setEditingJd] = useState(false);
+  const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -57,8 +75,22 @@ export default function RoleDetail() {
     if (r) {
       setNameDraft(r.name);
       setJdDraft(r.jd);
+      setInterviews(listInterviewsForRole(r.id));
     }
+    // Refresh interview summaries when this tab is focused (covers
+    // navigating back from the workspace page).
+    const onFocus = () => {
+      if (r) setInterviews(listInterviewsForRole(r.id));
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [id]);
+
+  const interviewByCid = useMemo(() => {
+    const out: Record<number, ScorecardSummary> = {};
+    for (const ir of interviews) out[ir.candidateId] = summarise(ir);
+    return out;
+  }, [interviews]);
 
   const ranked = useMemo(() => {
     if (!role) return [];
@@ -147,6 +179,36 @@ export default function RoleDetail() {
     if (!confirm(`Delete role "${role.name}"? This can't be undone.`)) return;
     deleteRole(role.id);
     router.push('/roles');
+  };
+
+  const onExportCsv = () => {
+    if (!role) return;
+    const headers = [
+      'candidate_id', 'name', 'role', 'location', 'status', 'note',
+      'match_score', 'matched_skills', 'missing_skills',
+      'interview_composite', 'interview_recommendation',
+      'interview_rated', 'interview_total',
+    ];
+    const rows = shortlistDetails.map(({ entry, c, match }) => {
+      const ir = interviewByCid[c.id];
+      return [
+        c.id,
+        c.name,
+        c.role,
+        c.location,
+        entry.status,
+        entry.note ?? '',
+        match.score,
+        match.matchedSkills,
+        match.missingSkills,
+        ir ? ir.composite : '',
+        ir ? RECOMMENDATION_LABEL[ir.recommendation] : '',
+        ir ? ir.ratedCount : '',
+        ir ? ir.totalCount : '',
+      ];
+    });
+    const filename = `shortlist_${role.name.replace(/[^a-z0-9]+/gi, '_')}.csv`;
+    downloadFile(filename, toCsv(headers, rows));
   };
 
   if (!ready) {
@@ -245,6 +307,14 @@ export default function RoleDetail() {
             <div className="mt-3">{planChips}</div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={onExportCsv}
+              disabled={total === 0}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              title={total === 0 ? 'Shortlist is empty' : 'Download shortlist as CSV'}
+            >
+              Export CSV
+            </button>
             <button
               onClick={onShare}
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white hover:bg-white/10"
@@ -451,17 +521,29 @@ export default function RoleDetail() {
               </div>
             ) : (
               <div className="mt-6 space-y-3">
-                {shortlistDetails.map(({ entry, c, match }) => (
+                {shortlistDetails.map(({ entry, c, match }) => {
+                  const ir = interviewByCid[c.id];
+                  const recTone = ir ? RECOMMENDATION_TONE[ir.recommendation] : null;
+                  return (
                   <div
                     key={c.id}
                     className="rounded-xl border border-white/10 bg-white/[0.04] p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{c.name}</span>
                           <StatusPill status={entry.status} />
                           <span className="text-xs text-white/40">· {match.score} match</span>
+                          {ir && ir.ratedCount > 0 && recTone && (
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${TONE_RING[recTone]}`}
+                              title={`${RECOMMENDATION_LABEL[ir.recommendation]} · composite ${ir.composite} · ${ir.ratedCount}/${ir.totalCount} rated`}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                              iv · {ir.composite}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-white/60">
                           {c.role} · {c.location}
@@ -485,6 +567,12 @@ export default function RoleDetail() {
                           onChange={s => onStatus(c.id, s)}
                         />
                         <div className="flex gap-1.5">
+                          <Link
+                            href={`/roles/${role.id}/interview/${c.id}`}
+                            className="rounded-md border border-violet-400/40 bg-violet-400/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-400/20"
+                          >
+                            {ir && ir.ratedCount > 0 ? 'Open interview' : 'Start interview'}
+                          </Link>
                           <button
                             onClick={() => setOutreach({ candidateId: c.id })}
                             className="rounded-md bg-indigo-500 px-2.5 py-1 text-[11px] font-medium text-black hover:bg-indigo-400"
@@ -509,7 +597,8 @@ export default function RoleDetail() {
                       />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

@@ -2,12 +2,53 @@
 
 Credicrew is a talent-discovery tool that doesn't stop at "here's a ranked
 list." It runs the **whole hiring loop**: parse a JD, get an explainable
-shortlist, track candidates through statuses, and send a tailored outreach
-email — all from a dark, fast, single-page workspace.
+shortlist, track candidates through statuses, send a tailored outreach
+email, and **run the interview** with a JD-tailored prep kit and a weighted
+scorecard that lands on a hire/no-hire signal — all from a dark, fast,
+single-page workspace.
 
-The same scoring + email logic runs in the browser (for instant UI feedback)
-and on the FastAPI backend (for programmatic / agentic use), so explanations
-and drafts are byte-for-byte identical wherever they're generated.
+The same scoring + email + interview logic runs in the browser (for instant
+UI feedback) and on the FastAPI backend (for programmatic / agentic use),
+so plans, drafts, and composite scores are byte-for-byte identical wherever
+they're generated.
+
+---
+
+## What's new — Interview Kit (Day 12)
+
+The hiring loop ended at *outreach* — when a candidate flipped to
+`interview` status, the app went silent. Day 12 fills that gap with a
+deterministic, JD-tailored Interview Kit.
+
+- **Tailored question bank** — From the parsed JD plan, the engine picks
+  prompts out of a 13-skill bank (React, Next.js, TypeScript, FastAPI,
+  Python, Postgres, MongoDB, Redis, AWS, Docker, Kubernetes, PyTorch, LLM)
+  and slots each into the natural stage (technical / system design),
+  alongside a universal phone-screen / behavioral set. A typical
+  back-end JD produces ~18 prompts across 4 stages.
+- **Weighted rubric** — 4–7 dimensions: skill-driven dims (Frontend depth,
+  Backend depth, Data systems, Cloud / infra, ML systems, Language craft)
+  collapse duplicate skills (`react` + `next.js` both feed *Frontend
+  depth*), with Σ-weight bumped per duplicate skill. Universal dims —
+  *Communication · Ownership · Collaboration · System design* — round it
+  out, plus a *Scope & influence* bonus dim for senior+ roles. Weights
+  renormalise so they always sum to 1.
+- **Composite + recommendation** — `Σ ((rating−1)/4) · weight · 100` over
+  rated dims (weights renormalise across rated dims so a half-finished
+  scorecard still produces a meaningful number). Bands: ≥80 strong-hire ·
+  ≥65 lean-yes · ≥50 mixed · ≥35 lean-no · else no-hire.
+- **Workspace UI** — `/roles/[id]/interview/[candidateId]`. Stage stepper
+  with per-stage rated/total counts; expandable question cards with
+  difficulty + signal pills + collapsible follow-ups; per-stage rubric
+  sliders coloured by rating; per-stage signal log (strengths / concerns)
+  with quick-add; live recommendation ring + composite breakdown bar
+  chart; Markdown report export.
+- **Role-detail integration** — every shortlist row now shows an
+  `iv · <composite>` chip in the candidate's recommendation tone the
+  moment any rating is filled in, plus an *Open / Start interview* button
+  that drops into the workspace. A new **Export CSV** action ships the
+  whole shortlist (incl. interview composite + recommendation) for ATS
+  handoff — closing another roadmap item.
 
 ---
 
@@ -167,15 +208,48 @@ Response:
 }
 ```
 
+### `POST /interview/plan`
+Generate a tailored interview plan (rubric + question bank + empty stage
+records) from a JD or pre-parsed plan.
+
+```bash
+curl -X POST http://127.0.0.1:8000/interview/plan \
+  -H 'content-type: application/json' \
+  -d '{"jd": "Senior backend engineer (FastAPI + Postgres) in Bengaluru"}'
+```
+
+Returns `{ rubric: [...], questions: [...], stages: [...] }`. Rubric
+weights always sum to 1.
+
+### `POST /interview/score`
+Aggregate a filled-in scorecard to a composite + recommendation.
+
+```bash
+curl -X POST http://127.0.0.1:8000/interview/score \
+  -H 'content-type: application/json' \
+  -d '{
+    "rubric": [{"key":"backend_depth","label":"Backend depth","description":"","weight":0.25,"source":"skill"},
+               {"key":"data_systems","label":"Data systems","description":"","weight":0.25,"source":"skill"},
+               {"key":"system_design_skill","label":"System design","description":"","weight":0.25,"source":"skill"},
+               {"key":"communication","label":"Communication","description":"","weight":0.25,"source":"communication"}],
+    "stages": [{"stage":"technical","status":"done","scores":[{"key":"backend_depth","rating":4},{"key":"data_systems","rating":4}]},
+               {"stage":"behavioral","status":"done","scores":[{"key":"communication","rating":5}]}]
+  }'
+```
+
+Returns `{ composite, recommendation, rated_count, total_count, per_dimension }`.
+
 ### Endpoint map
 
-| Method | Path           | Purpose                                                 |
-|-------:|----------------|---------------------------------------------------------|
-| GET    | `/health`      | liveness                                                |
-| GET    | `/candidates`  | demo candidate listing                                  |
-| GET    | `/roles`       | demo role listing                                       |
-| POST   | `/match`       | rank candidates against a query (explainable)           |
-| POST   | `/outreach`    | compose deterministic outreach email                    |
+| Method | Path                  | Purpose                                                 |
+|-------:|-----------------------|---------------------------------------------------------|
+| GET    | `/health`             | liveness                                                |
+| GET    | `/candidates`         | demo candidate listing                                  |
+| GET    | `/roles`              | demo role listing                                       |
+| POST   | `/match`              | rank candidates against a query (explainable)           |
+| POST   | `/outreach`           | compose deterministic outreach email                    |
+| POST   | `/interview/plan`     | tailored rubric + question bank from JD / plan          |
+| POST   | `/interview/score`    | aggregate scorecard → composite + recommendation        |
 
 ---
 
@@ -188,10 +262,12 @@ Credicrew/
 │       ├── main.py                 # FastAPI + CORS + routers
 │       ├── routers/
 │       │   ├── match.py            # POST /match
-│       │   └── outreach.py         # POST /outreach
+│       │   ├── outreach.py         # POST /outreach
+│       │   └── interview.py        # POST /interview/{plan,score}
 │       └── services/
 │           ├── match.py            # explainable engine
-│           └── outreach.py         # email composer
+│           ├── outreach.py         # email composer
+│           └── interview.py        # rubric · question bank · scorecard
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -200,16 +276,24 @@ Credicrew/
 │       │   └── roles/
 │       │       ├── page.tsx        # Roles list
 │       │       ├── new/page.tsx    # New role from JD
-│       │       ├── [id]/page.tsx   # Role detail (JD, matches, shortlist)
-│       │       └── share/page.tsx  # Import a shared role
+│       │       ├── share/page.tsx  # Import a shared role
+│       │       └── [id]/
+│       │           ├── page.tsx    # Role detail (JD, matches, shortlist, CSV)
+│       │           └── interview/[candidateId]/page.tsx  # Interview workspace
 │       ├── components/
 │       │   ├── CandidateCard.tsx
 │       │   ├── DiversityCard.tsx
+│       │   ├── InterviewStepper.tsx
 │       │   ├── MatchExplain.tsx
 │       │   ├── OutreachModal.tsx
+│       │   ├── QuestionCard.tsx
+│       │   ├── RecommendationRing.tsx
 │       │   ├── RoleCard.tsx
+│       │   ├── RubricSlider.tsx
 │       │   └── StatusPill.tsx
 │       └── lib/
+│           ├── csv.ts              # tiny RFC-4180 writer + downloader
+│           ├── interview.ts        # rubric · question bank · scorecard
 │           ├── match.ts            # TS match engine (parity w/ backend)
 │           ├── outreach.ts         # TS email composer (parity w/ backend)
 │           ├── pipeline.ts         # quick-save ids
@@ -224,7 +308,8 @@ Credicrew/
 - LLM-assisted JD parsing for messy real-world specs (still fall back to
   the deterministic path).
 - iCal export for an "Interview" status with proposed slots.
-- CSV export of a shortlist for ATS handoff.
+- ~~CSV export of a shortlist for ATS handoff.~~ ✅ Day 12.
+- ~~Interview kit: tailored prompts, weighted rubric, scorecard, hire/no-hire signal.~~ ✅ Day 12.
 
 ---
 
