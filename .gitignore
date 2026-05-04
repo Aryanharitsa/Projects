@@ -24,3 +24,6 @@ yarn-error.log*
 # Archives
 *.zip
 *.tar.gz
+
+# Local run-history database (per-machine)
+LLM_Playground/llm_playground_backend/src/database/history.db

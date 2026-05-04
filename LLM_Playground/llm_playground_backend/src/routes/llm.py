@@ -12,6 +12,7 @@ from src.models.user import User
 from src.providers.provider_factory import ProviderFactory
 from src.pricing import estimate_cost, get_pricing_table
 from src.judge import DEFAULT_RUBRIC, judge_compare
+from src import history
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -316,14 +317,29 @@ def compare():
             winners['cheapest']    = min(successes, key=lambda r: r['cost_usd'])['model']
             winners['most_verbose'] = max(successes, key=lambda r: r['output_tokens'])['model']
 
-        return jsonify({
+        run_id = str(uuid.uuid4())
+        arena_payload = {
             'success': True,
             'results': results,
             'winners': winners,
             'wall_latency': total_latency,
-            'request_id': str(uuid.uuid4()),
+            'request_id': run_id,
             'timestamp': datetime.utcnow().isoformat(),
-        })
+        }
+
+        # Persist to history. The prompt of record is the last user message
+        # in the chain; downstream we surface it as the "row title".
+        prompt_for_history = next(
+            (m.get('content', '') for m in reversed(clean_messages) if m.get('role') == 'user'),
+            '',
+        )
+        try:
+            history.save_run(arena_payload, prompt=prompt_for_history, system_prompt=system_prompt)
+        except Exception as save_err:  # noqa: BLE001
+            # Persistence is best-effort — never let a logging issue 500 the run.
+            current_app.logger.warning(f"history.save_run failed: {save_err}")
+
+        return jsonify(arena_payload)
     except Exception as e:
         current_app.logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -387,10 +403,128 @@ def judge():
             rubric=rubric,
             provider_factory=provider_factory,
         )
+
+        # If the client passed a `run_id`, retro-attach this verdict to the
+        # persisted Arena run so /history surfaces it. Best-effort — a missing
+        # row (e.g. because the run was deleted mid-judging) is non-fatal.
+        run_id = (data.get('run_id') or '').strip() or None
+        if status == 200 and payload.get('success') and run_id:
+            try:
+                history.update_judge(run_id, payload)
+            except Exception as save_err:  # noqa: BLE001
+                current_app.logger.warning(f"history.update_judge failed: {save_err}")
+
         return jsonify(payload), status
     except Exception as e:  # noqa: BLE001
         current_app.logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Run history — every Arena/Judge run is persisted; these endpoints power
+# the History tab (list / detail / tag / star / delete / stats / diff).
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/history', methods=['GET'])
+def history_list():
+    """List runs with optional filtering. Filters compose with AND semantics.
+
+    Query params:
+        q            substring match across prompt / system / model fingerprint
+        model        substring match in the comma-joined model list
+        provider     match runs that included this provider
+        judged       "1" → only runs with an LLM-as-judge result
+        starred      "1" → only starred runs
+        tag          exact tag match
+        since        unix epoch (float)
+        before       unix epoch (float)
+        limit        page size (default 50, max 500)
+        offset       row offset
+    """
+    args = request.args
+
+    def _bool_arg(name: str) -> bool:
+        v = args.get(name, '').strip().lower()
+        return v in ('1', 'true', 'yes', 'on')
+
+    def _float_arg(name: str):
+        v = args.get(name)
+        if v in (None, ''):
+            return None
+        try:
+            return float(v)
+        except ValueError:
+            return None
+
+    rows, total = history.list_runs(
+        q=(args.get('q') or '').strip() or None,
+        model=(args.get('model') or '').strip() or None,
+        provider=(args.get('provider') or '').strip() or None,
+        judged_only=_bool_arg('judged'),
+        starred_only=_bool_arg('starred'),
+        tag=(args.get('tag') or '').strip() or None,
+        since=_float_arg('since'),
+        before=_float_arg('before'),
+        limit=int(args.get('limit', 50) or 50),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'runs': rows, 'total': total})
+
+
+@llm_bp.route('/history/stats', methods=['GET'])
+def history_stats():
+    """Aggregate dashboard metrics across the whole history."""
+    return jsonify({'success': True, 'stats': history.stats()})
+
+
+@llm_bp.route('/history/diff', methods=['POST'])
+def history_diff():
+    """Side-by-side diff of two runs. Body: `{a: <run_id>, b: <run_id>}`."""
+    data = request.get_json() or {}
+    a = (data.get('a') or '').strip()
+    b = (data.get('b') or '').strip()
+    if not a or not b:
+        return jsonify({'success': False, 'error': 'a and b are required'}), 400
+    if a == b:
+        return jsonify({'success': False, 'error': 'a and b must be different runs'}), 400
+    result = history.diff(a, b)
+    if result is None:
+        return jsonify({'success': False, 'error': 'one or both runs not found'}), 404
+    return jsonify({'success': True, 'diff': result})
+
+
+@llm_bp.route('/history/<run_id>', methods=['GET'])
+def history_get(run_id):
+    run = history.get_run(run_id)
+    if not run:
+        return jsonify({'success': False, 'error': 'run not found'}), 404
+    return jsonify({'success': True, 'run': run})
+
+
+@llm_bp.route('/history/<run_id>', methods=['DELETE'])
+def history_delete(run_id):
+    if not history.delete_run(run_id):
+        return jsonify({'success': False, 'error': 'run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/history/<run_id>/meta', methods=['POST'])
+def history_set_meta(run_id):
+    """Update tag / note / starred on a run."""
+    data = request.get_json() or {}
+    tag = data.get('tag')
+    note = data.get('note')
+    starred = data.get('starred')
+    if tag is None and note is None and starred is None:
+        return jsonify({'success': False, 'error': 'no updatable field'}), 400
+    if not history.set_meta(
+        run_id,
+        tag=tag if isinstance(tag, str) else None,
+        note=note if isinstance(note, str) else None,
+        starred=bool(starred) if starred is not None else None,
+    ):
+        return jsonify({'success': False, 'error': 'run not found'}), 404
+    return jsonify({'success': True, 'run': history.get_run(run_id)})
 
 
 @llm_bp.route('/august/upload', methods=['POST'])

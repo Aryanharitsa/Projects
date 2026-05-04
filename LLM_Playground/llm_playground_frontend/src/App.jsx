@@ -46,10 +46,12 @@ import {
   ListOrdered,
   ChevronRight,
   Wand2,
-  RotateCcw
+  RotateCcw,
+  History as HistoryIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
+import HistoryPanel from './components/HistoryPanel';
 import './App.css';
 
 const App = () => {
@@ -711,6 +713,9 @@ const App = () => {
           response: r.response,
           status:   r.status,
         })),
+        // Tying back to the persisted row lets the History tab show the
+        // verdict without us re-deriving the leaderboard there.
+        run_id: arenaResults.request_id,
         judge:  { provider: judgeProvider, model: judgeModel.trim() },
         rubric: rubric.map(r => ({ name: r.name, description: r.description, weight: Number(r.weight) || 0 })),
       };
@@ -916,7 +921,14 @@ const App = () => {
                       <RadioGroupItem value="arena" id="arena" />
                       <Label htmlFor="arena" className="cursor-pointer flex items-center gap-1">
                         <Swords className="w-3.5 h-3.5 text-purple-600" />
-                        Arena <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-blue-600 to-purple-600 text-white px-1.5 py-0.5 rounded">new</span>
+                        Arena
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="history" id="history" />
+                      <Label htmlFor="history" className="cursor-pointer flex items-center gap-1">
+                        <HistoryIcon className="w-3.5 h-3.5 text-indigo-600" />
+                        History <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1183,7 +1195,29 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'arena' ? (
+          {selectedMode === 'history' ? (
+            <div className="lg:col-span-3">
+              <HistoryPanel
+                onRerun={({ prompt, system_prompt, candidates }) => {
+                  // Hop back to Arena pre-loaded with this run's prompt + roster.
+                  setSelectedMode('arena');
+                  setArenaPrompt(prompt || '');
+                  if (system_prompt != null) setSystemPrompt(system_prompt);
+                  if (Array.isArray(candidates) && candidates.length > 0) {
+                    setCandidates(candidates.map((c, i) => ({
+                      id: `r${Date.now()}-${i}`,
+                      provider: c.provider,
+                      model: c.model,
+                    })));
+                  }
+                  // Drop stale results so the user clearly sees the new run.
+                  setArenaResults(null);
+                  setJudgeResults(null);
+                  toast.success("Loaded into Arena — hit Run Arena to fire");
+                }}
+              />
+            </div>
+          ) : selectedMode === 'arena' ? (
             <div className="lg:col-span-3">
               <Card className="shadow-lg border-0 bg-white/60 backdrop-blur-sm">
                 <CardHeader className="pb-4">

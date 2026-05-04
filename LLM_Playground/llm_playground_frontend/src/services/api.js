@@ -118,6 +118,48 @@ class ApiService {
     });
   }
 
+  // ─── Run History ──────────────────────────────────────────────────────────
+  // Every Arena run is auto-persisted server-side; these endpoints power the
+  // History tab (list / detail / tag / star / delete / stats / diff).
+
+  // List runs with optional filter object: { q, model, provider, judged,
+  // starred, tag, since, before, limit, offset } — all keys are optional.
+  async listHistory(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '' || v === false) return;
+      qs.set(k, v === true ? '1' : String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/history${suffix}`);
+  }
+
+  async getRun(runId) {
+    return this.request(`/history/${encodeURIComponent(runId)}`);
+  }
+
+  async deleteRun(runId) {
+    return this.request(`/history/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+  }
+
+  async setRunMeta(runId, meta) {
+    return this.request(`/history/${encodeURIComponent(runId)}/meta`, {
+      method: 'POST',
+      body: JSON.stringify(meta),
+    });
+  }
+
+  async historyStats() {
+    return this.request('/history/stats');
+  }
+
+  async diffRuns(a, b) {
+    return this.request('/history/diff', {
+      method: 'POST',
+      body: JSON.stringify({ a, b }),
+    });
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();
