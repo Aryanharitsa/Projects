@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChatPanel } from "@/components/ChatPanel";
 import { Graph } from "@/components/Graph";
 import { Header } from "@/components/Header";
 import { Inspector } from "@/components/Inspector";
@@ -11,11 +12,14 @@ import { SearchBar } from "@/components/SearchBar";
 import { TopicPalette } from "@/components/TopicPalette";
 import { api } from "@/lib/api";
 import type {
+  ChatTurn,
   Community,
   Graph as GraphT,
   GraphNode,
   OrphanSuggestion,
 } from "@/lib/types";
+
+const edgeKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
 export default function Page() {
   const [graph, setGraph] = useState<GraphT | null>(null);
@@ -25,6 +29,7 @@ export default function Page() {
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [pathEdges, setPathEdges] = useState<Set<string> | null>(null);
+  const [chatTurn, setChatTurn] = useState<ChatTurn | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshGraph = useCallback(async () => {
@@ -82,6 +87,7 @@ export default function Page() {
       await api.deleteNote(id);
       setSelected(null);
       setPathEdges(null);
+      setChatTurn(null);
       await refreshGraph();
     },
     [refreshGraph],
@@ -89,9 +95,40 @@ export default function Page() {
 
   const nodes = useMemo(() => graph?.nodes ?? [], [graph]);
 
+  // Derive the set of edge keys + node ids the chat panel just exercised
+  // so the canvas can paint them in cyan. We also include "virtual"
+  // seed→community-anchor edges as discrete highlights even when the
+  // synapse graph itself has no edge between them — those are flagged
+  // with `kind === "community"` and we still fold them into the node
+  // halo set without claiming a synapse exists.
+  const chatTraversalEdges = useMemo(() => {
+    if (!chatTurn) return null;
+    const out = new Set<string>();
+    for (const e of chatTurn.response.traversal.expansions) {
+      if (e.kind === "synapse") out.add(edgeKey(e.src, e.dst));
+    }
+    return out.size > 0 ? out : null;
+  }, [chatTurn]);
+
+  const chatTraversalNodes = useMemo(() => {
+    if (!chatTurn) return null;
+    const out = new Set<number>();
+    for (const id of chatTurn.response.traversal.seeds) out.add(id);
+    for (const e of chatTurn.response.traversal.expansions) {
+      out.add(e.src);
+      out.add(e.dst);
+    }
+    for (const c of chatTurn.response.citations) out.add(c.note_id);
+    return out.size > 0 ? out : null;
+  }, [chatTurn]);
+
   return (
     <main className="min-h-screen flex flex-col">
-      <Header stats={graph?.stats ?? null} apiOk={apiOk} />
+      <Header
+        stats={graph?.stats ?? null}
+        apiOk={apiOk}
+        chatActive={chatTurn !== null}
+      />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
         <aside className="col-span-12 lg:col-span-3 space-y-5">
@@ -119,6 +156,8 @@ export default function Page() {
               data={graph}
               selectedId={selected?.id ?? null}
               highlightPath={pathEdges}
+              chatTraversalEdges={chatTraversalEdges}
+              chatTraversalNodes={chatTraversalNodes}
               isolatedCommunity={isolated}
               onSelect={(n) => setSelected(n)}
             />
@@ -131,7 +170,12 @@ export default function Page() {
           )}
         </section>
 
-        <aside className="col-span-12 lg:col-span-3">
+        <aside className="col-span-12 lg:col-span-3 space-y-5">
+          <ChatPanel
+            nodes={nodes}
+            onCitationClick={(n) => setSelected(n)}
+            onTraversalChange={setChatTurn}
+          />
           <Inspector
             selected={selected}
             onSelect={setSelected}
@@ -143,7 +187,8 @@ export default function Page() {
       <footer className="mx-auto w-full max-w-[1600px] px-6 pb-6 text-[11px] font-mono text-ink-400 flex items-center justify-between">
         <span>
           synapse := cosine(embedding<sub>a</sub>, embedding<sub>b</sub>) ≥ τ
-          ∧ topK · clusters via greedy modularity
+          ∧ topK · clusters via greedy modularity · chat retrieves along
+          synapses
         </span>
         <span>
           built by <span className="text-ink-200">aryan</span> · projects rotation
@@ -168,6 +213,10 @@ function HelpCard() {
         <li>
           Clusters and their names emerge automatically; isolated thoughts
           surface as &quot;orphans&quot; you can rescue.
+        </li>
+        <li>
+          Ask the graph anything — answers cite the exact notes, and the
+          retrieval traversal lights up on the canvas.
         </li>
       </ol>
     </div>

@@ -92,3 +92,48 @@ class OrphanOut(BaseModel):
     suggested_title: str | None
     suggested_strength: float
     suggested_threshold: float
+
+
+class ChatRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    mode: Literal["auto", "extractive", "llm"] = "auto"
+    k_seed: int = Field(default=4, ge=1, le=12)
+    hops: int = Field(default=1, ge=0, le=2)
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    top_k: int | None = Field(default=None, ge=1, le=20)
+    include_community_anchors: bool = True
+
+
+class ChatCitation(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    score: float
+    role: Literal["seed", "synapse", "community"]
+    via_seed_id: int | None = None
+    via_strength: float = 0.0
+
+
+class ChatExpansion(BaseModel):
+    src: int
+    dst: int
+    strength: float
+    kind: Literal["seed", "synapse", "community"]
+
+
+class ChatTraversal(BaseModel):
+    seeds: list[int]
+    expansions: list[ChatExpansion]
+
+
+class ChatOut(BaseModel):
+    query: str
+    answer: str
+    citations: list[ChatCitation]
+    traversal: ChatTraversal
+    model: str
+    mode_used: Literal["extractive", "llm"]
+    latency_ms: int
+    llm_available: bool
+    llm_provider: str | None = None
+    notice: str | None = None

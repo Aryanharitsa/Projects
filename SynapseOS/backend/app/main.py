@@ -12,6 +12,8 @@ Minimal FastAPI surface:
     GET  /path?src=&dst=     -> strongest-chain path between two notes
     GET  /communities        -> labeled clusters with auto-derived names
     GET  /orphans            -> isolated notes + best-candidate rescues
+    POST /chat               -> graph-aware RAG: answer + citations + traversal
+    GET  /chat/status        -> reports whether an LLM key is configured
     GET  /health             -> { ok: true, notes: N }
 
 The point of the API is to be boring and obvious. The interesting behavior
@@ -23,12 +25,14 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import chat as chat_engine
 from . import community, schemas, store, synapse
 from .embed import cosine
+from .llm import llm_available, llm_provider_label
 
 app = FastAPI(
     title="SynapseOS",
-    version="0.1.0",
+    version="0.2.0",
     description=(
         "Second-brain OS. Notes auto-link via embedding-based synapses; "
         "query and traverse the graph through a small, honest API."
@@ -178,3 +182,36 @@ def orphans(
         }
         for s in suggestions
     ]
+
+
+@app.get("/chat/status")
+def chat_status() -> dict:
+    """Lightweight probe so the frontend can label LLM mode honestly."""
+    return {
+        "llm_available": llm_available(),
+        "llm_provider": llm_provider_label() if llm_available() else None,
+        "extractive_available": True,
+    }
+
+
+@app.post("/chat", response_model=schemas.ChatOut)
+def chat(req: schemas.ChatRequest) -> dict:
+    """Graph-aware RAG over the synapse graph.
+
+    The retriever seeds with semantic search, expands one hop along the
+    same synapses the canvas renders, and (optionally) tacks on a
+    high-weight anchor from each seed's community. Default ``mode=auto``
+    uses an LLM if ``SYNAPSE_LLM_KEY`` is set, else extractive.
+    """
+    if store.count() == 0:
+        raise HTTPException(400, "no notes yet — add a few before asking")
+    result = chat_engine.answer(
+        query=req.query,
+        mode=req.mode,
+        k_seed=req.k_seed,
+        hops=req.hops,
+        threshold=req.threshold,
+        top_k=req.top_k,
+        include_community_anchors=req.include_community_anchors,
+    )
+    return chat_engine.serialize(result)

@@ -5,9 +5,10 @@ import type { GraphStats } from "@/lib/types";
 type Props = {
   stats: GraphStats | null;
   apiOk: boolean | null;
+  chatActive?: boolean;
 };
 
-export function Header({ stats, apiOk }: Props) {
+export function Header({ stats, apiOk, chatActive }: Props) {
   return (
     <header className="relative border-b border-white/5">
       <div className="absolute inset-0 bg-grid-fade pointer-events-none" />
@@ -43,6 +44,12 @@ export function Header({ stats, apiOk }: Props) {
                 color="amber"
               />
             </>
+          )}
+          {chatActive && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-synapse-cyan/10 ring-1 ring-synapse-cyan/40 px-2.5 py-1 font-mono text-[11px] text-synapse-cyan">
+              <span className="w-1.5 h-1.5 rounded-full bg-synapse-cyan animate-pulse-slow" />
+              traversal active
+            </span>
           )}
           <HealthDot ok={apiOk} />
         </div>

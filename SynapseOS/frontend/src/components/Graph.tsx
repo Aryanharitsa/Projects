@@ -11,6 +11,11 @@ type Props = {
   data: GraphT | null;
   selectedId: number | null;
   highlightPath: Set<string> | null; // edge keys "u-v" with u<v
+  // The chat panel's most recent retrieval traversal. Drawn in cyan
+  // (vs. the path tracer's amber) so the two annotations don't blur
+  // together when both are active.
+  chatTraversalEdges: Set<string> | null;
+  chatTraversalNodes: Set<number> | null;
   // When non-null, nodes outside this community are dimmed and edges
   // crossing the boundary are faded. The graph still renders everything,
   // it just lets the user mentally "lift" one cluster out of the rest.
@@ -31,6 +36,8 @@ export function Graph({
   data,
   selectedId,
   highlightPath,
+  chatTraversalEdges,
+  chatTraversalNodes,
   isolatedCommunity,
   onSelect,
 }: Props) {
@@ -95,12 +102,16 @@ export function Graph({
           d3VelocityDecay={0.3}
           linkWidth={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
-            const highlighted = highlightPath?.has(k);
-            return highlighted ? 2.2 : 0.8 + l.strength * 1.8;
+            if (highlightPath?.has(k)) return 2.2;
+            if (chatTraversalEdges?.has(k)) return 1.8;
+            return 0.8 + l.strength * 1.8;
           }}
           linkColor={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
+            // Path tracer (amber) wins over chat traversal (cyan) if
+            // both happen to fire for the same edge.
             if (highlightPath?.has(k)) return "rgba(251,191,36,0.95)";
+            if (chatTraversalEdges?.has(k)) return "rgba(34,211,238,0.92)";
             const su = linkId(l.source);
             const tu = linkId(l.target);
             const ca = communityById.get(su);
@@ -121,10 +132,16 @@ export function Graph({
           }}
           linkDirectionalParticles={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
-            return highlightPath?.has(k) ? 4 : 0;
+            if (highlightPath?.has(k)) return 4;
+            if (chatTraversalEdges?.has(k)) return 3;
+            return 0;
           }}
           linkDirectionalParticleSpeed={0.006}
-          linkDirectionalParticleColor={() => "rgba(251,191,36,0.95)"}
+          linkDirectionalParticleColor={(l: any) => {
+            const k = edgeKey(linkId(l.source), linkId(l.target));
+            if (highlightPath?.has(k)) return "rgba(251,191,36,0.95)";
+            return "rgba(34,211,238,0.92)";
+          }}
           linkDirectionalParticleWidth={2}
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
             const n = node as FGNode;
@@ -165,6 +182,16 @@ export function Graph({
               ctx.strokeStyle = hexToRgba("#ffffff", 0.65 * alpha);
               ctx.lineWidth = 1 / scale;
               ctx.arc(n.x!, n.y!, radius - 1.5 / scale, 0, 2 * Math.PI, false);
+              ctx.stroke();
+            }
+
+            // Cyan halo for chat-traversal participants — drawn just
+            // outside the core so it doesn't fight the selection ring.
+            if (chatTraversalNodes?.has(n.id) && !isSelected) {
+              ctx.beginPath();
+              ctx.strokeStyle = "rgba(34,211,238,0.9)";
+              ctx.lineWidth = 1.6 / scale;
+              ctx.arc(n.x!, n.y!, radius + 2.5 / scale, 0, 2 * Math.PI, false);
               ctx.stroke();
             }
 

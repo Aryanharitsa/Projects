@@ -67,3 +67,19 @@ body {
     transparent
   );
 }
+
+/* Shimmer loop used by the chat panel's "retrieving…" indicator */
+@keyframes ws-shimmer {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(400%); }
+}
+
+/* Tailwind 3.4 doesn't ship line-clamp util by default in some configs;
+   declare the widely-supported -webkit version so citation snippets clip
+   to two lines without a plugin. */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

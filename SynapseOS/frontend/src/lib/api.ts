@@ -1,4 +1,7 @@
 import type {
+  ChatMode,
+  ChatResponse,
+  ChatStatus,
   Community,
   Graph,
   Neighbor,
@@ -67,4 +70,24 @@ export const api = {
     const qs = q.toString();
     return j<OrphanSuggestion[]>(`/orphans${qs ? `?${qs}` : ""}`);
   },
+
+  chatStatus: () => j<ChatStatus>(`/chat/status`),
+
+  chat: (payload: {
+    query: string;
+    mode?: ChatMode;
+    k_seed?: number;
+    hops?: number;
+    include_community_anchors?: boolean;
+  }) =>
+    j<ChatResponse>(`/chat`, {
+      method: "POST",
+      body: JSON.stringify({
+        query: payload.query,
+        mode: payload.mode ?? "auto",
+        k_seed: payload.k_seed ?? 4,
+        hops: payload.hops ?? 1,
+        include_community_anchors: payload.include_community_anchors ?? true,
+      }),
+    }),
 };

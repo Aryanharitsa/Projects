@@ -77,3 +77,54 @@ export type PathResult = {
   path: PathStep[];
   cost: number;
 };
+
+export type ChatRole = "seed" | "synapse" | "community";
+
+export type ChatCitation = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  score: number;
+  role: ChatRole;
+  via_seed_id: number | null;
+  via_strength: number;
+};
+
+export type ChatExpansion = {
+  src: number;
+  dst: number;
+  strength: number;
+  kind: ChatRole;
+};
+
+export type ChatTraversal = {
+  seeds: number[];
+  expansions: ChatExpansion[];
+};
+
+export type ChatMode = "auto" | "extractive" | "llm";
+
+export type ChatResponse = {
+  query: string;
+  answer: string;
+  citations: ChatCitation[];
+  traversal: ChatTraversal;
+  model: string;
+  mode_used: "extractive" | "llm";
+  latency_ms: number;
+  llm_available: boolean;
+  llm_provider: string | null;
+  notice: string | null;
+};
+
+export type ChatStatus = {
+  llm_available: boolean;
+  llm_provider: string | null;
+  extractive_available: boolean;
+};
+
+export type ChatTurn = {
+  id: string;       // local-only uuid for keys
+  query: string;
+  response: ChatResponse;
+};

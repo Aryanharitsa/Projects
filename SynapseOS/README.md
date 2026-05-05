@@ -43,6 +43,13 @@ threshold live, and watch your topical clusters discover themselves.
   alongside their strongest near-miss neighbor and the exact `τ` value
   that would attach them. Lower the threshold, or refine the note —
   no thought stays isolated by accident.
+- **Chat with your graph.** Ask anything in plain English. Retrieval
+  *uses the synapse graph*: top-*k* semantic seeds → 1-hop fan-out
+  along the same edges the canvas renders → optional community anchor
+  per seed. Every answer cites notes inline (`[#1]`, `[#2]`, …) and the
+  exact synapses that contributed light up cyan on the canvas.
+  **Default mode is extractive (zero-dep). Optional LLM mode** when
+  `SYNAPSE_LLM_KEY` is set — same citation contract.
 - **Interactive force-directed graph** with zoom, drag, selection,
   community-coloured nodes, weight-haloed edges, and labels that fade
   in at zoom.
@@ -62,31 +69,31 @@ threshold live, and watch your topical clusters discover themselves.
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│  Next.js 14 · App Router · Tailwind · react-force-graph-2d             │
-│  ┌──────────────┬─────────────────────┬───────────────────────────┐    │
-│  │ NoteComposer │       Graph         │        Inspector          │    │
-│  │ SearchBar    │ canvas, 60fps       │  neighbors + body         │    │
-│  │ TopicPalette │ community colors    │                           │    │
-│  │ OrphanRescue │ + isolation overlay │                           │    │
-│  │ PathFinder   │                     │                           │    │
-│  └──────────────┴─────────────────────┴───────────────────────────┘    │
-└─────────────────────────────────┬──────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Next.js 14 · App Router · Tailwind · react-force-graph-2d               │
+│  ┌──────────────┬─────────────────────┬─────────────────────────────┐    │
+│  │ NoteComposer │       Graph         │       ChatPanel             │    │
+│  │ SearchBar    │ canvas, 60fps       │  ask/transcript/citations   │    │
+│  │ TopicPalette │ community colors    │  · cyan retrieval overlay   │    │
+│  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
+│  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
+│  └──────────────┴─────────────────────┴─────────────────────────────┘    │
+└─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│  FastAPI · pydantic · uvicorn                                          │
-│  ┌────────────┬────────────────┬─────────────────┬──────────────────┐  │
-│  │   main.py  │   synapse.py   │  community.py   │     store.py     │  │
-│  │  (routes)  │  (graph build, │ (greedy modu-   │ (SQLite + packed │  │
-│  │            │   search, path)│ larity + names  │  vector blobs)   │  │
-│  │            │                │ + orphan find)  │                  │  │
-│  └────────────┴────────────────┴─────────────────┴──────────────────┘  │
-│                          │                                             │
-│                          ▼                                             │
-│                  embed.py — 512-d hashing-trick embedder               │
-│                (char 4-grams + word uni/bi-grams → L2-norm)            │
-└────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  FastAPI · pydantic · uvicorn                                            │
+│  ┌──────────┬─────────────┬─────────────┬──────────────┬──────────────┐  │
+│  │ main.py  │ synapse.py  │ community.py│   chat.py    │   store.py   │  │
+│  │ (routes) │ (graph,     │(greedy mod. │ (graph-aware │  (SQLite +   │  │
+│  │          │  search,    │ + names +   │  RAG +       │   packed     │  │
+│  │          │  path)      │  orphans)   │  extractive) │   vectors)   │  │
+│  └──────────┴─────────────┴─────────────┴──────────────┴──────────────┘  │
+│                   │                              │                       │
+│                   ▼                              ▼                       │
+│         embed.py — 512-d hashing-trick    llm.py — stdlib HTTP           │
+│         embedder (L2-normalized)          to Anthropic / OpenAI          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### The synapse formula
@@ -147,6 +154,61 @@ A note is an *orphan* if it has zero edges in the current graph at
 report the strongest peer along with `nudged_τ = max(0, sim − 0.005)` —
 exactly the threshold that would attach them.
 
+### Chat with your graph
+
+Most "RAG over notes" stops at vector search → stuff into prompt.
+SynapseOS *already* builds a graph from those embeddings, so the
+retriever does something better:
+
+```
+1. SEED      top-k cosine hits against the query           ─→ "match"
+2. EXPAND    1-hop along each seed's synapses (the same    ─→ "synapse"
+             edges the canvas renders), capped by top_k
+3. ANCHOR    optionally include the highest-weight note    ─→ "anchor"
+             in each seed's community (cluster anchor)
+4. ANSWER    extractive (default) or LLM, with strict
+             inline [#N] citations for every claim
+```
+
+Each retrieved note carries provenance: a `role` of `seed` / `synapse`
+/ `community`, the seed it was reached from, and the synapse strength
+along the way. The `traversal` returned alongside the answer maps
+1-to-1 to edges in the live graph, so the **canvas paints exactly the
+synapses that contributed** in cyan, with animated particles and a
+halo around participating nodes.
+
+**Composite score for synapse hits** (so adjacent thoughts beat random
+neighbours):
+
+```
+score = (s · s_seed · 0.85^hop) + 0.4 · cosine(query, neighbour)
+```
+
+where `s` is the synapse strength along the expansion edge and
+`s_seed` is `1.0` for direct seeds. We cap fan-out per node to `top_k`
+and reject any edge below a `0.10` floor so retrieval stays focused.
+
+**Default extractive answer.** No API keys, no network. We score every
+sentence in the citations by `(query-term hits · 1.4) / length_norm
++ 0.6 / (citation_rank + 1)` and pick up to 5, one per citation when
+possible. If nothing overlaps lexically, we fall back to a "your
+strongest matches were…" summary so the answer stays honest about its
+floor.
+
+**Optional LLM mode.** Set `SYNAPSE_LLM_KEY` and the same context goes
+to a small LLM under a strict citation contract ("answer ONLY from
+these notes, cite inline as `[#N]`, say so plainly if missing"). On
+network/LLM failure we silently fall back to extractive with a notice.
+
+```
+SYNAPSE_LLM_PROVIDER  anthropic | openai      (default: anthropic)
+SYNAPSE_LLM_KEY       your provider key       (omit to keep extractive only)
+SYNAPSE_LLM_MODEL     model id                (default: claude-haiku-4-5-20251001
+                                                or gpt-4o-mini)
+```
+
+Zero new Python deps — `urllib.request` does the HTTP.
+
 ---
 
 ## API surface
@@ -164,6 +226,8 @@ exactly the threshold that would attach them.
 | `GET`  | `/path?src=&dst=`            | Strongest-chain path between two notes               |
 | `GET`  | `/communities?threshold…`    | Auto-named clusters: `[ { id, name, color, size, terms[], member_ids[] } ]` |
 | `GET`  | `/orphans?threshold…`        | Isolated notes + best below-threshold candidate      |
+| `GET`  | `/chat/status`               | `{ llm_available, llm_provider, extractive_available }` |
+| `POST` | `/chat`                      | Graph-aware RAG. Body: `{ query, mode?, k_seed?, hops?, include_community_anchors? }`. Response: `{ answer, citations[], traversal: { seeds, expansions }, model, mode_used, latency_ms, llm_available, notice? }` |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -189,9 +253,22 @@ npm run dev                                 # http://localhost:3000
 Visit `http://localhost:3000`. The demo graph has 16 seed notes that
 cluster into a handful of topical regions (embeddings, design,
 retrieval) with a deliberately bridging "Why this app exists" note.
-Click a cluster in the **Topic Palette** to isolate it. Add your own
-thoughts — watch the synapses form and the topic palette refresh in
-real time.
+Click a cluster in the **Topic Palette** to isolate it. **Ask the
+graph** — type a question in the chat panel and watch the cited
+synapses light up cyan on the canvas. Add your own thoughts — watch
+the synapses form and the topic palette refresh in real time.
+
+### Optional: enable LLM mode
+
+```bash
+export SYNAPSE_LLM_KEY=sk-ant-…              # or sk-… for openai
+export SYNAPSE_LLM_PROVIDER=anthropic        # or openai
+# export SYNAPSE_LLM_MODEL=claude-haiku-4-5-20251001
+uvicorn app.main:app --reload --port 8000
+```
+
+The `/chat/status` endpoint reports availability; the chat panel UI
+flips its "extractive" pill to "LLM ready" automatically.
 
 ---
 
@@ -207,8 +284,9 @@ Incremental moves for future rotation days:
       cluster names, allow click-to-isolate *(shipped)*
 - [x] **Orphan rescue** — surface isolated notes + the threshold that
       would attach them *(shipped)*
-- [ ] Chat-with-your-graph: retrieval-augmented generation using the
-      synapse + community neighborhood as the retriever
+- [x] **Chat-with-your-graph** — graph-aware RAG over synapse + community
+      neighborhood, with cited citations and a live traversal overlay
+      *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 
