@@ -24,7 +24,11 @@ PDF ──► sha256 ──► IPFS pin ──► AttestationRegistry.attest()
 ```
 
 ```
-transactions.csv ─► 7 detectors ─► weighted score ─► band ─► SAR draft
+transactions.csv ─► 8 detectors ─► weighted score ─► band ─► alert ─► case ─► SAR
+                                                                        │
+                                                                        ▼
+                                                                 Analyst workflow
+                                                          (priority · SLA · timeline)
 ```
 
 ## Design choices

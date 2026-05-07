@@ -27,3 +27,7 @@ __MACOSX/
 
 # Environment
 *.env
+
+# AML case store (per-deployment SQLite)
+apps/ai-aml/data/cases.sqlite3
+apps/ai-aml/data/cases.sqlite3-*

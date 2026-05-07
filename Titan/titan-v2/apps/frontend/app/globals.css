@@ -112,3 +112,121 @@ body::before {
 .band-critical { background: linear-gradient(135deg, rgba(239,68,68,0.22), rgba(239,68,68,0.05)); border-color: rgba(239,68,68,0.55); }
 
 /* Score-ring conic gradient is generated inline in components */
+
+/* ---- Case management surface (round-3, day-15) ---- */
+
+.ws-case-card {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  padding: 14px;
+  text-align: left;
+  transition: border-color .2s, transform .2s, background .2s, box-shadow .2s;
+}
+.ws-case-card:hover {
+  border-color: rgba(45, 225, 194, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 12px 30px -18px rgba(45, 225, 194, 0.35);
+}
+
+/* Kanban swim lanes */
+.ws-lane {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+.ws-lane-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 10px;
+}
+.ws-lane-stripe-critical { box-shadow: inset 4px 0 0 0 #ef4444; }
+.ws-lane-stripe-high     { box-shadow: inset 4px 0 0 0 #fb923c; }
+.ws-lane-stripe-medium   { box-shadow: inset 4px 0 0 0 #fbbf24; }
+.ws-lane-stripe-low      { box-shadow: inset 4px 0 0 0 #22d3a8; }
+
+.ws-lane-empty {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  flex: 1;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 12px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px 12px;
+}
+
+/* Timeline */
+.ws-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ws-timeline-item {
+  position: relative;
+  padding-left: 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+.ws-timeline-rail {
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  bottom: -18px;
+  width: 1.5px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
+}
+.ws-timeline-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid rgba(7, 11, 20, 1);
+}
+
+/* Case detail composer */
+.ws-composer textarea {
+  resize: vertical;
+}
+
+/* Status segmented control */
+.ws-status-seg {
+  display: inline-flex;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.ws-status-seg button {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  transition: background .2s, color .2s;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ws-status-seg button:last-child { border-right: 0; }
+.ws-status-seg button:hover { background: rgba(255, 255, 255, 0.04); color: rgba(255, 255, 255, 0.9); }
+.ws-status-seg button.active {
+  color: rgb(7, 11, 20);
+  background: linear-gradient(135deg, #2DE1C2, #6E5BFF);
+  font-weight: 600;
+}
+.ws-status-seg button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

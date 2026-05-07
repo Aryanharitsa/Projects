@@ -2,15 +2,22 @@
 
 **Trusted Identity & Transaction Authentication Network.**
 Document-grade KYC + on-chain attestation + a deterministic, explainable AML
-risk engine **with built-in sanctions screening** — wrapped in a single
-dark-themed Next.js console.
+risk engine **with built-in sanctions screening** and a real **case
+management workflow** — wrapped in a single dark-themed Next.js console.
 
-> Day-10 of the project rotation shipped the Phase-2 roadmap headline:
-> a fuzzy-matched sanctions watchlist (~30 illustrative entities), a new
-> `sanctions_hit` detector wired into the AML scorer, a public
-> `/aml/sanctions/screen` endpoint, a dedicated **/watchlist** screening
-> route, and a **what-if simulator** on the AML console that re-scores
-> the leaderboard live as you re-tune detector weights.
+> Day-15 of the project rotation closed the loop on the AML side: every
+> alert can now be promoted to a **case** with one click. Cases live in a
+> persistent SQLite store, carry **priority** + **SLA**, and walk a real
+> workflow: `open → review → escalated → cleared / sar_filed`. Every
+> transition, note, assignment, and SAR generation is captured on an
+> append-only timeline so the case is end-to-end auditable. A new
+> `/cases` route renders a kanban-style queue (priority swim lanes,
+> SLA breach counter, search + assignee filters). A new `/cases/{id}`
+> page renders the full detail: frozen evidence snapshot, transaction
+> graph, sanctions hits, status workflow buttons, note composer, and
+> the timeline rail. The AML console gained a header **Open as cases**
+> button (bulk-promote at medium+ priority) plus per-row chips and a
+> live counter on the nav.
 
 ---
 
@@ -26,6 +33,17 @@ dark-themed Next.js console.
 | SAR draft | `POST /aml/sar` | Markdown narrative + structured payload |
 | Sanctions screen | `POST /aml/sanctions/screen` | Fuzzy-match a batch of names against the watchlist |
 | Sanctions list | `GET  /aml/sanctions/list` | Paged dump of bundled watchlist entries |
+| **Case queue** | `GET  /aml/cases` | Filter by status/priority/assignee/SLA/q |
+| **Open case** | `POST /aml/cases/open` | Promote one `account_report` snapshot |
+| **Bulk open** | `POST /aml/cases/bulk_open` | Promote a `/aml/score` response in one call |
+| **Case stats** | `GET  /aml/cases/stats` | Tiles: open · breaches · per-status · avg-age |
+| **Assignees** | `GET  /aml/cases/assignees` | Distinct list for the filter dropdown |
+| **Case detail** | `GET  /aml/cases/{id}` | Snapshot + full event timeline |
+| **Transition** | `POST /aml/cases/{id}/transition` | `to_status: review/cleared/escalated/sar_filed/reopen` |
+| **Assign** | `POST /aml/cases/{id}/assign` | Set or clear analyst handle |
+| **Note** | `POST /aml/cases/{id}/note` | Append a free-text note to the timeline |
+| **File SAR** | `POST /aml/cases/{id}/sar` | Render SAR + attach + transition to `sar_filed` |
+| **Delete** | `DELETE /aml/cases/{id}` | Hard delete (admin demo only) |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -92,18 +110,81 @@ env var; the loader contract stays the same.
 
 ---
 
+## Case workflow, in detail
+
+```
+                          ┌───────────────┐
+                          │  open  (auto) │
+                          └───────┬───────┘
+       ┌──────────────────────────┼──────────────────────────┐
+       │                          ▼                          ▼
+   ┌───────┐                 ┌─────────┐                ┌──────────┐
+   │review │ ──────────────▶ │escalated│ ─────────────▶ │ sar_filed│ ◀── terminal
+   └───┬───┘                 └────┬────┘                └────┬─────┘
+       │                          │                          │
+       └────────── cleared ◀──────┘                          │
+                                                             ▼ reopen → review
+```
+
+**Priority** is computed once at open-time and re-validated on transition:
+
+```
+alert_score(case) = max( risk_score, max_similarity(sanctions) · 100 )
+priority(case)    = critical  if alert_score ≥ 80
+                    high      if alert_score ≥ 60
+                    medium    if alert_score ≥ 30
+                    low       otherwise
+```
+
+The `sanctions·100` axis means a strong alias match (similarity ≥ 0.85)
+forces critical even on otherwise quiet accounts — exactly the inversion
+real compliance teams expect.
+
+**SLA** is a derived property of the open case (clock pauses on closure):
+
+| State    | Threshold (default)   | Visual |
+|----------|-----------------------|--------|
+| `ok`     | < 24 h since opened   | teal pill |
+| `warn`   | 24 h – 72 h           | amber pill |
+| `breach` | ≥ 72 h                | rose pill |
+
+Override per deployment with `TITAN_CASE_SLA_WARN_HOURS` /
+`TITAN_CASE_SLA_BREACH_HOURS`.
+
+**Audit trail.** The store is intentionally append-only on the
+`case_events` side. Every transition, assignment, note, SAR generation,
+and reopen emits a typed event with actor + before/after status + JSON
+payload. The case detail timeline renders these chronologically with a
+type-coloured rail (opened=teal, assigned=violet, note=slate,
+status=amber, sar=emerald, reopened=orange).
+
+**Idempotency.** Re-opening the same `account_id` within a calendar UTC
+day returns the existing OPEN/REVIEW/ESCALATED case rather than creating
+a duplicate. Closed cases re-open as fresh ones — the workflow resets.
+
+**Snapshot persistence.** Every case stores a *frozen* snapshot of the
+account report at triage time: factors with evidence, sanctions hits,
+edges (capped at 64 rows), totals. Even if the underlying transactions
+are re-classified later, the case detail still shows what the analyst
+saw. That is the audit trail regulators care about.
+
+---
+
 ## Frontend
 
 | Route | Purpose |
 |---|---|
-| `/` | Hero + flow diagram + four feature cards + "how it fits" |
-| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft |
+| `/` | Hero + 4-step pipeline + five feature cards + flow diagram |
+| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, **+ case promotion (per-row chip and bulk header button)** |
+| `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
+| `/cases/{id}` | Big alert ring, priority/SLA pills, frozen evidence snapshot (factor bars + tx graph), sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail, attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
 | `/kyc` | PDF dropzone, animated 3-stage pipeline, on-chain receipt with deep-link to explorer |
 | `/attestations` | Search by `docHash`, live `Attested` event feed, click-through to detail |
 
 Built with Next.js 14 + Tailwind + a small set of inline SVG components
-(`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`). No charting libs.
+(`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`, `PriorityDot`,
+`AgePill`, `Timeline`, `CasesNavPill`). No charting libs.
 
 ---
 
@@ -137,21 +218,37 @@ cd apps/ai-aml
 pip install -r requirements.txt
 uvicorn main:app --port 8002
 
-# screen a name
-curl -s -X POST localhost:8002/aml/sanctions/screen \
-  -H 'Content-Type: application/json' \
-  -d '{"names": ["Trident Exports", "Bharat Petroleum"], "threshold": 0.45}' \
-  | python -m json.tool | head -40
-
-# score with a weights override
+# 1) score the bundled sample
 curl -s -X POST localhost:8002/aml/score \
   -H 'Content-Type: application/json' \
-  -d '{"transactions": [...], "weights": {"sanctions_hit": 50}}'
+  -d @../../datasets/samples/aml-sample.json | tee /tmp/score.json | head -20
+
+# 2) bulk-promote alerts to cases
+curl -s -X POST localhost:8002/aml/cases/bulk_open \
+  -H 'Content-Type: application/json' \
+  -d "{\"score_response\": $(cat /tmp/score.json), \"min_priority\": \"medium\"}" \
+  | python -m json.tool | head -40
+
+# 3) walk the queue
+curl -s localhost:8002/aml/cases | python -m json.tool | head
+curl -s localhost:8002/aml/cases/stats | python -m json.tool
+
+# 4) drive a case through the workflow (replace CASE-XXX with a real id)
+CID=CASE-XXXXXXXXXX
+curl -s -X POST localhost:8002/aml/cases/$CID/assign \
+  -H 'Content-Type: application/json' \
+  -d '{"assignee":"alice","actor":"system"}'
+curl -s -X POST localhost:8002/aml/cases/$CID/transition \
+  -H 'Content-Type: application/json' \
+  -d '{"to_status":"review","actor":"alice","note":"Triaging."}'
+curl -s -X POST localhost:8002/aml/cases/$CID/sar \
+  -H 'Content-Type: application/json' \
+  -d '{"actor":"alice","analyst":"alice"}' | python -m json.tool | head -30
 ```
 
-Or just open the **AML console** in the browser — the bundled sample CSV
-exercises structuring, a round-trip cycle, a high-risk geo, and three
-sanctions matches.
+Or just open the **AML console** in the browser — drop the bundled CSV,
+hit **Score**, then hit **Open as cases** in the header to bulk-promote
+every medium+ alert into the queue.
 
 ---
 
@@ -159,26 +256,36 @@ sanctions matches.
 
 ```
 apps/
-  api/         FastAPI gateway — KYC ingest, attestation lookup, AML pass-through
-  ai-ocr/      PAN PDF stub — sha256 + IPFS pin
-  ai-aml/      Risk engine + sanctions matcher + SAR generator (no ML deps)
-    risk.py        8 detectors + weight-override support
-    sanctions.py   token-set + n-gram + containment matcher
-    sar.py         markdown narrative + structured payload
-    data/sanctions.json    bundled illustrative watchlist
-  frontend/    Next.js 14 console (dark theme, glass UI)
+  api/              FastAPI gateway — KYC ingest, attestation lookup, AML pass-through
+  ai-ocr/           PAN PDF stub — sha256 + IPFS pin
+  ai-aml/           Risk engine + sanctions matcher + SAR generator (no ML deps)
+    risk.py             8 detectors + weight-override support
+    sanctions.py        token-set + n-gram + containment matcher
+    sar.py              markdown narrative + structured payload
+    cases.py            SQLite-backed case store + workflow engine + SLA
+    data/sanctions.json bundled illustrative watchlist
+    data/cases.sqlite3  case persistence (gitignored, per-deployment)
+  frontend/         Next.js 14 console (dark theme, glass UI)
+    app/cases/page.tsx          queue: kanban + stats + filters
+    app/cases/[id]/page.tsx     detail: timeline + evidence + workflow
+    components/CaseCard.tsx
+    components/CasesNavPill.tsx
+    components/Timeline.tsx
+    components/PriorityDot.tsx
+    components/AgePill.tsx
 blockchain/
-  contracts/   AttestationRegistry.sol
-  scripts/     deploy.ts
-infra/         docker-compose for the whole stack
-datasets/      sample inputs
+  contracts/        AttestationRegistry.sol
+  scripts/          deploy.ts
+infra/              docker-compose for the whole stack
+datasets/           sample inputs
 ```
 
 ## Roadmap
 
 - ~~**Phase 2** — sanctions feed (✅ shipped, day-10), DB persistence
-  (Postgres) for cases & alerts, SHAP-style attributions on top of the
-  rule engine.~~
+  for cases & alerts (✅ shipped, day-15 — SQLite + workflow + timeline +
+  SLA), SHAP-style attributions on top of the rule engine.~~
 - **Phase 3** — Zero-knowledge attestation circuits (prove "I am attested
   by V" without revealing the docHash); GraphQL subgraph for the explorer;
-  OAuth.
+  OAuth + analyst RBAC; live alerting / web-hooks on case state changes;
+  per-detector SHAP-style attribution overlays on the factor bars.

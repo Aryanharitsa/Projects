@@ -10,6 +10,14 @@ const FEATURES = [
     cta: "Score transactions",
   },
   {
+    href: "/cases",
+    title: "Case Workflow",
+    eyebrow: "Triage",
+    body: "Promote any alert to a case with one click. Priority-sorted swim lanes, SLA pills, an append-only audit trail of every transition, and a one-click Generate-and-file SAR action that closes the loop.",
+    accent: "from-emerald-400/30 via-teal-400/15 to-transparent",
+    cta: "Open queue",
+  },
+  {
     href: "/watchlist",
     title: "Sanctions Watchlist",
     eyebrow: "Screening",
@@ -38,7 +46,7 @@ const FEATURES = [
 const STATS = [
   { label: "Pattern detectors", value: "8" },
   { label: "Watchlist entries", value: "30" },
-  { label: "On-chain attestations", value: "live" },
+  { label: "Case workflow states", value: "5" },
   { label: "External ML deps", value: "0" },
 ];
 
@@ -99,7 +107,7 @@ export default function Home() {
       </section>
 
       {/* Feature cards */}
-      <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {FEATURES.map((f) => (
           <Link
             key={f.href}
@@ -132,7 +140,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold">How it fits together</h2>
           <span className="pill">deterministic</span>
         </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card
             step="01"
             title="Ingest"
@@ -146,7 +154,12 @@ export default function Home() {
           <Card
             step="03"
             title="Score"
-            body="Per-account risk = Σ weighted detector contributions, capped at 100. Triggers a SAR draft at ≥60."
+            body="Per-account risk = Σ weighted detector contributions, capped at 100. Triggers an alert at ≥30 (medium)."
+          />
+          <Card
+            step="04"
+            title="Triage"
+            body="Alerts promote to cases — priority swim lanes, SLA clock, append-only timeline, and one-click Generate-and-file SAR."
           />
         </div>
       </section>

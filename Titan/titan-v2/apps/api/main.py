@@ -261,3 +261,123 @@ async def aml_sanctions_list(limit: int = 50) -> Dict[str, Any]:
         r = await client.get(f"{AML_SVC}/aml/sanctions/list", params={"limit": limit})
         r.raise_for_status()
         return r.json()
+
+
+# ----- AML case management pass-through (round-3, day-15)
+
+
+@app.get("/aml/cases")
+async def aml_cases_list(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    assignee: Optional[str] = None,
+    account_id: Optional[str] = None,
+    q: Optional[str] = None,
+    sla: Optional[str] = None,
+    include_closed: bool = True,
+    limit: int = 200,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    params = {
+        "include_closed": include_closed,
+        "limit": limit,
+        "offset": offset,
+    }
+    for k, v in [
+        ("status", status), ("priority", priority), ("assignee", assignee),
+        ("account_id", account_id), ("q", q), ("sla", sla),
+    ]:
+        if v is not None and v != "":
+            params[k] = v
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/cases", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/cases/open")
+async def aml_cases_open(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/open", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/bulk_open")
+async def aml_cases_bulk_open(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/bulk_open", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/cases/stats")
+async def aml_cases_stats() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/cases/stats")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/cases/assignees")
+async def aml_cases_assignees() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/cases/assignees")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/cases/{case_id}")
+async def aml_cases_get(case_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/cases/{case_id}")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/{case_id}/transition")
+async def aml_cases_transition(case_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/{case_id}/transition", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/{case_id}/assign")
+async def aml_cases_assign(case_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/{case_id}/assign", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/{case_id}/note")
+async def aml_cases_note(case_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/{case_id}/note", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/{case_id}/sar")
+async def aml_cases_sar(case_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/cases/{case_id}/sar", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.delete("/aml/cases/{case_id}")
+async def aml_cases_delete(case_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.delete(f"{AML_SVC}/aml/cases/{case_id}")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()

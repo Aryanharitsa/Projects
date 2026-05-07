@@ -242,3 +242,228 @@ export async function recentAttestations(limit = 25) {
   const r = await fetch(`${API_BASE}/attestations/recent?limit=${limit}`, { cache: "no-store" });
   return jsonOrThrow(r);
 }
+
+// ---------------------------------------------------------------------------
+// Case management (round-3, day-15)
+// ---------------------------------------------------------------------------
+
+export type CaseStatus =
+  | "open"
+  | "review"
+  | "cleared"
+  | "escalated"
+  | "sar_filed";
+
+export type CasePriority = "critical" | "high" | "medium" | "low";
+
+export type CaseSla = "ok" | "warn" | "breach";
+
+export type CaseEventType =
+  | "opened"
+  | "assigned"
+  | "note"
+  | "status"
+  | "sar"
+  | "reopened";
+
+export type CaseEvent = {
+  id: number;
+  case_id: string;
+  type: CaseEventType;
+  actor: string;
+  body: string | null;
+  from_status: CaseStatus | null;
+  to_status: CaseStatus | null;
+  payload: any;
+  created_at: number;
+  created_at_iso: string;
+};
+
+export type CaseSummary = {
+  id: string;
+  account_id: string;
+  display_name: string;
+  status: CaseStatus;
+  priority: CasePriority;
+  risk_score: number;
+  band: "low" | "medium" | "high" | "critical";
+  alert_score: number;
+  sanctions_count: number;
+  fired_count: number;
+  assignee: string | null;
+  opened_by: string;
+  opened_at: number;
+  opened_at_iso: string;
+  last_event_at: number;
+  last_event_at_iso: string;
+  closed_at: number | null;
+  closed_at_iso: string | null;
+  sar_id: string | null;
+  sar_filed_at: number | null;
+  sar_filed_at_iso: string | null;
+  summary: string;
+  age_hours: number;
+  sla: CaseSla;
+};
+
+export type CaseSnapshot = {
+  account_id: string;
+  display_name?: string;
+  risk_score: number;
+  band: "low" | "medium" | "high" | "critical";
+  factors: Factor[];
+  sanctions_hits: SanctionsHit[];
+  edges: { from: string; to: string; amount: number; timestamp?: string; channel?: string }[];
+  counterparty_count: number;
+  inbound_total: number;
+  outbound_total: number;
+};
+
+export type CaseDetail = CaseSummary & {
+  snapshot: CaseSnapshot;
+  events: CaseEvent[];
+};
+
+export type CaseStats = {
+  ok: boolean;
+  engine: string;
+  total: number;
+  open_total: number;
+  closed_total: number;
+  by_status: Record<CaseStatus, number>;
+  by_priority: Record<CasePriority, number>;
+  by_sla: Record<CaseSla, number>;
+  avg_open_age_hours: number;
+  by_assignee: Record<string, number>;
+  sla_thresholds: { warn_hours: number; breach_hours: number };
+};
+
+export type ListCasesFilters = {
+  status?: CaseStatus;
+  priority?: CasePriority;
+  assignee?: string;
+  account_id?: string;
+  q?: string;
+  sla?: CaseSla;
+  include_closed?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+export async function listCases(
+  f: ListCasesFilters = {},
+): Promise<{ cases: CaseSummary[]; count: number; limit: number; offset: number }> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) {
+    if (v === undefined || v === null || v === "") continue;
+    qs.set(k, String(v));
+  }
+  const r = await fetch(`${API_BASE}/aml/cases?${qs.toString()}`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getCase(id: string): Promise<{ ok: boolean; case: CaseDetail }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function casesStats(): Promise<CaseStats> {
+  const r = await fetch(`${API_BASE}/aml/cases/stats`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function casesAssignees(): Promise<{ ok: boolean; assignees: string[] }> {
+  const r = await fetch(`${API_BASE}/aml/cases/assignees`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function openCase(
+  account_report: AccountReport,
+  opts: { opened_by?: string; note?: string } = {},
+): Promise<{ ok: boolean; case: CaseSummary }> {
+  const body: any = { account_report };
+  if (opts.opened_by) body.opened_by = opts.opened_by;
+  if (opts.note) body.note = opts.note;
+  const r = await fetch(`${API_BASE}/aml/cases/open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function bulkOpenCases(
+  score_response: ScoreResponse,
+  opts: { min_priority?: CasePriority; opened_by?: string } = {},
+): Promise<{ ok: boolean; opened: CaseSummary[]; skipped: any[]; total_accounts: number }> {
+  const r = await fetch(`${API_BASE}/aml/cases/bulk_open`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ score_response, ...opts }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function transitionCase(
+  id: string,
+  to_status: CaseStatus | "reopen",
+  opts: { actor?: string; note?: string } = {},
+): Promise<{ ok: boolean; case: CaseSummary }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}/transition`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to_status,
+      actor: opts.actor || "TITAN-ANALYST",
+      note: opts.note,
+    }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function assignCase(
+  id: string,
+  assignee: string,
+  actor = "TITAN-ANALYST",
+): Promise<{ ok: boolean; case: CaseSummary }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assignee, actor }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function noteCase(
+  id: string,
+  body: string,
+  actor = "TITAN-ANALYST",
+): Promise<{ ok: boolean; event: CaseEvent }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}/note`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, actor }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function fileSarOnCase(
+  id: string,
+  opts: { actor?: string; analyst?: string; note?: string } = {},
+): Promise<{ ok: boolean; case: CaseSummary; sar: { sar_id: string; narrative_md: string; filed_at: string } }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}/sar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      actor: opts.actor || "TITAN-ANALYST",
+      analyst: opts.analyst,
+      note: opts.note,
+    }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function deleteCase(id: string): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API_BASE}/aml/cases/${id}`, { method: "DELETE" });
+  return jsonOrThrow(r);
+}

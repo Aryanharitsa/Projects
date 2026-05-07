@@ -12,6 +12,20 @@ POST /aml/score                 score a batch of transactions → per-account re
 POST /aml/sar                   generate a SAR draft from one account report
 POST /aml/sanctions/screen      fuzzy-match one or more names against the watchlist
 GET  /aml/sanctions/list        full bundled watchlist (paged)
+
+Case-management surface (round-3, day-15)
+-----------------------------------------
+GET    /aml/cases               queue with priority/status/assignee filters
+POST   /aml/cases/open          promote one account_report to a case
+POST   /aml/cases/bulk_open     promote a /aml/score response in one shot
+GET    /aml/cases/stats         dashboard tiles + SLA breakdown
+GET    /aml/cases/assignees     distinct assignees seen in the store
+GET    /aml/cases/{id}          one case + full event timeline + snapshot
+POST   /aml/cases/{id}/transition   open → review → cleared/escalated/sar_filed
+POST   /aml/cases/{id}/assign       set or clear assignee
+POST   /aml/cases/{id}/note         append a free-text note to the timeline
+POST   /aml/cases/{id}/sar          generate + attach SAR, transition to sar_filed
+DELETE /aml/cases/{id}              hard delete (admin demo only)
 """
 
 from __future__ import annotations
@@ -22,11 +36,12 @@ from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+import cases as case_store
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 
-ENGINE_VERSION = "titan-aml/1.1.0"
+ENGINE_VERSION = "titan-aml/1.2.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -156,3 +171,175 @@ def sanctions_list(limit: int = 50) -> Dict[str, Any]:
         "watchlist": sanctions_engine.get_metadata(),
         "entries": sanctions_engine.list_entries(limit=limit),
     }
+
+
+# ---------------------------------------------------------------------------
+# Case management
+# ---------------------------------------------------------------------------
+
+
+class OpenCaseReq(BaseModel):
+    account_report: Dict[str, Any]
+    opened_by: Optional[str] = "TITAN-AUTOMATED"
+    note: Optional[str] = None
+
+
+class BulkOpenReq(BaseModel):
+    score_response: Dict[str, Any]
+    min_priority: Optional[str] = Field(
+        default="medium",
+        description="Skip accounts whose derived priority is below this band.",
+    )
+    opened_by: Optional[str] = "TITAN-AUTOMATED"
+
+
+class TransitionReq(BaseModel):
+    to_status: str = Field(
+        ...,
+        description="One of review | cleared | escalated | sar_filed | reopen",
+    )
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    note: Optional[str] = None
+
+
+class AssignReq(BaseModel):
+    assignee: str = ""
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+
+
+class NoteReq(BaseModel):
+    body: str = Field(..., min_length=1)
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+
+
+class FileSarReq(BaseModel):
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    analyst: Optional[str] = None  # SAR header name; falls back to actor
+    note: Optional[str] = None
+
+
+@app.get("/aml/cases")
+def cases_list(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    assignee: Optional[str] = None,
+    account_id: Optional[str] = None,
+    q: Optional[str] = None,
+    sla: Optional[str] = None,
+    include_closed: bool = True,
+    limit: int = 200,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    return case_store.list_cases(
+        status=status,
+        priority=priority,
+        assignee=assignee,
+        account_id=account_id,
+        q=q,
+        sla=sla,
+        include_closed=include_closed,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.post("/aml/cases/open")
+def cases_open(req: OpenCaseReq = Body(...)) -> Dict[str, Any]:
+    try:
+        case = case_store.open_case(
+            req.account_report, opened_by=req.opened_by or "TITAN-AUTOMATED",
+            note=req.note,
+        )
+        return {"ok": True, "case": case}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/aml/cases/bulk_open")
+def cases_bulk_open(req: BulkOpenReq = Body(...)) -> Dict[str, Any]:
+    try:
+        out = case_store.bulk_open_from_score(
+            req.score_response,
+            min_priority=req.min_priority or "medium",
+            opened_by=req.opened_by or "TITAN-AUTOMATED",
+        )
+        return {"ok": True, **out}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/aml/cases/stats")
+def cases_stats() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **case_store.stats()}
+
+
+@app.get("/aml/cases/assignees")
+def cases_assignees() -> Dict[str, Any]:
+    return {"ok": True, "assignees": case_store.assignees()}
+
+
+@app.get("/aml/cases/{case_id}")
+def cases_get(case_id: str) -> Dict[str, Any]:
+    case = case_store.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="case not found")
+    return {"ok": True, "case": case}
+
+
+@app.post("/aml/cases/{case_id}/transition")
+def cases_transition(case_id: str, req: TransitionReq = Body(...)) -> Dict[str, Any]:
+    try:
+        case = case_store.transition(
+            case_id, to_status=req.to_status, actor=req.actor, note=req.note,
+        )
+        return {"ok": True, "case": case}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/aml/cases/{case_id}/assign")
+def cases_assign(case_id: str, req: AssignReq = Body(...)) -> Dict[str, Any]:
+    try:
+        case = case_store.assign(case_id, assignee=req.assignee, actor=req.actor)
+        return {"ok": True, "case": case}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/aml/cases/{case_id}/note")
+def cases_note(case_id: str, req: NoteReq = Body(...)) -> Dict[str, Any]:
+    try:
+        event = case_store.add_note(case_id, actor=req.actor, body=req.body)
+        return {"ok": True, "event": event}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/aml/cases/{case_id}/sar")
+def cases_file_sar(case_id: str, req: FileSarReq = Body(...)) -> Dict[str, Any]:
+    case = case_store.get_case(case_id, with_events=False)
+    if not case:
+        raise HTTPException(status_code=404, detail="case not found")
+    snapshot = (case.get("snapshot") or {})
+    snapshot["account_id"] = case["account_id"]  # required by sar_engine
+    sar_doc = sar_engine.render_sar(snapshot, analyst=req.analyst or req.actor)
+    try:
+        updated = case_store.attach_sar(case_id, sar=sar_doc, actor=req.actor)
+        return {"ok": True, "case": updated, "sar": sar_doc}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="case not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/aml/cases/{case_id}")
+def cases_delete(case_id: str) -> Dict[str, Any]:
+    if not case_store.delete_case(case_id):
+        raise HTTPException(status_code=404, detail="case not found")
+    return {"ok": True, "deleted": case_id}

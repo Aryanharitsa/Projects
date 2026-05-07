@@ -7,10 +7,13 @@ import SimilarityRing, { GRADE_TINT } from "../../components/SimilarityRing";
 import TxGraph from "../../components/TxGraph";
 import {
   AccountReport,
+  CaseSummary,
   ScoreResponse,
   Tx,
   WeightOverrides,
+  bulkOpenCases,
   generateSar,
+  openCase,
   score,
 } from "../../lib/api";
 
@@ -78,6 +81,14 @@ export default function AMLPage() {
   const [sar, setSar] = useState<{ md: string; id: string } | null>(null);
   const [showWhatIf, setShowWhatIf] = useState(false);
   const [weights, setWeights] = useState<WeightOverrides>({});
+  const [casePromote, setCasePromote] = useState<{
+    busy: boolean;
+    summary: string | null;
+    error: string | null;
+    bulkOpened: number;
+    bulkSkipped: number;
+  }>({ busy: false, summary: null, error: null, bulkOpened: 0, bulkSkipped: 0 });
+  const [openedFor, setOpenedFor] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,6 +144,56 @@ export default function AMLPage() {
     setCsv(await f.text());
   }, []);
 
+  const onPromoteOne = useCallback(async (acc: AccountReport) => {
+    setCasePromote((p) => ({ ...p, busy: true, error: null }));
+    try {
+      const out = await openCase(acc, { opened_by: "AML-CONSOLE" });
+      setOpenedFor((m) => ({ ...m, [acc.account_id]: out.case.id }));
+      setCasePromote({
+        busy: false,
+        summary: `Opened ${out.case.id} (${out.case.priority})`,
+        error: null,
+        bulkOpened: 0,
+        bulkSkipped: 0,
+      });
+    } catch (e: any) {
+      setCasePromote((p) => ({
+        ...p,
+        busy: false,
+        error: e.message || "Failed to open case",
+      }));
+    }
+  }, []);
+
+  const onPromoteAll = useCallback(async () => {
+    if (!resp) return;
+    setCasePromote((p) => ({ ...p, busy: true, error: null }));
+    try {
+      const out = await bulkOpenCases(resp, {
+        min_priority: "medium",
+        opened_by: "AML-CONSOLE",
+      });
+      const newMap: Record<string, string> = { ...openedFor };
+      out.opened.forEach((c: CaseSummary) => {
+        newMap[c.account_id] = c.id;
+      });
+      setOpenedFor(newMap);
+      setCasePromote({
+        busy: false,
+        summary: `Opened ${out.opened.length} case${out.opened.length !== 1 ? "s" : ""} · skipped ${out.skipped.length} below threshold`,
+        error: null,
+        bulkOpened: out.opened.length,
+        bulkSkipped: out.skipped.length,
+      });
+    } catch (e: any) {
+      setCasePromote((p) => ({
+        ...p,
+        busy: false,
+        error: e.message || "Bulk open failed",
+      }));
+    }
+  }, [resp, openedFor]);
+
   const onSar = useCallback(async () => {
     if (!selectedReport) return;
     try {
@@ -177,11 +238,40 @@ export default function AMLPage() {
           <button className="btn" onClick={() => setCsv(SAMPLE)}>
             Reset sample
           </button>
+          <button
+            className="btn"
+            onClick={onPromoteAll}
+            disabled={!resp || casePromote.busy}
+            title="Promote every alert at medium+ priority to a case"
+          >
+            {casePromote.busy
+              ? "Opening…"
+              : `Open as cases${
+                  resp
+                    ? ` (${resp.accounts.filter((a) => (a.risk_score ?? 0) >= 30 || (a.sanctions_hits?.length ?? 0) > 0).length})`
+                    : ""
+                }`}
+          </button>
           <button className="btn-primary" onClick={onScore} disabled={loading}>
             {loading ? "Scoring…" : `Score ${txs.length} txs`}
           </button>
         </div>
       </header>
+
+      {(casePromote.summary || casePromote.error) && (
+        <div
+          className={`glass flex items-center justify-between gap-3 px-4 py-2.5 text-[12.5px] ${
+            casePromote.error
+              ? "border-rose-400/30 bg-rose-500/[0.06] text-rose-300"
+              : "border-teal-400/30 bg-teal-500/[0.06] text-teal-300"
+          }`}
+        >
+          <span>{casePromote.error || casePromote.summary}</span>
+          <a href="/cases" className="btn-ghost !py-1 text-[12px]">
+            Open case queue →
+          </a>
+        </div>
+      )}
 
       {/* What-if simulator */}
       {showWhatIf && (
@@ -321,39 +411,67 @@ export default function AMLPage() {
               <div className="mt-5">
                 <div className="label">Accounts (sorted by risk)</div>
                 <div className="scroll-thin max-h-56 space-y-2 overflow-y-auto pr-1">
-                  {resp.accounts.map((a) => (
-                    <button
-                      key={a.account_id}
-                      onClick={() => setSelected(a.account_id)}
-                      className={`band-${a.band} flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition hover:translate-y-[-1px] ${
-                        selected === a.account_id
-                          ? "ring-1 ring-white/30"
-                          : ""
-                      }`}
-                    >
-                      <span className="flex min-w-0 flex-col">
-                        <span className="font-mono text-[12.5px] text-white/85">
-                          {a.account_id}
-                        </span>
-                        {a.display_name && (
-                          <span className="truncate text-[10.5px] text-white/55">
-                            {a.display_name}
+                  {resp.accounts.map((a) => {
+                    const caseId = openedFor[a.account_id];
+                    return (
+                      <div
+                        key={a.account_id}
+                        className={`band-${a.band} flex w-full items-stretch gap-2 rounded-xl border px-2 py-2 text-left transition hover:translate-y-[-1px] ${
+                          selected === a.account_id
+                            ? "ring-1 ring-white/30"
+                            : ""
+                        }`}
+                      >
+                        <button
+                          onClick={() => setSelected(a.account_id)}
+                          className="flex min-w-0 flex-1 items-center gap-3 px-1 text-left"
+                        >
+                          <span className="flex min-w-0 flex-col">
+                            <span className="font-mono text-[12.5px] text-white/85">
+                              {a.account_id}
+                            </span>
+                            {a.display_name && (
+                              <span className="truncate text-[10.5px] text-white/55">
+                                {a.display_name}
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </span>
-                      <span className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/55">
-                        {a.sanctions_hits.length > 0 && (
-                          <span className="rounded-md border border-rose-400/40 bg-rose-500/10 px-1.5 py-0.5 text-[9.5px] text-rose-300">
-                            sanctions
+                          <span className="ml-auto flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/55">
+                            {a.sanctions_hits.length > 0 && (
+                              <span className="rounded-md border border-rose-400/40 bg-rose-500/10 px-1.5 py-0.5 text-[9.5px] text-rose-300">
+                                sanctions
+                              </span>
+                            )}
+                            <span>{a.band}</span>
                           </span>
+                          <span className="text-[14px] font-semibold tabular-nums">
+                            {a.risk_score.toFixed(0)}
+                          </span>
+                        </button>
+                        {caseId ? (
+                          <a
+                            href={`/cases/${caseId}`}
+                            className="grid place-items-center rounded-md border border-emerald-400/35 bg-emerald-500/10 px-2 text-[10px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/15"
+                            title="View case"
+                          >
+                            case →
+                          </a>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onPromoteOne(a);
+                            }}
+                            disabled={casePromote.busy}
+                            className="grid place-items-center rounded-md border border-white/15 bg-white/[0.04] px-2 text-[10px] uppercase tracking-wider text-white/65 hover:bg-white/[0.08] hover:text-white/90 disabled:opacity-40"
+                            title="Open this account as a case"
+                          >
+                            + case
+                          </button>
                         )}
-                        <span>{a.band}</span>
-                      </span>
-                      <span className="text-[14px] font-semibold tabular-nums">
-                        {a.risk_score.toFixed(0)}
-                      </span>
-                    </button>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -396,6 +514,22 @@ export default function AMLPage() {
               >
                 Copy JSON
               </button>
+              {openedFor[selectedReport.account_id] ? (
+                <a
+                  href={`/cases/${openedFor[selectedReport.account_id]}`}
+                  className="btn"
+                >
+                  Open case →
+                </a>
+              ) : (
+                <button
+                  className="btn"
+                  onClick={() => onPromoteOne(selectedReport)}
+                  disabled={casePromote.busy}
+                >
+                  {casePromote.busy ? "Opening…" : "Open as case"}
+                </button>
+              )}
               <button className="btn-primary" onClick={onSar}>
                 Generate SAR
               </button>

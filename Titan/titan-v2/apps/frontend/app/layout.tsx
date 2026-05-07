@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import CasesNavPill from "../components/CasesNavPill";
 import Logo from "../components/Logo";
 import StatusPill from "../components/StatusPill";
 
@@ -9,9 +10,10 @@ export const metadata = {
     "KYC + on-chain attestation + explainable AML risk scoring, in one pipeline.",
 };
 
-const NAV = [
+const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/", label: "Overview" },
   { href: "/aml", label: "AML Console" },
+  { href: "/cases", label: "Cases", pill: "cases" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/kyc", label: "KYC Pipeline" },
   { href: "/attestations", label: "Attestations" },
@@ -38,9 +40,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <a
                   key={n.href}
                   href={n.href}
-                  className="rounded-lg px-3 py-1.5 text-[13px] text-white/70 hover:bg-white/[0.05] hover:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-white/70 hover:bg-white/[0.05] hover:text-white"
                 >
                   {n.label}
+                  {n.pill === "cases" && <CasesNavPill />}
                 </a>
               ))}
               <span className="ml-2 hidden md:inline">
