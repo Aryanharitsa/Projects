@@ -2,13 +2,13 @@
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
-import json, uuid, io, base64, urllib.parse
+import json, uuid, io, base64, urllib.parse, time as _time
 from datetime import datetime, date, time, timedelta
 from pathlib import Path
 from PIL import Image
 
 from utils import haversine_km, point_in_polygon, sha256_hex, build_merkle
-from safety import compute_safety, heatmap_points
+from safety import compute_safety, heatmap_points, point_risk
 from routing import (
     plan_safest_route, plan_fastest_route,
     plan_forecast_route, find_best_departure, to_gpx,
@@ -19,7 +19,11 @@ from theme import (
     render_route_compare, render_route_summary, ROUTE_ACCENT,
     render_forecast_card, render_24h_curve, render_category_bars,
     render_best_window, render_hotspots, forecast_color,
+    render_live_trip_header, render_alert_feed, render_lookahead_panel,
+    render_contacts_strip, render_broadcast_log, render_trip_empty,
+    render_trip_log_row,
 )
+import companion as cp
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -52,6 +56,19 @@ if "sos_active" not in st.session_state:
     st.session_state.sos_active = False
 if "current_loc" not in st.session_state:
     st.session_state.current_loc = {"lat": 15.55, "lon": 73.77}
+if "trip" not in st.session_state:
+    st.session_state.trip = None
+if "trip_log" not in st.session_state:
+    st.session_state.trip_log = []
+if "trip_broadcasts" not in st.session_state:
+    st.session_state.trip_broadcasts = []
+if "trip_auto_advance" not in st.session_state:
+    st.session_state.trip_auto_advance = False
+if "trip_speed_factor" not in st.session_state:
+    st.session_state.trip_speed_factor = 4.0
+if "contacts" not in st.session_state:
+    p = DATA / "contacts.csv"
+    st.session_state.contacts = cp.load_contacts(p) if p.exists() else []
 
 
 @st.cache_data(show_spinner=False)
@@ -274,10 +291,11 @@ if role == "Tourist App":
     if safety.band in ("High Risk", "Danger"):
         st.warning(f"⚠️ {safety.band} zone — review factors above and consider an alternate route.")
 
-    tabs = st.tabs([
-        "Map", "Plan Route", "Forecast",
-        "Report Hazard", "Alerts", "SOS", "Trip Report",
-    ])
+    tab_labels = [
+        "Map", "Plan Route", "Live Trip", "Forecast",
+        "Report Hazard", "Alerts", "SOS", "Trip Log",
+    ]
+    tabs = st.tabs(tab_labels)
 
     # ---------------- Map
     with tabs[0]:
@@ -439,8 +457,312 @@ if role == "Tourist App":
                         )
                     render_best_window(windows, plan["depart_at"])
 
-    # ---------------- Forecast
+    # ---------------- Live Trip Companion (round-3 closer)
     with tabs[2]:
+        st.subheader("Live Trip Companion")
+        st.caption(
+            "Be *with* the user during the trip — proactive geofence + risk-corridor alerts, "
+            "trusted-contact broadcasts, and an auto-SOS rule when stalled in elevated-risk territory."
+        )
+
+        plan = st.session_state.get("plan")
+        trip = st.session_state.get("trip")
+
+        # Auto-tick on every Streamlit rerun while active (engine reads wall-clock).
+        if trip is not None and trip.status == "active":
+            inc_rec = inc_df.to_dict("records") if not inc_df.empty else []
+            poi_rec = poi_df.to_dict("records") if not poi_df.empty else []
+            new_alerts = cp.tick(trip, incidents=inc_rec, geofences=GEOFENCES, pois=poi_rec)
+            for a in new_alerts:
+                br = cp.dispatch_broadcasts(
+                    a, trip, st.session_state.contacts,
+                    log_path=DATA / "notifications.csv",
+                )
+                st.session_state.trip_broadcasts.extend(br)
+            if trip.status == "completed":
+                st.session_state.trip_log.append(cp.trip_digest(trip))
+
+        # ---- HEADER ----
+        if trip is not None:
+            render_live_trip_header(trip, datetime.utcnow())
+        elif plan is not None:
+            st.markdown(
+                "<div class='ws-card' style='display:flex; align-items:center; gap:14px;'>"
+                "<span style='font-size:1.6rem;'>🚀</span>"
+                "<div><div style='font-weight:800; font-size:1.05rem;'>Route ready — start the journey</div>"
+                f"<div style='font-size:.82rem; color:#8892A6;'>"
+                f"{plan['origin'][0]:.4f},{plan['origin'][1]:.4f} → {plan.get('dest_label','destination')}"
+                f" · {plan['safest'].distance_km:g} km · ETA {plan['safest'].eta_minutes:g} min</div></div></div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            render_trip_empty()
+
+        # ---- CONTROLS BAR ----
+        ctrl_l, ctrl_r = st.columns([3, 2])
+        with ctrl_l:
+            if trip is None and plan is not None:
+                mode_pick = st.radio(
+                    "Use which planned route as the live journey?",
+                    ["safest", "fastest"] + (["forecast-safest"] if plan.get("forecast") else []),
+                    index=0, horizontal=True, key="trip_mode_pick",
+                )
+                speed = st.select_slider(
+                    "Simulation speed",
+                    options=[1.0, 2.0, 4.0, 8.0, 16.0],
+                    value=st.session_state.trip_speed_factor,
+                    format_func=lambda v: f"{v:g}×",
+                    key="trip_speed_select",
+                    help="1× = real time. 4× is the demo default.",
+                )
+                if st.button("▶ Start journey", type="primary", use_container_width=True):
+                    st.session_state.trip_speed_factor = float(speed)
+                    src_route = plan.get(mode_pick) or plan["safest"]
+                    o_label = "Your location"
+                    new_trip = cp.start_trip(
+                        src_route,
+                        origin_label=o_label,
+                        dest_label=plan.get("dest_label", "Destination"),
+                        speed_factor=float(speed),
+                    )
+                    st.session_state.trip = new_trip
+                    # Departure broadcast
+                    if new_trip.alerts:
+                        br = cp.dispatch_broadcasts(
+                            new_trip.alerts[-1], new_trip,
+                            st.session_state.contacts,
+                            log_path=DATA / "notifications.csv",
+                        )
+                        st.session_state.trip_broadcasts.extend(br)
+                    st.rerun()
+            elif trip is not None and trip.status == "active":
+                cba, cbb, cbc, cbd = st.columns(4)
+                with cba:
+                    if st.button("⏸ Pause", use_container_width=True, key="trip_pause"):
+                        cp.pause_trip(trip); st.rerun()
+                with cbb:
+                    new_speed = st.select_slider(
+                        "Speed",
+                        options=[1.0, 2.0, 4.0, 8.0, 16.0],
+                        value=trip.speed_factor,
+                        format_func=lambda v: f"{v:g}×",
+                        key="trip_speed_active",
+                        label_visibility="collapsed",
+                    )
+                    if abs(new_speed - trip.speed_factor) > 1e-3:
+                        trip.speed_factor = float(new_speed)
+                        st.session_state.trip_speed_factor = float(new_speed)
+                with cbc:
+                    if st.button("🆘 Manual SOS", use_container_width=True, key="trip_manual_sos"):
+                        a = cp.trigger_user_sos(trip)
+                        br = cp.dispatch_broadcasts(
+                            a, trip, st.session_state.contacts,
+                            log_path=DATA / "notifications.csv",
+                        )
+                        st.session_state.trip_broadcasts.extend(br)
+                        st.rerun()
+                with cbd:
+                    if st.button("✕ Cancel", use_container_width=True, key="trip_cancel"):
+                        cp.cancel_trip(trip)
+                        st.session_state.trip_log.append(cp.trip_digest(trip))
+                        st.rerun()
+            elif trip is not None and trip.status == "paused":
+                cba, cbb = st.columns(2)
+                with cba:
+                    if st.button("▶ Resume", type="primary", use_container_width=True, key="trip_resume"):
+                        cp.resume_trip(trip); st.rerun()
+                with cbb:
+                    if st.button("✕ Cancel", use_container_width=True, key="trip_cancel_p"):
+                        cp.cancel_trip(trip)
+                        st.session_state.trip_log.append(cp.trip_digest(trip))
+                        st.rerun()
+            elif trip is not None and trip.status in ("completed", "cancelled"):
+                cba, cbb = st.columns(2)
+                with cba:
+                    if st.button("Plan another", type="primary", use_container_width=True, key="trip_replan"):
+                        st.session_state.trip = None
+                        st.session_state.trip_broadcasts = []
+                        st.rerun()
+                with cbb:
+                    if st.button("Clear trip", use_container_width=True, key="trip_clear"):
+                        st.session_state.trip = None
+                        st.session_state.trip_broadcasts = []
+                        st.rerun()
+
+        with ctrl_r:
+            if trip is not None and trip.status == "active":
+                st.session_state.trip_auto_advance = st.toggle(
+                    "Auto-advance (refresh every 2s)",
+                    value=st.session_state.trip_auto_advance,
+                    key="trip_auto_toggle",
+                )
+                pos = trip.position()
+                if pos:
+                    here_safety = compute_safety(
+                        pos[0], pos[1],
+                        incidents=inc_df.to_dict("records") if not inc_df.empty else [],
+                        geofences=GEOFENCES,
+                        pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                    )
+                    band_c = band_color(here_safety.band)
+                    st.markdown(
+                        f"<div style='display:flex; gap:10px; align-items:center; margin-top:6px;'>"
+                        f"<div style='width:10px; height:10px; border-radius:50%; background:{band_c}; box-shadow:0 0 10px {band_c};'></div>"
+                        f"<div><div style='font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:#8892A6;font-weight:700;'>"
+                        f"Live spot safety</div>"
+                        f"<div style='font-size:1.05rem; font-weight:800; color:{band_c};'>{here_safety.score} · {here_safety.band}</div></div>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+        # ---- BODY: map + side panel ----
+        if trip is not None:
+            map_col, side_col = st.columns([3, 2], gap="large")
+
+            with map_col:
+                # Build map: route line + heartbeats trail + current pulsing dot
+                accent = ROUTE_ACCENT.get(trip.plan.route_mode, "#5EEAD4")
+                rgb = {
+                    "safest":          [61, 169, 252],
+                    "fastest":         [249, 196, 64],
+                    "forecast-safest": [167, 139, 250],
+                }.get(trip.plan.route_mode, [94, 234, 212])
+
+                extras = _route_path_layer(
+                    type("R", (), {"coords": trip.plan.coords, "mode": trip.plan.route_mode})(),
+                    rgb, glow_width=10,
+                )
+                # Trail of past heartbeats
+                if len(trip.heartbeats) >= 2:
+                    trail = [[lon, lat] for _, lat, lon, _ in trip.heartbeats]
+                    extras.append(pdk.Layer(
+                        "PathLayer",
+                        data=[{"path": trail}],
+                        get_path="path",
+                        get_color=[94, 234, 212, 200],
+                        get_width=3, width_min_pixels=3, rounded=True,
+                    ))
+                # Current position — big pulsing dot
+                pos = trip.position() or trip.plan.coords[0]
+                extras.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    data=pd.DataFrame([{"lat": pos[0], "lon": pos[1], "name": "you are here"}]),
+                    get_position='[lon, lat]',
+                    get_fill_color=[94, 234, 212, 230],
+                    get_radius=70, pickable=True,
+                    stroked=True, get_line_color=[14, 17, 23], line_width_min_pixels=2,
+                ))
+                extras.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    data=pd.DataFrame([{"lat": pos[0], "lon": pos[1]}]),
+                    get_position='[lon, lat]',
+                    get_fill_color=[94, 234, 212, 60],
+                    get_radius=180,
+                ))
+                # Origin & destination markers
+                if trip.plan.coords:
+                    extras.append(pdk.Layer(
+                        "ScatterplotLayer",
+                        data=pd.DataFrame([
+                            {"lat": trip.plan.coords[0][0], "lon": trip.plan.coords[0][1], "name": "Start"},
+                            {"lat": trip.plan.coords[-1][0], "lon": trip.plan.coords[-1][1], "name": trip.plan.dest_label},
+                        ]),
+                        get_position='[lon, lat]',
+                        get_fill_color=[83, 227, 166],
+                        get_radius=55, pickable=True,
+                        stroked=True, get_line_color=[14, 17, 23], line_width_min_pixels=2,
+                    ))
+
+                view = pdk.ViewState(latitude=pos[0], longitude=pos[1], zoom=13)
+                draw_map_layers(
+                    inc_df, bcast_df, poi_df, my,
+                    show_heatmap=True,
+                    extra_layers=extras,
+                    view_state_override=view,
+                )
+                legend = (
+                    f"🟦/🟧/🟪 planned route · 🟢 trail (past {len(trip.heartbeats)}) · "
+                    "🟡 current position · heatmap = recent incident risk"
+                )
+                st.caption(legend)
+
+                # Look-ahead panel
+                inc_rec = inc_df.to_dict("records") if not inc_df.empty else []
+                poi_rec = poi_df.to_dict("records") if not poi_df.empty else []
+                ahead = []
+                # 3 evenly-spaced look-ahead slices: 0.4, 0.9, 1.5 km
+                for dk in (0.4, 0.9, 1.5):
+                    target_km = trip.km_travelled + dk
+                    pt = cp._interp_position(trip.plan, target_km)
+                    r = point_risk(pt[0], pt[1], inc_rec, GEOFENCES, poi_rec)
+                    cat = cp._dominant_category_at(pt[0], pt[1], incidents=inc_rec)
+                    haz = cat.title() if cat else ""
+                    ahead.append((dk, r, haz))
+                render_lookahead_panel(ahead)
+
+            with side_col:
+                st.markdown('<div class="ws-kicker">Alerts feed</div>', unsafe_allow_html=True)
+                render_alert_feed(trip.alerts, datetime.utcnow(), limit=8)
+
+                st.markdown(
+                    '<div class="ws-kicker" style="margin-top:14px;">Trusted contacts</div>',
+                    unsafe_allow_html=True,
+                )
+                render_contacts_strip(st.session_state.contacts)
+
+                with st.expander("Manage contacts"):
+                    cdf = pd.DataFrame([
+                        {"name": c.name, "contact": c.contact, "relationship": c.relationship,
+                         "opt_in": ", ".join(c.opt_in)}
+                        for c in st.session_state.contacts
+                    ]) if st.session_state.contacts else pd.DataFrame(
+                        columns=["name", "contact", "relationship", "opt_in"]
+                    )
+                    edited = st.data_editor(
+                        cdf, num_rows="dynamic", use_container_width=True,
+                        column_config={
+                            "opt_in": st.column_config.TextColumn(
+                                help="Comma-separated: departure, arrival, auto_sos, risk_ahead, geofence_enter, info"
+                            ),
+                        },
+                        key="contacts_editor",
+                    )
+                    if st.button("Save contacts", key="save_contacts_btn"):
+                        new_contacts = []
+                        for _, r in edited.iterrows():
+                            name = str(r.get("name") or "").strip()
+                            if not name:
+                                continue
+                            existing = next(
+                                (c for c in st.session_state.contacts if c.name == name),
+                                None,
+                            )
+                            cid = existing.id if existing else f"c-{uuid.uuid4().hex[:6]}"
+                            opt_in = [s.strip() for s in str(r.get("opt_in", "")).split(",") if s.strip()] \
+                                     or ["departure", "arrival", "auto_sos"]
+                            new_contacts.append(cp.TrustedContact(
+                                id=cid, name=name,
+                                contact=str(r.get("contact") or ""),
+                                relationship=str(r.get("relationship") or "friend"),
+                                opt_in=opt_in,
+                            ))
+                        st.session_state.contacts = new_contacts
+                        cp.save_contacts(new_contacts, DATA / "contacts.csv")
+                        st.success(f"Saved {len(new_contacts)} contact(s).")
+
+                st.markdown(
+                    '<div class="ws-kicker" style="margin-top:14px;">Simulated dispatches</div>',
+                    unsafe_allow_html=True,
+                )
+                render_broadcast_log(st.session_state.trip_broadcasts, datetime.utcnow(), limit=10)
+
+            # Auto-advance loop — only when toggled on
+            if trip.status == "active" and st.session_state.trip_auto_advance:
+                _time.sleep(2.0)
+                st.rerun()
+
+    # ---------------- Forecast
+    with tabs[3]:
         st.subheader("Hazard Forecast")
         st.caption(
             "Empirical-Bayes spatiotemporal model — historical hazards binned by "
@@ -539,7 +861,7 @@ if role == "Tourist App":
             )
 
     # ---------------- Report Hazard
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -572,7 +894,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -591,7 +913,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -617,22 +939,72 @@ if role == "Tourist App":
             poi_local["dist_km"] = poi_local.apply(_dist, axis=1)
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
-    # ---------------- Trip Report
-    with tabs[6]:
-        st.subheader("Export Trip (demo)")
+    # ---------------- Trip Log
+    with tabs[7]:
+        st.subheader("Trip Log")
+        log = st.session_state.trip_log
+        live = st.session_state.trip
+        if live is not None and live.status == "active":
+            st.caption("One trip is live — log appends on completion / cancellation.")
+            from theme import render_trip_log_row as _ltlr  # noqa: F401
+            digest = cp.trip_digest(live)
+            digest["status"] = "active"
+            render_trip_log_row(digest, datetime.utcnow())
+
+        if not log:
+            st.markdown(
+                "<div style='color:#8892A6; font-size:.85rem;'>No completed trips yet. "
+                "Plan a route, start a journey in the **Live Trip** tab, and the digest "
+                "will land here when you arrive.</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            for d in reversed(log[-20:]):
+                render_trip_log_row(d, datetime.utcnow())
+            export = json.dumps(log, default=str, indent=2)
+            st.download_button(
+                "Export trip log (JSON)",
+                data=export, file_name="waysafe_trips.json",
+                mime="application/json",
+            )
+
+        # Existing PDF report — preserved for "trip + safety" docs
+        st.markdown("---")
+        st.markdown('<div class="ws-kicker">Generate PDF safety report</div>', unsafe_allow_html=True)
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import cm
         if st.button("Generate PDF"):
             buf = io.BytesIO(); c = canvas.Canvas(buf, pagesize=A4)
-            w,h = A4; c.setFont("Helvetica-Bold",14); c.drawString(2*cm,h-2*cm,"Trip & Safety Report (POC)")
-            c.setFont("Helvetica",10); c.drawString(2*cm,h-2.7*cm,f"User: {st.session_state.user}  | Generated: {datetime.utcnow().isoformat()}Z")
-            inc_mine = inc_df[inc_df["user"] == st.session_state.user].tail(5); y = h-3.5*cm
-            for _, r in inc_mine.iterrows():
-                c.drawString(2*cm,y,f"- {r['created_at'][:19]}Z • {r['category']} @ ({r['lat']:.4f},{r['lon']:.4f}) • status={r['status']}"); y -= 0.7*cm
+            w, h = A4; c.setFont("Helvetica-Bold", 14)
+            c.drawString(2*cm, h-2*cm, "Trip & Safety Report (POC)")
+            c.setFont("Helvetica", 10)
+            c.drawString(2*cm, h-2.7*cm,
+                         f"User: {st.session_state.user}  |  Generated: {datetime.utcnow().isoformat()}Z")
+            y = h - 3.5*cm
+            if log:
+                c.setFont("Helvetica-Bold", 11); c.drawString(2*cm, y, "Recent trips"); y -= 0.6*cm
+                c.setFont("Helvetica", 9)
+                for d in list(reversed(log))[:8]:
+                    c.drawString(2*cm, y,
+                                 f"- {d.get('started_at','')[:16].replace('T',' ')} · "
+                                 f"{d.get('origin','?')} → {d.get('destination','?')} · "
+                                 f"{d.get('route_mode','—')} · {d.get('km_travelled', 0):g}/{d.get('distance_km', 0):g} km · "
+                                 f"{d.get('status','')}")
+                    y -= 0.6*cm
+            inc_mine = inc_df[inc_df["user"] == st.session_state.user].tail(5)
+            if not inc_mine.empty:
+                c.setFont("Helvetica-Bold", 11); y -= 0.3*cm; c.drawString(2*cm, y, "Recent reports"); y -= 0.6*cm
+                c.setFont("Helvetica", 9)
+                for _, r in inc_mine.iterrows():
+                    c.drawString(2*cm, y, f"- {r['created_at'][:19]}Z • {r['category']} @ ({r['lat']:.4f},{r['lon']:.4f}) • status={r['status']}")
+                    y -= 0.6*cm
             c.showPage(); c.save(); buf.seek(0)
             b64 = base64.b64encode(buf.read()).decode()
-            st.markdown(f'<a download="trip_report.pdf" href="data:application/pdf;base64,{b64}">Download Trip PDF</a>', unsafe_allow_html=True)
+            st.markdown(
+                f'<a download="trip_report.pdf" href="data:application/pdf;base64,{b64}">Download Trip PDF</a>',
+                unsafe_allow_html=True,
+            )
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")

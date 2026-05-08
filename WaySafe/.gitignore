@@ -7,3 +7,5 @@ __pycache__/
 venv/
 *.sqlite3
 .DS_Store
+# Live Trip Companion runtime — auto-grown demo dispatch log
+data/notifications.csv

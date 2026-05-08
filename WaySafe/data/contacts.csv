@@ -1,0 +1,4 @@
+id,name,contact,relationship,opt_in
+c-1a2b3c,Aryan Haritsa,+91-9000000001,me,"departure,arrival,auto_sos,risk_ahead,geofence_enter"
+c-2d3e4f,Mom,+91-9000000002,family,"departure,arrival,auto_sos"
+c-3g4h5i,Roomie Rahul,+91-9000000003,friend,"auto_sos,arrival"
