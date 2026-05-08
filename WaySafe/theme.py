@@ -211,6 +211,162 @@ def inject_theme() -> None:
         .ws-hotspot-coord {{ font-size:.8rem; color:#D4DAEA; font-variant-numeric: tabular-nums; }}
         .ws-hotspot-meta  {{ font-size:.7rem; color:{MUTED}; }}
         .ws-hotspot-risk  {{ font-size:1.2rem; font-weight:800; }}
+
+        /* ------------- Live Trip Companion ------------- */
+        .ws-live-head {{
+            display: grid;
+            grid-template-columns: 144px 1fr;
+            gap: 18px; align-items: center;
+            background: linear-gradient(135deg, rgba(94,234,212,0.10) 0%, rgba(167,139,250,0.10) 100%);
+            border: 1px solid rgba(94,234,212,0.28);
+            border-radius: 16px; padding: 16px 18px; margin-bottom: 14px;
+            position: relative; overflow: hidden;
+        }}
+        .ws-live-head::before {{
+            content: ""; position: absolute; inset: 0;
+            background: radial-gradient(circle at 90% 0%, rgba(94,234,212,0.18) 0%, transparent 55%);
+            pointer-events: none;
+        }}
+        .ws-live-progress {{
+            width: 124px; height: 124px; border-radius: 50%; flex-shrink: 0;
+            background: conic-gradient(var(--accent, #5EEAD4) calc(var(--pct,0) * 1%), rgba(255,255,255,0.07) 0);
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+            box-shadow: 0 0 28px rgba(94,234,212,0.18) inset;
+        }}
+        .ws-live-progress::after {{
+            content: ""; position: absolute; inset: 9px;
+            background: #131726; border-radius: 50%;
+        }}
+        .ws-live-progress-inner {{ position: relative; z-index: 1; text-align: center; }}
+        .ws-live-progress-pct  {{ font-size: 2.0rem; font-weight: 800; line-height: 1; color: var(--accent, #5EEAD4); }}
+        .ws-live-progress-cap  {{ font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: {MUTED}; margin-top: 4px; font-weight: 700; }}
+        .ws-live-meta {{ display: grid; gap: 4px; }}
+        .ws-live-route {{
+            font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+            color: {MUTED}; font-weight: 700;
+        }}
+        .ws-live-title {{ font-size: 1.32rem; font-weight: 800; letter-spacing: -0.01em; }}
+        .ws-live-stats {{
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px; margin-top: 10px;
+        }}
+        .ws-live-stat {{
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px; padding: 8px 10px;
+        }}
+        .ws-live-stat-label {{ font-size:.6rem; letter-spacing:.13em; text-transform:uppercase; color:{MUTED}; font-weight:700; }}
+        .ws-live-stat-val   {{ font-size:1.18rem; font-weight:800; line-height:1.05; margin-top:2px; }}
+        .ws-live-status-pulse {{
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 999px; font-size: .68rem;
+            font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+            background: rgba(94,234,212,0.14); color: #5EEAD4;
+            border: 1px solid rgba(94,234,212,0.34);
+        }}
+        .ws-live-status-pulse .ws-dot {{
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #5EEAD4; box-shadow: 0 0 0 0 rgba(94,234,212,0.7);
+            animation: ws-pulse 1.6s infinite;
+        }}
+        .ws-live-status-pulse.paused {{ background: rgba(255,255,255,0.06); color: {MUTED}; border-color: rgba(255,255,255,0.12); }}
+        .ws-live-status-pulse.paused .ws-dot {{ background: {MUTED}; animation: none; }}
+        .ws-live-status-pulse.completed {{ background: rgba(83,227,166,0.14); color:#7BE7C2; border-color: rgba(83,227,166,0.36); }}
+        .ws-live-status-pulse.completed .ws-dot {{ background: #7BE7C2; animation: none; }}
+        .ws-live-status-pulse.cancelled {{ background: rgba(255,127,80,0.14); color:#FFA17A; border-color: rgba(255,127,80,0.36); }}
+        .ws-live-status-pulse.cancelled .ws-dot {{ background: #FFA17A; animation: none; }}
+        @keyframes ws-pulse {{
+            0%   {{ box-shadow: 0 0 0 0 rgba(94,234,212,0.7); }}
+            70%  {{ box-shadow: 0 0 0 10px rgba(94,234,212,0); }}
+            100% {{ box-shadow: 0 0 0 0 rgba(94,234,212,0); }}
+        }}
+        .ws-live-bar-track {{ background: rgba(255,255,255,0.07); height: 8px; border-radius: 999px; overflow: hidden; margin-top: 10px; }}
+        .ws-live-bar-fill  {{
+            height: 100%; border-radius: 999px;
+            background: linear-gradient(90deg, #5EEAD4 0%, #A78BFA 100%);
+            transition: width .8s ease;
+        }}
+        .ws-alert-feed {{ display: flex; flex-direction: column; gap: 8px; }}
+        .ws-alert {{
+            display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center;
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+            border-left: 3px solid var(--tone, {MUTED});
+            border-radius: 10px; padding: 8px 12px;
+        }}
+        .ws-alert-icon {{ font-size: 1.05rem; text-align: center; }}
+        .ws-alert-msg  {{ font-size: .82rem; color:#D9DEEC; line-height: 1.35; }}
+        .ws-alert-time {{ font-size: .68rem; color:{MUTED}; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        .ws-alert.info     {{ --tone: #5EEAD4; }}
+        .ws-alert.warn     {{ --tone: #F9C440; background: rgba(249,196,64,0.04); }}
+        .ws-alert.critical {{
+            --tone: #FF3D60; background: rgba(255,61,96,0.05);
+            box-shadow: 0 0 18px rgba(255,61,96,0.10) inset;
+        }}
+        .ws-look-card {{
+            background: {CARD}; border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+        }}
+        .ws-look-row {{
+            display: grid; grid-template-columns: 56px 1fr 70px;
+            gap: 10px; align-items: center; padding: 6px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.06);
+        }}
+        .ws-look-row:last-child {{ border-bottom: none; }}
+        .ws-look-d   {{ font-size: .82rem; font-weight:700; color:#D4DAEA; font-variant-numeric: tabular-nums; }}
+        .ws-look-bar {{ height: 8px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }}
+        .ws-look-fill {{ height: 100%; border-radius: 999px; background: var(--tone, #5EEAD4); transition: width .4s ease; }}
+        .ws-look-pct {{ text-align: right; font-size: .78rem; font-weight: 700; color: var(--tone, #5EEAD4); font-variant-numeric: tabular-nums; }}
+        .ws-contact {{
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 5px 12px 5px 5px; border-radius: 999px;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+            margin: 0 6px 6px 0;
+        }}
+        .ws-contact-avatar {{
+            width: 26px; height: 26px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: .68rem; font-weight: 800; color: #0E1117;
+            background: linear-gradient(135deg, var(--c1, #5EEAD4), var(--c2, #A78BFA));
+        }}
+        .ws-contact-name {{ font-size: .8rem; font-weight: 700; color:#D4DAEA; }}
+        .ws-contact-rel  {{ font-size: .65rem; color:{MUTED}; }}
+        .ws-broadcast-row {{
+            display: grid; grid-template-columns: 30px 1fr auto; gap: 8px; align-items: start;
+            padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.06);
+        }}
+        .ws-broadcast-row:last-child {{ border-bottom: none; }}
+        .ws-broadcast-name {{ font-size:.78rem; font-weight:700; color:#D4DAEA; }}
+        .ws-broadcast-body {{ font-size:.74rem; color:{MUTED}; line-height:1.35; }}
+        .ws-broadcast-time {{ font-size:.66rem; color:{MUTED}; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+        .ws-broadcast-kind {{
+            font-size:.58rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+            padding: 2px 7px; border-radius: 999px; display:inline-block; margin-bottom: 2px;
+            background: rgba(167,139,250,0.16); color:#C8B8FF;
+        }}
+        .ws-broadcast-kind.auto_sos {{ background: rgba(255,61,96,0.18); color:#FF6680; }}
+        .ws-broadcast-kind.departure {{ background: rgba(94,234,212,0.16); color:#7EE7DA; }}
+        .ws-broadcast-kind.arrival {{ background: rgba(83,227,166,0.16); color:#7BE7C2; }}
+        .ws-trip-empty {{
+            background: {CARD}; border: 1px dashed rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 36px 24px; text-align: center;
+        }}
+        .ws-trip-empty-icon {{ font-size: 2.6rem; margin-bottom: 8px; }}
+        .ws-trip-empty h4 {{ margin: 0 0 6px; font-weight:800; letter-spacing:-0.01em; }}
+        .ws-trip-empty p  {{ color: {MUTED}; font-size: .85rem; margin: 0; }}
+        .ws-mini-pill {{
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: .64rem; font-weight: 800; letter-spacing: .08em;
+            background: rgba(255,255,255,0.05); color:{MUTED}; border:1px solid rgba(255,255,255,0.08);
+            margin-right: 4px;
+        }}
+        .ws-trip-log-row {{
+            display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center;
+            padding: 10px 14px; border-radius: 12px; margin-bottom: 8px;
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+        }}
+        .ws-trip-log-title {{ font-size: .9rem; font-weight: 700; color: #D4DAEA; }}
+        .ws-trip-log-meta  {{ font-size: .7rem; color:{MUTED}; }}
+        .ws-trip-log-stats {{ display:flex; gap: 6px; flex-wrap: wrap; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -549,6 +705,254 @@ def render_score_card(result) -> None:
               {result.incidents_nearby} nearby incident(s) {help_line}
             </div>
             <div>{pills}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ----------------------------- Live Trip Companion -----------------------------
+
+
+_STATUS_LABEL = {
+    "active":    "live",
+    "paused":    "paused",
+    "completed": "arrived",
+    "cancelled": "cancelled",
+}
+
+
+def _fmt_eta_min(minutes: float) -> str:
+    minutes = max(0.0, minutes)
+    if minutes < 1.0:
+        return "<1 min"
+    if minutes < 60:
+        return f"{minutes:.0f} min"
+    h = int(minutes // 60); m = int(round(minutes - 60 * h))
+    return f"{h}h {m:02d}m"
+
+
+def _rel_time(ts, now) -> str:
+    if ts is None:
+        return ""
+    s = (now - ts).total_seconds()
+    if s < 0:
+        return "just now"
+    if s < 60:
+        return f"{int(s)}s ago"
+    if s < 3600:
+        return f"{int(s/60)}m ago"
+    if s < 86400:
+        return f"{int(s/3600)}h ago"
+    return f"{int(s/86400)}d ago"
+
+
+def render_live_trip_header(trip, now) -> None:
+    """The big hero card at the top of the Live Trip tab."""
+    pct = max(0, min(100, trip.progress_pct))
+    eta_str = _fmt_eta_min(trip.eta_remaining_min)
+    here_band = "live" if trip.status == "active" else _STATUS_LABEL.get(trip.status, trip.status)
+    pulse_cls = trip.status if trip.status in ("paused", "completed", "cancelled") else ""
+    accent = "#5EEAD4" if trip.status == "active" else (
+        "#7BE7C2" if trip.status == "completed" else
+        ("#FFA17A" if trip.status == "cancelled" else MUTED)
+    )
+    started = trip.started_at.strftime("%H:%M")
+    arrive = (trip.expected_arrival or trip.arrived_at)
+    arrive_str = arrive.strftime("%H:%M") if arrive else "—"
+
+    st.markdown(
+        f"""
+        <div class="ws-live-head">
+          <div class="ws-live-progress" style="--pct:{pct}; --accent:{accent};">
+            <div class="ws-live-progress-inner">
+              <div class="ws-live-progress-pct">{pct}%</div>
+              <div class="ws-live-progress-cap">complete</div>
+            </div>
+          </div>
+          <div class="ws-live-meta">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="ws-live-status-pulse {pulse_cls}"><span class="ws-dot"></span>{here_band}</span>
+              <span class="ws-live-route">{trip.plan.route_mode.upper()} ROUTE · {trip.plan.distance_km:g} KM TOTAL</span>
+            </div>
+            <div class="ws-live-title">{trip.plan.origin_label} → {trip.plan.dest_label}</div>
+            <div class="ws-live-stats">
+              <div class="ws-live-stat">
+                <div class="ws-live-stat-label">ETA</div>
+                <div class="ws-live-stat-val">{eta_str}</div>
+              </div>
+              <div class="ws-live-stat">
+                <div class="ws-live-stat-label">Distance left</div>
+                <div class="ws-live-stat-val">{trip.distance_remaining_km:.2f} <span style="font-size:.7rem;color:{MUTED}">km</span></div>
+              </div>
+              <div class="ws-live-stat">
+                <div class="ws-live-stat-label">Started</div>
+                <div class="ws-live-stat-val">{started}</div>
+              </div>
+              <div class="ws-live-stat">
+                <div class="ws-live-stat-label">Arrival</div>
+                <div class="ws-live-stat-val">{arrive_str}</div>
+              </div>
+            </div>
+            <div class="ws-live-bar-track"><div class="ws-live-bar-fill" style="width:{pct}%"></div></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_alert_feed(alerts, now, *, limit: int = 8) -> None:
+    if not alerts:
+        st.markdown(
+            "<div class='ws-look-card' style='color:#8892A6; font-size:.82rem;'>"
+            "No alerts yet. WaySafe will warn you as soon as it sees one — geofence "
+            "crossings, risk corridors ahead, stalls, or arrival.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    rows = []
+    for a in list(reversed(alerts))[:limit]:
+        sev = a.severity if a.severity in ("info", "warn", "critical") else "info"
+        rows.append(
+            f"<div class='ws-alert {sev}'>"
+            f"<div class='ws-alert-icon'>{a.icon}</div>"
+            f"<div class='ws-alert-msg'>{a.message}</div>"
+            f"<div class='ws-alert-time'>{_rel_time(a.ts, now)}</div>"
+            "</div>"
+        )
+    st.markdown(
+        "<div class='ws-alert-feed'>" + "".join(rows) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_lookahead_panel(samples, *, label: str = "Risk on the next 1.5 km") -> None:
+    """`samples` is `[(km_offset, risk_0_1, [hazard_label]), ...]`."""
+    if not samples:
+        st.markdown(
+            f"<div class='ws-look-card'><div class='ws-kicker'>{label}</div>"
+            "<div style='color:#8892A6; font-size:.82rem; margin-top:6px'>"
+            "Not enough route ahead to scan.</div></div>",
+            unsafe_allow_html=True,
+        )
+        return
+    rows = []
+    for dk, risk, hazard in samples:
+        risk = max(0.0, min(1.0, float(risk)))
+        tone = forecast_color(risk)
+        d_label = f"+{dk*1000:.0f} m" if dk < 1 else f"+{dk:.1f} km"
+        haz = f"<div style='font-size:.66rem;color:{MUTED}'>{hazard}</div>" if hazard else ""
+        rows.append(
+            f"<div class='ws-look-row'>"
+            f"<div><div class='ws-look-d'>{d_label}</div>{haz}</div>"
+            f"<div class='ws-look-bar'><div class='ws-look-fill' style='--tone:{tone}; width:{risk*100:.0f}%'></div></div>"
+            f"<div class='ws-look-pct' style='--tone:{tone}'>{int(risk*100)}</div>"
+            "</div>"
+        )
+    st.markdown(
+        f"<div class='ws-look-card'><div class='ws-kicker'>{label}</div>"
+        + "".join(rows) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _avatar_palette(seed: str) -> tuple[str, str]:
+    palettes = [
+        ("#5EEAD4", "#A78BFA"), ("#F9C440", "#FF6A3D"),
+        ("#3DA9FC", "#5EEAD4"), ("#FF6A3D", "#FF3D60"),
+        ("#7BE7C2", "#3DA9FC"), ("#A78BFA", "#FF6A3D"),
+    ]
+    h = sum(ord(c) for c in seed)
+    return palettes[h % len(palettes)]
+
+
+def render_contacts_strip(contacts) -> None:
+    if not contacts:
+        st.markdown(
+            "<div style='color:#8892A6; font-size:.82rem;'>No trusted contacts yet — "
+            "add one below so WaySafe can ping them on departure, arrival, and SOS.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    chips = []
+    for c in contacts:
+        c1, c2 = _avatar_palette(c.id)
+        initials = "".join(p[0].upper() for p in c.name.split()[:2]) or "?"
+        chips.append(
+            f"<div class='ws-contact'>"
+            f"<div class='ws-contact-avatar' style='--c1:{c1}; --c2:{c2}'>{initials}</div>"
+            f"<div><div class='ws-contact-name'>{c.name}</div>"
+            f"<div class='ws-contact-rel'>{c.relationship} · {len(c.opt_in)} alerts opt-in</div></div>"
+            "</div>"
+        )
+    st.markdown("".join(chips), unsafe_allow_html=True)
+
+
+def render_broadcast_log(broadcasts, now, *, limit: int = 12) -> None:
+    if not broadcasts:
+        st.markdown(
+            "<div style='color:#8892A6; font-size:.8rem;'>No simulated dispatches yet.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+    rows = []
+    for b in list(reversed(broadcasts))[:limit]:
+        kind_cls = b.kind if b.kind in ("auto_sos", "departure", "arrival") else "info"
+        c1, c2 = _avatar_palette(b.contact_id)
+        initials = "".join(p[0].upper() for p in b.contact_name.split()[:2]) or "?"
+        rows.append(
+            f"<div class='ws-broadcast-row'>"
+            f"<div class='ws-contact-avatar' style='--c1:{c1}; --c2:{c2}; width:24px; height:24px; font-size:.6rem;'>{initials}</div>"
+            f"<div>"
+            f"<span class='ws-broadcast-kind {kind_cls}'>{b.kind}</span>"
+            f"<div class='ws-broadcast-name'>→ {b.contact_name} <span style='color:{MUTED}; font-weight:500;'>· {b.contact}</span></div>"
+            f"<div class='ws-broadcast-body'>{b.body}</div>"
+            "</div>"
+            f"<div class='ws-broadcast-time'>{_rel_time(b.ts, now)}</div>"
+            "</div>"
+        )
+    st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+def render_trip_empty(*, hint: str = "Plan a route in the **Plan Route** tab, then come back here to start the journey.") -> None:
+    st.markdown(
+        f"""
+        <div class='ws-trip-empty'>
+          <div class='ws-trip-empty-icon'>🧭</div>
+          <h4>No active journey</h4>
+          <p>{hint}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_trip_log_row(digest: dict, now) -> None:
+    counts = digest.get("alerts_by_kind", {}) or {}
+    sos_pill = (f"<span class='ws-mini-pill' style='color:#FF6680; border-color:rgba(255,61,96,0.36); background:rgba(255,61,96,0.10);'>SOS</span>"
+                if digest.get("auto_sos_fired") or digest.get("user_sos_fired") else "")
+    pills = "".join(
+        f"<span class='ws-mini-pill'>{k} · {v}</span>"
+        for k, v in counts.items() if k not in ("departure", "arrival")
+    ) or "<span class='ws-mini-pill'>no warnings</span>"
+    started = digest.get("started_at", "")[:16].replace("T", " ")
+    pct = digest.get("progress_pct", 0)
+    status = digest.get("status", "")
+    status_color = {"completed": "#7BE7C2", "cancelled": "#FFA17A",
+                    "active": "#5EEAD4", "paused": MUTED}.get(status, MUTED)
+    st.markdown(
+        f"""
+        <div class='ws-trip-log-row'>
+          <div>
+            <div class='ws-trip-log-title'>{digest.get('origin','?')} → {digest.get('destination','?')}</div>
+            <div class='ws-trip-log-meta'>{started} · {digest.get('route_mode','—')} · {digest.get('km_travelled', 0)} / {digest.get('distance_km', 0)} km · <span style='color:{status_color}; font-weight:700;'>{status}</span></div>
+            <div class='ws-trip-log-stats' style='margin-top:6px;'>{sos_pill}{pills}</div>
+          </div>
+          <div style='text-align:right;'>
+            <div style='font-size:1.4rem; font-weight:800; color:{status_color};'>{pct}%</div>
+            <div style='font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; color:{MUTED};'>complete</div>
           </div>
         </div>
         """,
