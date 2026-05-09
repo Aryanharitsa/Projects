@@ -28,3 +28,39 @@ body::before {
 
 /* Make selection visible on dark surfaces. */
 ::selection { background: rgba(129,140,248,0.35); color: white; }
+
+/* ---------- Decision Studio ---------- */
+
+/* Verdict ring soft-glow on hover. */
+.cc-vring { transition: filter 180ms ease; }
+.cc-vring:hover { filter: drop-shadow(0 0 6px rgba(167,139,250,0.45)); }
+
+/* Calibrated comparison matrix surface. */
+.cc-matrix {
+  background:
+    radial-gradient(800px 240px at 50% -10%, rgba(99,102,241,0.06), transparent 60%),
+    rgba(255,255,255,0.03);
+}
+.cc-matrix table th, .cc-matrix table td { transition: background 120ms ease; }
+.cc-cell:hover { box-shadow: 0 0 0 1px rgba(255,255,255,0.18) inset; }
+
+/* Pipeline funnel rows: subtle hover lift. */
+.cc-funnel-row { transition: transform 120ms ease; }
+.cc-funnel-row:hover { transform: translateX(2px); }
+
+/* Slot picker buttons get a faint shimmer when picked. */
+.cc-slot { transition: transform 120ms ease, background 120ms ease; }
+.cc-slot:hover { transform: translateY(-1px); }
+
+/* Ranked list rows: brand glow on focus. */
+.cc-rank-row { transition: transform 140ms ease, box-shadow 140ms ease; }
+.cc-rank-row:hover { transform: translateY(-1px); }
+
+/* Decision tile micro-animation when value changes (purely cosmetic). */
+@keyframes cc-tile-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  100% { box-shadow: 0 0 0 6px transparent; }
+}
+.cc-tile { transition: border-color 180ms ease; }
+.cc-focus { background-image: radial-gradient(400px 120px at 80% -20%, rgba(167,139,250,0.10), transparent 65%); }
+.cc-nextround { background-image: radial-gradient(400px 120px at 20% -20%, rgba(45,212,191,0.08), transparent 65%); }

@@ -3,14 +3,58 @@
 Credicrew is a talent-discovery tool that doesn't stop at "here's a ranked
 list." It runs the **whole hiring loop**: parse a JD, get an explainable
 shortlist, track candidates through statuses, send a tailored outreach
-email, and **run the interview** with a JD-tailored prep kit and a weighted
-scorecard that lands on a hire/no-hire signal — all from a dark, fast,
-single-page workspace.
+email, **run the interview** with a JD-tailored prep kit and a weighted
+scorecard, then **decide** in a calibrated comparison studio that ranks
+the entire pool, generates a committee debrief, and exports `.ics` slots
+for the next round — all from a dark, fast, single-page workspace.
 
-The same scoring + email + interview logic runs in the browser (for instant
-UI feedback) and on the FastAPI backend (for programmatic / agentic use),
-so plans, drafts, and composite scores are byte-for-byte identical wherever
-they're generated.
+The same scoring + email + interview + decision logic runs in the browser
+(for instant UI feedback) and on the FastAPI backend (for programmatic /
+agentic use), so plans, drafts, composite scores, and ranked verdicts are
+byte-for-byte identical wherever they're generated.
+
+---
+
+## What's new — Decision Studio (Day 17)
+
+The interview kit produced a per-candidate scorecard but stopped there.
+Day 17 adds the missing **decision layer**: side-by-side calibration,
+ranked verdicts, and one-click iCal scheduling.
+
+- **Calibrated comparison matrix** — All shortlisted candidates as
+  columns × rubric dimensions as rows. Cells are heat-mapped 1–5 (rose →
+  amber → indigo → emerald), with a ★ marker on the top scorer per dim.
+  Click a dim label to sort the matrix by it; click a column header to
+  inspect that candidate; click ☆ to pin candidates and toggle a
+  pinned-only view for head-to-head comparison.
+- **Hire signal** — Composite × √(confidence). A 100-composite candidate
+  with only 40% of dims rated lands at signal ≈ 63 — *still ranked*, but
+  visibly behind a fully-rated 80-composite peer at signal 80. Sqrt
+  blunts the penalty so partial coverage doesn't completely tank a strong
+  candidate. Tier histogram across the pool sits above the matrix.
+- **Risk flags per candidate** — `thin_data`, `low_confidence`,
+  `missing_key_dim` (top-3 weighted dim has no rating), `high_variance`
+  (stdev across rated dims ≥ 1.5), `rubric_drift` (a dim was rated in one
+  done stage but not in another), `no_interview`, `unrated`.
+- **Hiring committee debrief** — One-click Markdown export with the
+  ranked verdict list, per-candidate strengths/concerns/flags, recommended
+  hire callout, recommendation tally, next-round candidates, and
+  per-rubric mean/spread/coverage.
+- **iCal slot proposer** — RFC-5545-compliant `.ics` generator. Auto-fills
+  the next 5 weekday business slots (10:00 / 14:00 / 16:00 local), pick
+  any subset, fills `SUMMARY` / `DESCRIPTION` / `LOCATION` / organiser /
+  attendee, then downloads a single `VCALENDAR` with N `VEVENT`s.
+  CRLF-terminated, UTC `Z`-suffixed, `,;\n\\` escaped, line-folded at 75
+  octets. Drops cleanly into Gmail, Outlook, Apple Calendar.
+- **Pipeline analytics** — Reached-at-least funnel + adjacent-stage
+  conversion rates (≥50% emerald, 25-50% amber, <25% rose), status mix
+  bar, stale-candidate watchlist (≥14 days in non-terminal status).
+- **Backend mirror** — `POST /decision/summary` (calibrated ranking
+  + verdicts + per-dim stats + counts + optional debrief),
+  `POST /decision/debrief` (Markdown only), `POST /interview/ics`
+  (returns `text/calendar` with a `Content-Disposition: attachment`
+  filename header). Same engine, same numbers — agentic clients get
+  byte-identical verdicts.
 
 ---
 
@@ -239,6 +283,24 @@ curl -X POST http://127.0.0.1:8000/interview/score \
 
 Returns `{ composite, recommendation, rated_count, total_count, per_dimension }`.
 
+### `POST /decision/summary`
+Calibrated ranking across a role's interviewed pool. Pass each candidate's
+parsed plan or JD plus their interview record (rubric + filled stages).
+Returns ranked `verdicts[]` with `hire_signal = round(composite ·
+√confidence)`, per-candidate flags, per-dim stats (mean / coverage /
+spread / best scorer), recommendation counts, and the top-hire id. Set
+`include_debrief: true` to bundle the committee Markdown.
+
+### `POST /decision/debrief`
+Same input shape as `/decision/summary`, returns `{ markdown }` only —
+useful when the client already has the summary cached.
+
+### `POST /interview/ics`
+Build an iCalendar `VCALENDAR` with N `VEVENT`s and stream it as
+`text/calendar; charset=utf-8` with a `Content-Disposition: attachment`
+header. CRLF-terminated, UTC `Z`-suffixed `DTSTART`/`DTEND`, line-folded
+at 75 octets, `\,;\n\\` escaped per RFC 5545 §3.3.11.
+
 ### Endpoint map
 
 | Method | Path                  | Purpose                                                 |
@@ -250,6 +312,9 @@ Returns `{ composite, recommendation, rated_count, total_count, per_dimension }`
 | POST   | `/outreach`           | compose deterministic outreach email                    |
 | POST   | `/interview/plan`     | tailored rubric + question bank from JD / plan          |
 | POST   | `/interview/score`    | aggregate scorecard → composite + recommendation        |
+| POST   | `/interview/ics`      | RFC-5545 `.ics` for proposed interview slots            |
+| POST   | `/decision/summary`   | calibrated ranking + verdicts + per-dim stats           |
+| POST   | `/decision/debrief`   | Markdown committee debrief                              |
 
 ---
 
@@ -279,20 +344,26 @@ Credicrew/
 │       │       ├── share/page.tsx  # Import a shared role
 │       │       └── [id]/
 │       │           ├── page.tsx    # Role detail (JD, matches, shortlist, CSV)
+│       │           ├── decision/page.tsx  # Decision Studio (NEW)
 │       │           └── interview/[candidateId]/page.tsx  # Interview workspace
 │       ├── components/
 │       │   ├── CandidateCard.tsx
+│       │   ├── DecisionMatrix.tsx       # rubric × candidate heatmap
 │       │   ├── DiversityCard.tsx
 │       │   ├── InterviewStepper.tsx
 │       │   ├── MatchExplain.tsx
 │       │   ├── OutreachModal.tsx
+│       │   ├── PipelineAnalytics.tsx    # funnel + conversion rates
 │       │   ├── QuestionCard.tsx
 │       │   ├── RecommendationRing.tsx
 │       │   ├── RoleCard.tsx
 │       │   ├── RubricSlider.tsx
+│       │   ├── SlotProposer.tsx         # iCal slot picker
 │       │   └── StatusPill.tsx
 │       └── lib/
 │           ├── csv.ts              # tiny RFC-4180 writer + downloader
+│           ├── decision.ts         # calibrated ranking · flags · debrief
+│           ├── ics.ts              # RFC-5545 minimal generator
 │           ├── interview.ts        # rubric · question bank · scorecard
 │           ├── match.ts            # TS match engine (parity w/ backend)
 │           ├── outreach.ts         # TS email composer (parity w/ backend)
@@ -307,9 +378,10 @@ Credicrew/
 - Server-persisted roles (Postgres) so they survive across browsers.
 - LLM-assisted JD parsing for messy real-world specs (still fall back to
   the deterministic path).
-- iCal export for an "Interview" status with proposed slots.
+- ~~iCal export for an "Interview" status with proposed slots.~~ ✅ Day 17.
 - ~~CSV export of a shortlist for ATS handoff.~~ ✅ Day 12.
 - ~~Interview kit: tailored prompts, weighted rubric, scorecard, hire/no-hire signal.~~ ✅ Day 12.
+- ~~Decision Studio: calibrated comparison, hire signal, committee debrief.~~ ✅ Day 17.
 
 ---
 

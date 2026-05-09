@@ -307,6 +307,18 @@ export default function RoleDetail() {
             <div className="mt-3">{planChips}</div>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href={`/roles/${role.id}/decision`}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                total === 0
+                  ? 'pointer-events-none border border-white/10 bg-white/5 text-white/40'
+                  : 'bg-gradient-to-r from-teal-400 to-violet-400 text-black shadow hover:opacity-95'
+              }`}
+              title={total === 0 ? 'Shortlist is empty' : 'Open Decision Studio'}
+              aria-disabled={total === 0}
+            >
+              Decision Studio →
+            </Link>
             <button
               onClick={onExportCsv}
               disabled={total === 0}
