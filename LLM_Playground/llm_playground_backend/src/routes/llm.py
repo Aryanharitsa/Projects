@@ -13,6 +13,7 @@ from src.providers.provider_factory import ProviderFactory
 from src.pricing import estimate_cost, get_pricing_table
 from src.judge import DEFAULT_RUBRIC, judge_compare
 from src import history
+from src import vote_arena
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -525,6 +526,156 @@ def history_set_meta(run_id):
     ):
         return jsonify({'success': False, 'error': 'run not found'}), 404
     return jsonify({'success': True, 'run': history.get_run(run_id)})
+
+
+# ---------------------------------------------------------------------------
+# Personal Chatbot Arena — blind A/B voting + ELO leaderboard.
+# Round-4 move (Day 18). Pairs are sampled from the persisted run history,
+# votes feed an ELO replay, and judge-vs-human agreement is computed
+# server-side from the same vote log.
+# ---------------------------------------------------------------------------
+
+
+@llm_bp.route('/arena/pair', methods=['GET'])
+def arena_pair():
+    """Return a blind A/B pair to vote on.
+
+    Optional query params:
+        run_id        — sample within this specific run (deeplink from History).
+        exclude_a     — model key already shown as A (de-duplicate refreshes).
+        exclude_b     — model key already shown as B.
+
+    Server keeps the truth in the response under `_truth` so the subsequent
+    POST /arena/vote can echo it back; the frontend never reveals A/B
+    identities until after the vote is cast (it strips _truth from the visible
+    DOM but keeps it in component state).
+    """
+    args = request.args
+    run_id = (args.get('run_id') or '').strip() or None
+    exclude_a = (args.get('exclude_a') or '').strip() or None
+    exclude_b = (args.get('exclude_b') or '').strip() or None
+    exclude_pairs = []
+    if exclude_a and exclude_b:
+        exclude_pairs.append((exclude_a, exclude_b))
+    pair = vote_arena.pick_pair(run_id=run_id, exclude_pairs=exclude_pairs)
+    if not pair:
+        return jsonify({'success': False, 'error': 'no votable pair available — run an Arena first'}), 404
+    return jsonify({'success': True, 'pair': pair})
+
+
+@llm_bp.route('/arena/vote', methods=['POST'])
+def arena_vote():
+    """Record a vote.
+
+    Body: {
+      run_id, model_a, model_b, winner ('a'|'b'|'tie'|'both_bad'),
+      voter?, judge_winner?, prompt_hash?, prompt_preview?,
+      latency_a?, latency_b?, cost_a?, cost_b?
+    }
+
+    Returns the updated leaderboard so the UI can show ΔELO chips for the
+    two models without a follow-up request.
+    """
+    data = request.get_json() or {}
+    vote_id = vote_arena.record_vote(
+        run_id=(data.get('run_id') or '').strip(),
+        model_a=(data.get('model_a') or '').strip(),
+        model_b=(data.get('model_b') or '').strip(),
+        winner=(data.get('winner') or '').strip(),
+        voter=(data.get('voter') or '').strip() or None,
+        judge_winner=(data.get('judge_winner') or '').strip() or None,
+        prompt_hash=(data.get('prompt_hash') or '').strip() or None,
+        prompt_preview=(data.get('prompt_preview') or '').strip() or None,
+        latency_a=data.get('latency_a'),
+        latency_b=data.get('latency_b'),
+        cost_a=data.get('cost_a'),
+        cost_b=data.get('cost_b'),
+    )
+    if not vote_id:
+        return jsonify({'success': False, 'error': 'invalid vote payload'}), 400
+    lb = vote_arena.leaderboard()
+    return jsonify({
+        'success': True,
+        'vote_id': vote_id,
+        'leaderboard': lb['ratings'],
+        'meta': lb['meta'],
+    })
+
+
+@llm_bp.route('/arena/vote/<vote_id>', methods=['DELETE'])
+def arena_vote_delete(vote_id):
+    """Undo a vote (e.g. misclick). The leaderboard is replayed every time
+    so deleting a vote rewinds it cleanly."""
+    if not vote_arena.delete_vote(vote_id):
+        return jsonify({'success': False, 'error': 'vote not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/arena/leaderboard', methods=['GET'])
+def arena_leaderboard():
+    """Replay-derived ELO leaderboard.
+
+    Optional query params:
+        k          — K-factor override (default $LLM_ELO_K or 24).
+        prior      — initial rating (default 1500).
+        since      — unix epoch lower bound (only votes after this).
+        min_games  — drop models with fewer than this many games.
+    """
+    args = request.args
+
+    def _f(name, default):
+        v = args.get(name)
+        if v is None or v == '':
+            return default
+        try:
+            return float(v)
+        except ValueError:
+            return default
+
+    lb = vote_arena.leaderboard(
+        k=_f('k', vote_arena.DEFAULT_K),
+        prior=_f('prior', vote_arena.DEFAULT_PRIOR),
+        since=_f('since', None),
+        min_games=int(_f('min_games', 0)),
+    )
+    return jsonify({'success': True, 'leaderboard': lb['ratings'], 'meta': lb['meta']})
+
+
+@llm_bp.route('/arena/matrix', methods=['GET'])
+def arena_matrix():
+    """Head-to-head wins matrix for the top-N models."""
+    try:
+        top_n = int(request.args.get('top_n', 8))
+    except ValueError:
+        top_n = 8
+    return jsonify({'success': True, 'matrix': vote_arena.pair_matrix(top_n=top_n)})
+
+
+@llm_bp.route('/arena/agreement', methods=['GET'])
+def arena_agreement():
+    """Judge-vs-human agreement metric across all judged runs that received
+    a decisive vote."""
+    try:
+        min_votes = int(request.args.get('min_votes', 1))
+    except ValueError:
+        min_votes = 1
+    return jsonify({'success': True, 'agreement': vote_arena.agreement(min_votes=min_votes)})
+
+
+@llm_bp.route('/arena/recent', methods=['GET'])
+def arena_recent():
+    """Recent votes feed."""
+    try:
+        limit = int(request.args.get('limit', 20))
+    except ValueError:
+        limit = 20
+    return jsonify({'success': True, 'votes': vote_arena.recent_votes(limit=limit)})
+
+
+@llm_bp.route('/arena/stats', methods=['GET'])
+def arena_stats():
+    """Top-of-page voting stats."""
+    return jsonify({'success': True, 'stats': vote_arena.stats()})
 
 
 @llm_bp.route('/august/upload', methods=['POST'])

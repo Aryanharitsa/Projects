@@ -52,6 +52,7 @@ import {
 import { toast } from "sonner";
 import ApiService from './services/api';
 import HistoryPanel from './components/HistoryPanel';
+import VotePanel from './components/VotePanel';
 import './App.css';
 
 const App = () => {
@@ -83,6 +84,9 @@ const App = () => {
     }
   }, [model, reasoningEffort]);
   const [selectedMode, setSelectedMode] = useState('universal');
+  // Deeplink target for the Arena vote panel — set when the user clicks
+  // "Vote on this run" inside the History panel.
+  const [voteRunId, setVoteRunId] = useState(null);
   const [provider, setProvider] = useState('OpenAI');
   const [modelsList, setModelsList] = useState([]);
   const [modelSearch, setModelSearch] = useState('');
@@ -928,7 +932,14 @@ const App = () => {
                       <RadioGroupItem value="history" id="history" />
                       <Label htmlFor="history" className="cursor-pointer flex items-center gap-1">
                         <HistoryIcon className="w-3.5 h-3.5 text-indigo-600" />
-                        History <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white px-1.5 py-0.5 rounded">new</span>
+                        History
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="vote" id="vote" />
+                      <Label htmlFor="vote" className="cursor-pointer flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                        Vote <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-amber-500 to-rose-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1195,7 +1206,14 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'history' ? (
+          {selectedMode === 'vote' ? (
+            <div className="lg:col-span-3">
+              <VotePanel
+                initialRunId={voteRunId}
+                onClearInitialRunId={() => setVoteRunId(null)}
+              />
+            </div>
+          ) : selectedMode === 'history' ? (
             <div className="lg:col-span-3">
               <HistoryPanel
                 onRerun={({ prompt, system_prompt, candidates }) => {
@@ -1214,6 +1232,13 @@ const App = () => {
                   setArenaResults(null);
                   setJudgeResults(null);
                   toast.success("Loaded into Arena — hit Run Arena to fire");
+                }}
+                onVote={(runId) => {
+                  // Deeplink: hand the run id off to VotePanel so the first
+                  // pair is sampled from this specific Arena run.
+                  setVoteRunId(runId);
+                  setSelectedMode('vote');
+                  toast.success("Loaded into Vote — pick a winner");
                 }}
               />
             </div>

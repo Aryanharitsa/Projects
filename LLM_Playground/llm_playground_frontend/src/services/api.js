@@ -160,6 +160,56 @@ class ApiService {
     });
   }
 
+  // ─── Personal Chatbot Arena ───────────────────────────────────────────────
+  // Blind A/B voting → ELO leaderboard. Pairs are sampled from the persisted
+  // run history, votes feed an ELO replay, and judge-vs-human agreement is
+  // surfaced server-side from the same vote log.
+
+  // Sample a blind pair. `runId` deeplinks to a specific run; otherwise the
+  // sampler walks recent runs and biases toward under-played pairings.
+  async arenaPair({ runId, excludeA, excludeB } = {}) {
+    const qs = new URLSearchParams();
+    if (runId)    qs.set('run_id', runId);
+    if (excludeA) qs.set('exclude_a', excludeA);
+    if (excludeB) qs.set('exclude_b', excludeB);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/arena/pair${suffix}`);
+  }
+
+  async arenaVote(payload) {
+    return this.request('/arena/vote', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async arenaUndo(voteId) {
+    return this.request(`/arena/vote/${encodeURIComponent(voteId)}`, { method: 'DELETE' });
+  }
+
+  async arenaLeaderboard({ k, prior, since, minGames } = {}) {
+    const qs = new URLSearchParams();
+    if (k != null)     qs.set('k', k);
+    if (prior != null) qs.set('prior', prior);
+    if (since != null) qs.set('since', since);
+    if (minGames)      qs.set('min_games', minGames);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/arena/leaderboard${suffix}`);
+  }
+
+  async arenaMatrix({ topN = 8 } = {}) {
+    return this.request(`/arena/matrix?top_n=${topN}`);
+  }
+
+  async arenaAgreement({ minVotes = 1 } = {}) {
+    return this.request(`/arena/agreement?min_votes=${minVotes}`);
+  }
+
+  async arenaRecent({ limit = 20 } = {}) {
+    return this.request(`/arena/recent?limit=${limit}`);
+  }
+
+  async arenaStats() {
+    return this.request('/arena/stats');
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();
