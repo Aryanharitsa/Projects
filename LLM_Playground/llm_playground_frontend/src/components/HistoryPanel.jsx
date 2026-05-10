@@ -29,6 +29,7 @@ import {
   X,
   Sparkles,
   ChevronRight,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from "../services/api";
@@ -181,7 +182,7 @@ const ResultMiniCard = ({ r, verdict, isJudgeWinner, fastest, cheapest, verbose 
   );
 };
 
-const HistoryPanel = ({ onRerun }) => {
+const HistoryPanel = ({ onRerun, onVote }) => {
   const [filters, setFilters] = useState({
     q: "",
     provider: "",
@@ -634,6 +635,7 @@ const HistoryPanel = ({ onRerun }) => {
                 onSaveMeta={saveMeta}
                 onDelete={() => deleteRun(selectedRun)}
                 onRerun={() => handleRerun(selectedRun)}
+                onVote={onVote ? () => onVote(selectedRun) : null}
               />
             )}
           </div>
@@ -646,10 +648,11 @@ const HistoryPanel = ({ onRerun }) => {
 // ─── Detail pane ─────────────────────────────────────────────────────────────
 const RunDetail = ({
   run, diff, compareWithId, onPickCompareTarget, onClearCompare,
-  tagDraft, noteDraft, setTagDraft, setNoteDraft, onSaveMeta, onDelete, onRerun,
+  tagDraft, noteDraft, setTagDraft, setNoteDraft, onSaveMeta, onDelete, onRerun, onVote,
 }) => {
   const payload = run.payload || {};
   const results = payload.results || [];
+  const successCount = (results || []).filter(r => r?.status === "success").length;
   const winners = payload.winners || {};
   const judge   = payload.judge || null;
 
@@ -688,6 +691,17 @@ const RunDetail = ({
           <Button onClick={onRerun} size="sm" variant="outline" className="gap-1 text-indigo-700 hover:bg-indigo-50 border-indigo-200">
             <CornerUpLeft className="w-3.5 h-3.5" /> Re-run
           </Button>
+          {onVote && successCount >= 2 && (
+            <Button
+              onClick={onVote}
+              size="sm"
+              variant="outline"
+              className="gap-1 text-amber-700 hover:bg-amber-50 border-amber-200"
+              title="Blind A/B vote on this run's responses"
+            >
+              <Trophy className="w-3.5 h-3.5" /> Vote
+            </Button>
+          )}
           {compareWithId ? (
             <Button onClick={onClearCompare} size="sm" variant="outline" className="gap-1 text-violet-700 hover:bg-violet-50 border-violet-200">
               <X className="w-3.5 h-3.5" /> Clear compare
