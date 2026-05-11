@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "@/components/ChatPanel";
+import { DailyBrief } from "@/components/DailyBrief";
 import { Graph } from "@/components/Graph";
 import { Header } from "@/components/Header";
 import { Inspector } from "@/components/Inspector";
@@ -31,6 +32,8 @@ export default function Page() {
   const [pathEdges, setPathEdges] = useState<Set<string> | null>(null);
   const [chatTurn, setChatTurn] = useState<ChatTurn | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefBadge, setBriefBadge] = useState(false);
 
   const refreshGraph = useCallback(async () => {
     try {
@@ -65,6 +68,19 @@ export default function Page() {
     api.health().then(() => setApiOk(true)).catch(() => setApiOk(false));
     refreshGraph();
   }, [refreshGraph]);
+
+  // First-paint "have they seen today's brief yet?" — drives the pulse
+  // dot next to the header trigger. Cheap probe; we don't load the full
+  // brief until the modal opens.
+  useEffect(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const seen = localStorage.getItem("synapseos:lastBriefSeen");
+      setBriefBadge(seen !== today);
+    } catch {
+      setBriefBadge(true);
+    }
+  }, []);
 
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
@@ -128,6 +144,22 @@ export default function Page() {
         stats={graph?.stats ?? null}
         apiOk={apiOk}
         chatActive={chatTurn !== null}
+        onOpenBrief={() => setBriefOpen(true)}
+        briefBadge={briefBadge}
+      />
+
+      <DailyBrief
+        open={briefOpen}
+        onClose={() => setBriefOpen(false)}
+        onSelectNote={(stub) => {
+          // Resolve the stub against the loaded graph so the inspector
+          // gets full body/tags/degree/weight when available, then
+          // fall through to the stub on a cold-cache.
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onTouchedAny={() => setBriefBadge(false)}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">

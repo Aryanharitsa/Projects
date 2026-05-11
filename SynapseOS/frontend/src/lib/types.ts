@@ -4,6 +4,7 @@ export type Note = {
   body: string;
   tags: string[];
   created_at: string;
+  last_seen_at?: string | null;
 };
 
 export type GraphNode = {
@@ -127,4 +128,44 @@ export type ChatTurn = {
   id: string;       // local-only uuid for keys
   query: string;
   response: ChatResponse;
+};
+
+export type BriefReasonKind = "stale" | "central" | "orphan" | "diverse";
+
+export type BriefReason = {
+  kind: BriefReasonKind;
+  text: string;
+  weight: number;
+};
+
+export type BriefConnection = {
+  note_id: number;
+  title: string;
+  strength: number;
+  cluster_id: number | null;
+  cluster_name: string | null;
+};
+
+export type BriefPick = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  tags: string[];
+  score: number;
+  reasons: BriefReason[];
+  prompt: string;
+  connections: BriefConnection[];
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  days_since_seen: number | null;
+  is_orphan: boolean;
+};
+
+export type Brief = {
+  date: string;          // YYYY-MM-DD
+  k: number;
+  total_notes: number;
+  picks: BriefPick[];
+  stats: { considered?: number; orphan_count?: number; clusters_touched?: number };
 };
