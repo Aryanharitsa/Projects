@@ -24,6 +24,7 @@ class NoteOut(BaseModel):
     body: str
     tags: list[str]
     created_at: str  # ISO8601
+    last_seen_at: str | None = None  # ISO8601, set by POST /notes/{id}/touch
 
 
 class Node(BaseModel):
@@ -137,3 +138,44 @@ class ChatOut(BaseModel):
     llm_available: bool
     llm_provider: str | None = None
     notice: str | None = None
+
+
+# ------------------------------------------------------- daily brief
+
+
+class BriefReason(BaseModel):
+    kind: Literal["stale", "central", "orphan", "diverse"]
+    text: str
+    weight: float
+
+
+class BriefConnection(BaseModel):
+    note_id: int
+    title: str
+    strength: float
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+
+
+class BriefPickOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    score: float
+    reasons: list[BriefReason]
+    prompt: str
+    connections: list[BriefConnection]
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    days_since_seen: int | None = None
+    is_orphan: bool = False
+
+
+class BriefOut(BaseModel):
+    date: str
+    k: int
+    total_notes: int
+    picks: list[BriefPickOut]
+    stats: dict

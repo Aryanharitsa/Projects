@@ -51,16 +51,24 @@ def init_db() -> None:
         con.execute(
             """
             CREATE TABLE IF NOT EXISTS notes (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                title      TEXT NOT NULL,
-                body       TEXT NOT NULL,
-                tags       TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL,
-                embedding  BLOB NOT NULL
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                title        TEXT NOT NULL,
+                body         TEXT NOT NULL,
+                tags         TEXT NOT NULL DEFAULT '[]',
+                created_at   TEXT NOT NULL,
+                embedding    BLOB NOT NULL,
+                last_seen_at TEXT
             )
             """
         )
         con.execute("CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at)")
+        # Lightweight migration for installs predating the `last_seen_at`
+        # column. `ALTER TABLE … ADD COLUMN` is idempotent only if we
+        # gate on schema inspection; PRAGMA + check-and-add keeps repeat
+        # startups cheap.
+        cols = {row["name"] for row in con.execute("PRAGMA table_info(notes)").fetchall()}
+        if "last_seen_at" not in cols:
+            con.execute("ALTER TABLE notes ADD COLUMN last_seen_at TEXT")
 
 
 def add_note(title: str, body: str, tags: list[str]) -> int:
@@ -93,6 +101,28 @@ def all_notes() -> list[dict]:
         return [_row_to_note(r) for r in rows]
 
 
+def touch_note(note_id: int, *, when: str | None = None) -> bool:
+    """Record that the user just looked at this note.
+
+    Used by the Daily Brief flow so the revisit scorer can decay the
+    staleness term for recently-surfaced notes. Returns ``False`` if the
+    note doesn't exist so the caller can 404 cleanly.
+    """
+    ts = when or _iso_now()
+    with _conn() as con:
+        cur = con.execute(
+            "UPDATE notes SET last_seen_at = ? WHERE id = ?", (ts, note_id)
+        )
+        return cur.rowcount > 0
+
+
+def last_seen_map() -> dict[int, str | None]:
+    """`{ note_id: iso_string | None }` for every note in the store."""
+    with _conn() as con:
+        rows = con.execute("SELECT id, last_seen_at FROM notes").fetchall()
+        return {int(r["id"]): r["last_seen_at"] for r in rows}
+
+
 def all_embeddings() -> list[tuple[int, tuple[float, ...]]]:
     with _conn() as con:
         rows = con.execute("SELECT id, embedding FROM notes").fetchall()
@@ -112,12 +142,17 @@ def reset() -> None:
 
 
 def _row_to_note(row: sqlite3.Row) -> dict:
+    # last_seen_at is read defensively: SQLite Row's keys() is cheap, and
+    # tolerating its absence keeps the loader compatible with seed-test
+    # rigs that mock notes without going through `init_db`.
+    last_seen = row["last_seen_at"] if "last_seen_at" in row.keys() else None
     return {
         "id": row["id"],
         "title": row["title"],
         "body": row["body"],
         "tags": json.loads(row["tags"]),
         "created_at": row["created_at"],
+        "last_seen_at": last_seen,
     }
 
 

@@ -22,11 +22,13 @@ lives in `synapse.py` and `community.py`.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import chat as chat_engine
-from . import community, schemas, store, synapse
+from . import community, revisit, schemas, store, synapse
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
@@ -192,6 +194,110 @@ def chat_status() -> dict:
         "llm_provider": llm_provider_label() if llm_available() else None,
         "extractive_available": True,
     }
+
+
+@app.get("/brief", response_model=schemas.BriefOut)
+def brief(
+    k: int = Query(5, ge=1, le=12),
+    date: str | None = Query(None, description="YYYY-MM-DD; defaults to today UTC"),
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Today's spaced-revisit picks + journal prompts + bridge suggestions.
+
+    The brief is *idempotent within a day*: reloading the page returns
+    the same picks. The day-key seeds a tiny per-note jitter so tie
+    breaks differ across days without dragging the scoring physics into
+    randomness.
+    """
+    if store.count() == 0:
+        return {"date": revisit.today_key(), "k": k, "total_notes": 0, "picks": [], "stats": {}}
+
+    now = datetime.now(timezone.utc)
+    date_key = date or revisit.today_key(now)
+
+    notes = store.all_notes()
+    g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+    cmap = {n["id"]: n.get("community", 0) for n in g.nodes}
+    notes_for_community = {n["id"]: n for n in g.nodes}
+    built_communities = community.build_communities(cmap, notes_for_community)
+    community_lookup = {
+        c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+        for c in built_communities
+    }
+    degrees = {n["id"]: int(n.get("degree", 0)) for n in g.nodes}
+    weights = {n["id"]: float(n.get("weight", 0.0)) for n in g.nodes}
+
+    # Orphans = nodes with zero degree at the current (threshold, top_k).
+    orphans: set[int] = {nid for nid, d in degrees.items() if d == 0}
+
+    embeddings = dict(store.all_embeddings())
+
+    b = revisit.daily_brief(
+        date=date_key,
+        k=k,
+        now=now,
+        notes=notes,
+        cmap=cmap,
+        community_lookup=community_lookup,
+        degrees=degrees,
+        weights=weights,
+        orphans=orphans,
+        embeddings=embeddings,
+        cosine_fn=cosine,
+    )
+
+    return {
+        "date": b.date,
+        "k": b.k,
+        "total_notes": b.total_notes,
+        "picks": [
+            {
+                "note_id": p.note_id,
+                "title": p.title,
+                "snippet": p.snippet,
+                "tags": p.tags,
+                "score": p.score,
+                "reasons": [
+                    {"kind": r.kind, "text": r.text, "weight": r.weight}
+                    for r in p.reasons
+                ],
+                "prompt": p.prompt,
+                "connections": [
+                    {
+                        "note_id": c.note_id,
+                        "title": c.title,
+                        "strength": c.strength,
+                        "cluster_id": c.cluster_id,
+                        "cluster_name": c.cluster_name,
+                    }
+                    for c in p.connections
+                ],
+                "cluster_id": p.cluster_id,
+                "cluster_name": p.cluster_name,
+                "cluster_color": p.cluster_color,
+                "days_since_seen": p.days_since_seen,
+                "is_orphan": p.is_orphan,
+            }
+            for p in b.picks
+        ],
+        "stats": b.stats,
+    }
+
+
+@app.post("/notes/{note_id}/touch")
+def touch_note(note_id: int) -> dict:
+    """Record that the user just re-engaged with this note.
+
+    Idempotent — repeated taps just refresh the timestamp. Returns the
+    new ``last_seen_at`` so the frontend can update local state without
+    a round-trip back through ``/notes/{id}``.
+    """
+    if not store.touch_note(note_id):
+        raise HTTPException(404, "note not found")
+    n = store.get_note(note_id)
+    assert n is not None
+    return {"ok": True, "note_id": note_id, "last_seen_at": n.get("last_seen_at")}
 
 
 @app.post("/chat", response_model=schemas.ChatOut)

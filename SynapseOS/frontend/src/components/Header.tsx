@@ -6,9 +6,11 @@ type Props = {
   stats: GraphStats | null;
   apiOk: boolean | null;
   chatActive?: boolean;
+  onOpenBrief?: () => void;
+  briefBadge?: boolean;
 };
 
-export function Header({ stats, apiOk, chatActive }: Props) {
+export function Header({ stats, apiOk, chatActive, onOpenBrief, briefBadge }: Props) {
   return (
     <header className="relative border-b border-white/5">
       <div className="absolute inset-0 bg-grid-fade pointer-events-none" />
@@ -50,6 +52,19 @@ export function Header({ stats, apiOk, chatActive }: Props) {
               <span className="w-1.5 h-1.5 rounded-full bg-synapse-cyan animate-pulse-slow" />
               traversal active
             </span>
+          )}
+          {onOpenBrief && (
+            <button
+              onClick={onOpenBrief}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-amber/20 to-synapse-violet/20 ring-1 ring-synapse-amber/40 hover:ring-synapse-amber/70 px-3 py-1 font-mono text-[11px] text-synapse-amber hover:text-ink-100 transition"
+              aria-label="open daily brief"
+            >
+              <span aria-hidden>☼</span>
+              daily brief
+              {briefBadge && (
+                <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-synapse-cyan animate-pulse-slow" />
+              )}
+            </button>
           )}
           <HealthDot ok={apiOk} />
         </div>

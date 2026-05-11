@@ -1,4 +1,5 @@
 import type {
+  Brief,
   ChatMode,
   ChatResponse,
   ChatStatus,
@@ -90,4 +91,18 @@ export const api = {
         include_community_anchors: payload.include_community_anchors ?? true,
       }),
     }),
+
+  brief: (opts?: { k?: number; date?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.k !== undefined) q.set("k", String(opts.k));
+    if (opts?.date) q.set("date", opts.date);
+    const qs = q.toString();
+    return j<Brief>(`/brief${qs ? `?${qs}` : ""}`);
+  },
+
+  touchNote: (id: number) =>
+    j<{ ok: boolean; note_id: number; last_seen_at: string | null }>(
+      `/notes/${id}/touch`,
+      { method: "POST" },
+    ),
 };

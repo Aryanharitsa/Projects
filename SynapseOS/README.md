@@ -50,6 +50,16 @@ threshold live, and watch your topical clusters discover themselves.
   exact synapses that contributed light up cyan on the canvas.
   **Default mode is extractive (zero-dep). Optional LLM mode** when
   `SYNAPSE_LLM_KEY` is set — same citation contract.
+- **Daily Brief — your second brain, on a rotation.** Spaced-revisit
+  engine surfaces ~5 notes per day you should re-engage with: stale
+  hub notes, orphans the graph forgot, and a forced cross-cluster
+  pick so the brief never gets stuck in one topic. Each card carries
+  a one-line auto-generated **journal prompt** ("How does *X* connect
+  to *Y* in the *embeddings* cluster?") and **bridge suggestions** —
+  notes from other clusters with strong cosine to the pick that the
+  synapse graph hasn't linked yet. Idempotent per day, varies per
+  day via deterministic jitter, marks notes as seen so they decay
+  out of the rotation.
 - **Interactive force-directed graph** with zoom, drag, selection,
   community-coloured nodes, weight-haloed edges, and labels that fade
   in at zoom.
@@ -78,6 +88,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
+│  · DailyBrief modal — score ring · reason chips · prompt · bridges       │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -89,10 +100,14 @@ threshold live, and watch your topical clusters discover themselves.
 │  │          │  search,    │ + names +   │  RAG +       │   packed     │  │
 │  │          │  path)      │  orphans)   │  extractive) │   vectors)   │  │
 │  └──────────┴─────────────┴─────────────┴──────────────┴──────────────┘  │
-│                   │                              │                       │
-│                   ▼                              ▼                       │
-│         embed.py — 512-d hashing-trick    llm.py — stdlib HTTP           │
-│         embedder (L2-normalized)          to Anthropic / OpenAI          │
+│                   │              │              │                        │
+│                   ▼              ▼              ▼                        │
+│         embed.py — 512-d   revisit.py —   llm.py — stdlib HTTP           │
+│         hashing-trick      daily brief    to Anthropic / OpenAI          │
+│         embedder           (staleness ·                                  │
+│         (L2-normalized)     centrality ·                                 │
+│                             orphan ·                                     │
+│                             diversity)                                   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -200,6 +215,50 @@ to a small LLM under a strict citation contract ("answer ONLY from
 these notes, cite inline as `[#N]`, say so plainly if missing"). On
 network/LLM failure we silently fall back to extractive with a notice.
 
+### Daily Brief
+
+Every PKM tool fails the same way: notes get written once, never re-read.
+The brief fights that with a small composite scorer:
+
+```
+score(note) =   0.55 · staleness(days_since_touched)
+              + 0.25 · centrality(degree, weight)
+              + 0.30 · is_orphan
+              − 0.20 · same_cluster_picks_already_chosen
+              + jitter( note_id × YYYY-MM-DD )    ∈ [-0.05, +0.05]
+```
+
+- **Staleness** is a piecewise curve: 0 below a day, linear ramp 0→1
+  across days 1–14, holds at 1.0 through day 60, decays gently to 0.65
+  by day 180. Very old notes still surface — just less urgently than
+  freshly-stale ones, so the brief never gets stuck on a single
+  forgotten note.
+- **Centrality** is `0.55·degree_norm + 0.45·weight` — both already
+  computed by the synapse graph, so the brief reuses the
+  user-visible "this is a hub" signal.
+- **Orphan bonus** is flat: isolated notes need attention before the
+  threshold drifts and they become invisible.
+- **Diversity penalty** kicks in greedily as we build the top-K so a
+  hot topic can't monopolize the day's picks.
+- **Jitter** is keyed by `(note_id, YYYY-MM-DD)` so the brief is
+  idempotent within a day and reshuffles tie-breaks across days
+  without dragging the scoring physics into randomness.
+
+Each pick carries:
+
+- A short **journal prompt** templated from the note's title and its
+  cluster's name + top distinctive term ("How does *X* connect to *Y*
+  in the *embeddings* cluster?"). Orphans get a different template
+  ("Where does *X* belong?").
+- Up to **2 cross-cluster bridge suggestions** — notes from *other*
+  clusters with cosine ≥ 0.20 to the pick. Same-cluster neighbors
+  already light up in the synapse view; the interesting suggestion is
+  the one that *could* bridge clusters but doesn't yet.
+- A **"mark seen"** affordance that updates `last_seen_at` so the
+  staleness term decays for the next brief.
+
+Pure stdlib — no new Python deps.
+
 ```
 SYNAPSE_LLM_PROVIDER  anthropic | openai      (default: anthropic)
 SYNAPSE_LLM_KEY       your provider key       (omit to keep extractive only)
@@ -228,6 +287,8 @@ Zero new Python deps — `urllib.request` does the HTTP.
 | `GET`  | `/orphans?threshold…`        | Isolated notes + best below-threshold candidate      |
 | `GET`  | `/chat/status`               | `{ llm_available, llm_provider, extractive_available }` |
 | `POST` | `/chat`                      | Graph-aware RAG. Body: `{ query, mode?, k_seed?, hops?, include_community_anchors? }`. Response: `{ answer, citations[], traversal: { seeds, expansions }, model, mode_used, latency_ms, llm_available, notice? }` |
+| `GET`  | `/brief?k=&date=`            | Today's revisit picks: `{ date, k, total_notes, picks: [ { note_id, title, snippet, score, reasons[], prompt, connections[], cluster_*, days_since_seen, is_orphan } ], stats }`. `date` defaults to today UTC. |
+| `POST` | `/notes/{id}/touch`          | Mark a note as just re-engaged with; refreshes `last_seen_at`. `{ ok, note_id, last_seen_at }` |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -287,6 +348,8 @@ Incremental moves for future rotation days:
 - [x] **Chat-with-your-graph** — graph-aware RAG over synapse + community
       neighborhood, with cited citations and a live traversal overlay
       *(shipped)*
+- [x] **Daily Brief** — spaced-revisit picks with journal prompts and
+      cross-cluster bridge suggestions, idempotent per day *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 
