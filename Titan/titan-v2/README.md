@@ -2,22 +2,22 @@
 
 **Trusted Identity & Transaction Authentication Network.**
 Document-grade KYC + on-chain attestation + a deterministic, explainable AML
-risk engine **with built-in sanctions screening** and a real **case
-management workflow** — wrapped in a single dark-themed Next.js console.
+risk engine **with built-in sanctions screening**, a real **case management
+workflow**, and a **network-intelligence layer** that catches money-laundering
+patterns single-account scoring misses.
 
-> Day-15 of the project rotation closed the loop on the AML side: every
-> alert can now be promoted to a **case** with one click. Cases live in a
-> persistent SQLite store, carry **priority** + **SLA**, and walk a real
-> workflow: `open → review → escalated → cleared / sar_filed`. Every
-> transition, note, assignment, and SAR generation is captured on an
-> append-only timeline so the case is end-to-end auditable. A new
-> `/cases` route renders a kanban-style queue (priority swim lanes,
-> SLA breach counter, search + assignee filters). A new `/cases/{id}`
-> page renders the full detail: frozen evidence snapshot, transaction
-> graph, sanctions hits, status workflow buttons, note composer, and
-> the timeline rail. The AML console gained a header **Open as cases**
-> button (bulk-promote at medium+ priority) plus per-row chips and a
-> live counter on the nav.
+> **Day-20 — Network Intelligence.** Per-account scoring sees one account at
+> a time. Real laundering is networked: a clean-looking account that
+> transacts heavily with a sanctioned shell is *still* suspicious, and a
+> "Trident Exports" string spread across `M1`, `M2`, `M3` is *one* hand.
+> The new `/network` route resolves those entities, propagates risk along
+> the money flow via a biased PageRank, and lets you **ablate any node** to
+> see what the picture looks like without them. A per-account
+> **attribution** view runs leave-one-counterparty-out so you can point at
+> exactly which partners drive an account's risk.
+>
+> All deterministic — same input → same clusters, same propagated scores,
+> same layout coordinates. No ML, no embeddings, no animation jitter.
 
 ---
 
@@ -44,6 +44,10 @@ management workflow** — wrapped in a single dark-themed Next.js console.
 | **Note** | `POST /aml/cases/{id}/note` | Append a free-text note to the timeline |
 | **File SAR** | `POST /aml/cases/{id}/sar` | Render SAR + attach + transition to `sar_filed` |
 | **Delete** | `DELETE /aml/cases/{id}` | Hard delete (admin demo only) |
+| **Network rules** | `GET  /aml/network/rules` | Entity-resolution + propagation thresholds |
+| **Network analyse** | `POST /aml/network/analyze` | Cluster entities + propagate risk + return graph + layout |
+| **Network counterfactual** | `POST /aml/network/counterfactual` | Ablate entities, rescore, return per-entity deltas |
+| **Network attribution** | `POST /aml/network/attribution` | Leave-one-counterparty-out lift per account |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -170,12 +174,82 @@ saw. That is the audit trail regulators care about.
 
 ---
 
+## Network intelligence, in detail
+
+Per-account scoring (`risk.py`) catches one account at a time. The new
+`network.py` module catches the *picture* — three pieces, no ML:
+
+### 1. Entity resolution
+
+Two parties are merged via Union-Find if **either** of:
+
+- **Name similarity ≥ 0.78** — reuses the watchlist matcher primitives.
+  `combined = 0.55·token_set + 0.30·char_3gram + 0.15·containment` with
+  the same `STOPWORDS` (legal-form suffixes like Ltd / GmbH / JSC stripped).
+- **Counterparty-fingerprint Jaccard ≥ 0.55** (when both parties have at
+  least 3 counterparties and share at least 3). Two hands that transact
+  with substantially overlapping sets are likely the same hand.
+
+Single-token names need an exact normalised match to merge, so `M1` and
+`M2` won't collapse just because both names are short.
+
+### 2. Risk propagation
+
+A biased PageRank, on the row-stochastic money-flow adjacency:
+
+```
+r ← (1 − α) · s + α · Wᵀ · r           with α = 0.7
+```
+
+where `s` is the L1-normalised seed-risk vector (per-cluster max of the
+contained account's `risk_score`), `W[i, j] = amount(i→j) / Σ amount(i→*)`,
+and dangling rows teleport to `s`. Converges in ≤20 iterations on demo
+data; we cap at 30 with `tol = 1e-5`. The final per-entity number is a
+blend so per-account and neighborhood signals both show up:
+
+```
+network_risk = 0.55 · risk_score + 0.45 · 100 · (r / max(r))
+```
+
+A clean account heavily linked to a sanctioned one ends up amber, not
+green — which is exactly the inversion this layer is meant to expose.
+
+### 3. Counterfactual analysis
+
+Ablate a set of entities, drop every transaction touching any of their
+members, rerun risk.py + propagation, return per-entity deltas. The
+answer to *"what if Entity-X were a mule and we cut them out — does the
+rest of the picture clear?"* is now one click.
+
+A complementary **attribution** call runs leave-one-counterparty-out on a
+single account: for each partner, drop all transactions between the two,
+rerun the scorer, report the score drop. This is the simplest possible
+SHAP-style explanation — marginal contribution under a leave-one-out
+coalition, deterministic, fully auditable.
+
+### Layout
+
+A deterministic Fruchterman-Reingold variant runs server-side and ships
+coordinates with the response. The frontend renders SVG nodes at the
+returned `(x, y)` immediately — no force-simulation flicker, no client
+deps. SHA-seeded init keeps layouts stable across reloads but distinct
+per dataset.
+
+### Caps
+
+The graph truncates at **80 nodes / 200 edges** ranked by sanctioned
+status → risk_score → activity. Sanctioned nodes always make the cut so
+a truncated view never silently drops the most important signal.
+
+---
+
 ## Frontend
 
 | Route | Purpose |
 |---|---|
-| `/` | Hero + 4-step pipeline + five feature cards + flow diagram |
-| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, **+ case promotion (per-row chip and bulk header button)** |
+| `/` | Hero + 4-step pipeline + six feature cards + flow diagram |
+| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, **+ case promotion (per-row chip and bulk header button)**, + `Network →` deep-link |
+| `/network` | **(new)** Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
 | `/cases/{id}` | Big alert ring, priority/SLA pills, frozen evidence snapshot (factor bars + tx graph), sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail, attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
@@ -184,7 +258,8 @@ saw. That is the audit trail regulators care about.
 
 Built with Next.js 14 + Tailwind + a small set of inline SVG components
 (`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`, `PriorityDot`,
-`AgePill`, `Timeline`, `CasesNavPill`). No charting libs.
+`AgePill`, `Timeline`, `CasesNavPill`, `RiskGraph`, `EntityCard`,
+`DeltaBar`). No charting libs.
 
 ---
 
@@ -244,11 +319,23 @@ curl -s -X POST localhost:8002/aml/cases/$CID/transition \
 curl -s -X POST localhost:8002/aml/cases/$CID/sar \
   -H 'Content-Type: application/json' \
   -d '{"actor":"alice","analyst":"alice"}' | python -m json.tool | head -30
+
+# 5) network intelligence — analyse → ablate → attribute
+curl -s -X POST localhost:8002/aml/network/analyze \
+  -H 'Content-Type: application/json' \
+  -d @../../datasets/samples/aml-sample.json | python -m json.tool | head -40
+curl -s -X POST localhost:8002/aml/network/counterfactual \
+  -H 'Content-Type: application/json' \
+  -d '{"transactions": [...], "ablate": ["B"]}' | python -m json.tool
+curl -s -X POST localhost:8002/aml/network/attribution \
+  -H 'Content-Type: application/json' \
+  -d '{"transactions": [...], "account_id": "A2"}' | python -m json.tool
 ```
 
 Or just open the **AML console** in the browser — drop the bundled CSV,
-hit **Score**, then hit **Open as cases** in the header to bulk-promote
-every medium+ alert into the queue.
+hit **Score**, hit **Network view →** to see the propagated graph, then
+toggle the − button on any sidebar entity and **Re-score without N** to
+run a counterfactual.
 
 ---
 
@@ -263,9 +350,11 @@ apps/
     sanctions.py        token-set + n-gram + containment matcher
     sar.py              markdown narrative + structured payload
     cases.py            SQLite-backed case store + workflow engine + SLA
+    network.py          entity resolution + biased PageRank + counterfactual + attribution
     data/sanctions.json bundled illustrative watchlist
     data/cases.sqlite3  case persistence (gitignored, per-deployment)
   frontend/         Next.js 14 console (dark theme, glass UI)
+    app/network/page.tsx        entity graph + counterfactual + attribution
     app/cases/page.tsx          queue: kanban + stats + filters
     app/cases/[id]/page.tsx     detail: timeline + evidence + workflow
     components/CaseCard.tsx
@@ -273,6 +362,9 @@ apps/
     components/Timeline.tsx
     components/PriorityDot.tsx
     components/AgePill.tsx
+    components/RiskGraph.tsx        force graph with risk-coloured nodes + arrows
+    components/EntityCard.tsx       sidebar row with conic-gradient ring + ablate toggle
+    components/DeltaBar.tsx         diverging-bar visualisation for signed deltas
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -284,8 +376,10 @@ datasets/           sample inputs
 
 - ~~**Phase 2** — sanctions feed (✅ shipped, day-10), DB persistence
   for cases & alerts (✅ shipped, day-15 — SQLite + workflow + timeline +
-  SLA), SHAP-style attributions on top of the rule engine.~~
+  SLA), ~~SHAP-style attributions on top of the rule engine~~ (✅ shipped,
+  day-20 — leave-one-counterparty-out attribution + counterfactual ablation).~~
 - **Phase 3** — Zero-knowledge attestation circuits (prove "I am attested
   by V" without revealing the docHash); GraphQL subgraph for the explorer;
   OAuth + analyst RBAC; live alerting / web-hooks on case state changes;
-  per-detector SHAP-style attribution overlays on the factor bars.
+  member-chooser for attribution on aggregate clusters; expose network
+  intelligence as a case-detail panel (auto-run when a case is opened).

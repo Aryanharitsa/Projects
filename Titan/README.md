@@ -29,6 +29,13 @@ transactions.csv ─► 8 detectors ─► weighted score ─► band ─► ale
                                                                         ▼
                                                                  Analyst workflow
                                                           (priority · SLA · timeline)
+        │
+        ▼
+   Entity resolution ─► biased PageRank ─► network_risk per cluster
+                                              │
+                                              ▼
+                                    Counterfactual & attribution
+                              ("what if you removed Entity-X?")
 ```
 
 ## Design choices

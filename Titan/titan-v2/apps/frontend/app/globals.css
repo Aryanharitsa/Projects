@@ -230,3 +230,176 @@ body::before {
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* ---- Network intelligence surface (round-4, day-20) ---- */
+
+.ws-net-stat {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 14px 16px;
+}
+.ws-net-stat::after {
+  content: "";
+  position: absolute;
+  inset: -40% 60% -40% -40%;
+  background: radial-gradient(circle at 30% 30%, rgba(45, 225, 194, 0.25), transparent 60%);
+  filter: blur(20px);
+  pointer-events: none;
+}
+.ws-net-stat-violet::after {
+  background: radial-gradient(circle at 30% 30%, rgba(110, 91, 255, 0.32), transparent 60%);
+}
+.ws-net-stat-amber::after {
+  background: radial-gradient(circle at 30% 30%, rgba(251, 146, 60, 0.28), transparent 60%);
+}
+.ws-net-stat-rose::after {
+  background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.26), transparent 60%);
+}
+
+.ws-net-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.ws-net-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateX(2px);
+}
+.ws-net-row-sel {
+  border-color: rgba(45, 225, 194, 0.55);
+  background: linear-gradient(135deg, rgba(45, 225, 194, 0.08), rgba(110, 91, 255, 0.06));
+}
+.ws-net-row-ablated {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0 6px, transparent 6px 12px);
+}
+.ws-net-ring {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.ws-net-ring-core {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: rgba(7, 11, 20, 0.92);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+.ws-net-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+.ws-net-pill-agg {
+  color: #c4b5fd;
+  background: rgba(110, 91, 255, 0.18);
+  border: 1px solid rgba(110, 91, 255, 0.35);
+}
+.ws-net-pill-san {
+  color: #fca5a5;
+  background: rgba(244, 63, 94, 0.16);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+.ws-net-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+.ws-net-ablate {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ws-net-ablate:hover {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: rgba(252, 165, 165, 0.95);
+}
+.ws-net-ablate-on {
+  background: rgba(244, 63, 94, 0.22);
+  border-color: rgba(244, 63, 94, 0.55);
+  color: #fecaca;
+}
+
+.ws-net-attrib-row {
+  display: grid;
+  grid-template-columns: 1fr 4fr 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.ws-net-attrib-row:last-child {
+  border-bottom: 0;
+}
+.ws-net-attrib-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.ws-net-attrib-bar > span {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: linear-gradient(90deg, #fbbf24, #fb923c);
+  border-radius: 999px;
+}
+
+.ws-net-cf-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(110, 91, 255, 0.3);
+  background: linear-gradient(135deg, rgba(110, 91, 255, 0.14), rgba(45, 225, 194, 0.06));
+  padding: 18px 20px;
+}
+.ws-net-cf-banner::before {
+  content: "";
+  position: absolute;
+  inset: -50% -10% auto auto;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(110, 91, 255, 0.32), transparent 60%);
+  filter: blur(40px);
+  pointer-events: none;
+}

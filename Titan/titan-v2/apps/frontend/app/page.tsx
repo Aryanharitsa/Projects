@@ -10,6 +10,14 @@ const FEATURES = [
     cta: "Score transactions",
   },
   {
+    href: "/network",
+    title: "Network Intelligence",
+    eyebrow: "Graph",
+    body: "Per-account scoring catches one account. Networked laundering needs networked thinking — we cluster likely-same entities, propagate risk via biased PageRank along the money flow, and let you ablate any node to see what the picture looks like without them.",
+    accent: "from-cyan-400/30 via-violet-500/15 to-transparent",
+    cta: "Open graph",
+  },
+  {
     href: "/cases",
     title: "Case Workflow",
     eyebrow: "Triage",
@@ -46,7 +54,8 @@ const FEATURES = [
 const STATS = [
   { label: "Pattern detectors", value: "8" },
   { label: "Watchlist entries", value: "30" },
-  { label: "Case workflow states", value: "5" },
+  { label: "Workflow states", value: "5" },
+  { label: "Graph propagation", value: "α 0.7" },
   { label: "External ML deps", value: "0" },
 ];
 
@@ -93,7 +102,7 @@ export default function Home() {
       </section>
 
       {/* Stats strip */}
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {STATS.map((s) => (
           <div key={s.label} className="glass px-4 py-3">
             <div className="text-[11px] uppercase tracking-wider text-white/40">
@@ -107,7 +116,7 @@ export default function Home() {
       </section>
 
       {/* Feature cards */}
-      <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((f) => (
           <Link
             key={f.href}

@@ -252,6 +252,13 @@ export default function AMLPage() {
                     : ""
                 }`}
           </button>
+          <a
+            className="btn"
+            href="/network"
+            title="Open the network intelligence view for this dataset"
+          >
+            Network view →
+          </a>
           <button className="btn-primary" onClick={onScore} disabled={loading}>
             {loading ? "Scoring…" : `Score ${txs.length} txs`}
           </button>
@@ -514,6 +521,13 @@ export default function AMLPage() {
               >
                 Copy JSON
               </button>
+              <a
+                className="btn"
+                href={`/network?focus=${encodeURIComponent(selectedReport.account_id)}`}
+                title="Inspect this account in the network view"
+              >
+                Network →
+              </a>
               {openedFor[selectedReport.account_id] ? (
                 <a
                   href={`/cases/${openedFor[selectedReport.account_id]}`}

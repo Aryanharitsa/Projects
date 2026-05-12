@@ -467,3 +467,140 @@ export async function deleteCase(id: string): Promise<{ ok: boolean }> {
   const r = await fetch(`${API_BASE}/aml/cases/${id}`, { method: "DELETE" });
   return jsonOrThrow(r);
 }
+
+// ---------------------------------------------------------------------------
+// Network intelligence (day-20)
+// ---------------------------------------------------------------------------
+
+export type NetEntity = {
+  id: string;
+  members: string[];
+  display_name: string;
+  is_aggregate: boolean;
+  risk_score: number;
+  network_risk: number;
+  network_delta: number;
+  band: "low" | "medium" | "high" | "critical";
+  sanctioned: boolean;
+  flags: string[];
+  inbound_total: number;
+  outbound_total: number;
+  member_count: number;
+  x: number;
+  y: number;
+};
+
+export type NetEdge = {
+  src: string;
+  dst: string;
+  amount: number;
+  tx_count: number;
+  last_ts: string;
+};
+
+export type NetworkAnalyze = {
+  ok: boolean;
+  entities: NetEntity[];
+  edges: NetEdge[];
+  summary: {
+    total_parties: number;
+    total_clusters: number;
+    multi_member_clusters: number;
+    avg_network_lift: number;
+    top_lift_entity_id: string | null;
+    top_central_entity_id: string | null;
+    density: number;
+    components: number;
+  };
+  score_response: ScoreResponse;
+  params: { name_tau: number; counterparty_tau: number; pr_alpha: number; layout_size: number };
+  engine: string;
+};
+
+export type NetworkDelta = {
+  entity_id: string;
+  display_name: string;
+  risk_before: number;
+  risk_after: number;
+  risk_delta: number;
+  network_before: number;
+  network_after: number;
+  network_delta: number;
+};
+
+export type NetworkCounterfactual = {
+  ok: boolean;
+  ablated: string[];
+  removed_parties: string[];
+  txs_removed: number;
+  deltas: NetworkDelta[];
+  summary: {
+    network_avg_before: number;
+    network_avg_after: number;
+    network_avg_change: number;
+    alerted_before: number;
+    alerted_after: number;
+  };
+};
+
+export type AttributionContribution = {
+  counterparty: string;
+  tx_count: number;
+  amount_total: number;
+  score_with: number;
+  score_without: number;
+  lift: number;
+};
+
+export type NetworkAttribution = {
+  ok: boolean;
+  account_id: string;
+  display_name: string;
+  baseline_score: number;
+  baseline_band: "low" | "medium" | "high" | "critical";
+  counterparties: AttributionContribution[];
+};
+
+export async function analyzeNetwork(
+  transactions: Tx[],
+  opts: {
+    weights?: WeightOverrides;
+    sanctions_threshold?: number;
+    name_tau?: number;
+    counterparty_tau?: number;
+    score_response?: ScoreResponse;
+  } = {},
+): Promise<NetworkAnalyze> {
+  const r = await fetch(`${API_BASE}/aml/network/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transactions, ...opts }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function counterfactualNetwork(
+  transactions: Tx[],
+  ablate: string[],
+  opts: { weights?: WeightOverrides; sanctions_threshold?: number } = {},
+): Promise<NetworkCounterfactual> {
+  const r = await fetch(`${API_BASE}/aml/network/counterfactual`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transactions, ablate, ...opts }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function attributionNetwork(
+  transactions: Tx[],
+  account_id: string,
+  opts: { weights?: WeightOverrides; sanctions_threshold?: number; max_report?: number } = {},
+): Promise<NetworkAttribution> {
+  const r = await fetch(`${API_BASE}/aml/network/attribution`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transactions, account_id, ...opts }),
+  });
+  return jsonOrThrow(r);
+}

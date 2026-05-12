@@ -26,6 +26,13 @@ POST   /aml/cases/{id}/assign       set or clear assignee
 POST   /aml/cases/{id}/note         append a free-text note to the timeline
 POST   /aml/cases/{id}/sar          generate + attach SAR, transition to sar_filed
 DELETE /aml/cases/{id}              hard delete (admin demo only)
+
+Network intelligence (round-4, day-20)
+--------------------------------------
+GET    /aml/network/rules           thresholds + propagation params for auditors
+POST   /aml/network/analyze         entity resolution + risk propagation + layout
+POST   /aml/network/counterfactual  ablate entities, rescore, return deltas
+POST   /aml/network/attribution     leave-one-counterparty-out per account
 """
 
 from __future__ import annotations
@@ -37,11 +44,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 import cases as case_store
+import network as network_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 
-ENGINE_VERSION = "titan-aml/1.2.0"
+ENGINE_VERSION = "titan-aml/1.3.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -343,3 +351,98 @@ def cases_delete(case_id: str) -> Dict[str, Any]:
     if not case_store.delete_case(case_id):
         raise HTTPException(status_code=404, detail="case not found")
     return {"ok": True, "deleted": case_id}
+
+
+# ---------------------------------------------------------------------------
+# Network intelligence
+# ---------------------------------------------------------------------------
+
+
+class NetAnalyzeReq(BaseModel):
+    transactions: List[Tx]
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    name_tau: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    counterparty_tau: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    score_response: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional pre-computed /aml/score response. When present we skip"
+            " re-scoring and consume it directly, so the network call is cheap."
+        ),
+    )
+
+
+class NetCounterfactualReq(BaseModel):
+    transactions: List[Tx]
+    ablate: List[str] = Field(..., min_length=1, description="Entity ids to remove.")
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class NetAttributionReq(BaseModel):
+    transactions: List[Tx]
+    account_id: str = Field(..., min_length=1)
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    max_report: int = Field(default=8, ge=1, le=20)
+
+
+@app.get("/aml/network/rules")
+def network_rules() -> Dict[str, Any]:
+    return network_engine.get_rules()
+
+
+@app.post("/aml/network/analyze")
+def network_analyze(req: NetAnalyzeReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    return {
+        "ok": True,
+        **network_engine.analyze(
+            rows,
+            score_response=req.score_response,
+            weights=req.weights,
+            sanctions_threshold=req.sanctions_threshold,
+            name_tau=(req.name_tau if req.name_tau is not None else network_engine.NAME_TAU),
+            counterparty_tau=(
+                req.counterparty_tau
+                if req.counterparty_tau is not None
+                else network_engine.COUNTERPARTY_TAU
+            ),
+        ),
+    }
+
+
+@app.post("/aml/network/counterfactual")
+def network_counterfactual(req: NetCounterfactualReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    return {
+        "ok": True,
+        **network_engine.counterfactual(
+            rows,
+            ablate_entity_ids=req.ablate,
+            weights=req.weights,
+            sanctions_threshold=req.sanctions_threshold,
+        ),
+    }
+
+
+@app.post("/aml/network/attribution")
+def network_attribution(req: NetAttributionReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    return {
+        "ok": True,
+        **network_engine.attribution(
+            rows,
+            account_id=req.account_id,
+            weights=req.weights,
+            sanctions_threshold=req.sanctions_threshold,
+            max_report=req.max_report,
+        ),
+    }
