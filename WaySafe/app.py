@@ -22,8 +22,12 @@ from theme import (
     render_live_trip_header, render_alert_feed, render_lookahead_panel,
     render_contacts_strip, render_broadcast_log, render_trip_empty,
     render_trip_log_row,
+    render_itinerary_empty, render_itinerary_summary,
+    render_itinerary_timeline, render_itinerary_legs,
+    render_itinerary_windows,
 )
 import companion as cp
+import itinerary as itn
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -292,7 +296,7 @@ if role == "Tourist App":
         st.warning(f"⚠️ {safety.band} zone — review factors above and consider an alternate route.")
 
     tab_labels = [
-        "Map", "Plan Route", "Live Trip", "Forecast",
+        "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
@@ -457,8 +461,214 @@ if role == "Tourist App":
                         )
                     render_best_window(windows, plan["depart_at"])
 
-    # ---------------- Live Trip Companion (round-3 closer)
+    # ---------------- Itinerary (Day-21 move) ----------------
     with tabs[2]:
+        st.subheader("Multi-Stop Itinerary")
+        st.caption(
+            "String multiple stops into a single safety-aware day. "
+            "Order is optimised with a 2-opt over the haversine distance matrix, "
+            "each leg is priced by the same risk-aware A* used for single routes, "
+            "and the schedule rolls up into a Gantt timeline + iCal export."
+        )
+
+        # Default Goa-friendly tour, seeded once per session.
+        if "itin_stops_df" not in st.session_state:
+            st.session_state.itin_stops_df = pd.DataFrame([
+                {"name": "Start (you)",      "lat": my["lat"], "lon": my["lon"], "dwell_min": 0},
+                {"name": "Aguada Fort",       "lat": 15.4925,   "lon": 73.7825,   "dwell_min": 45},
+                {"name": "Calangute Beach",   "lat": 15.5440,   "lon": 73.7553,   "dwell_min": 60},
+                {"name": "Anjuna Flea Market","lat": 15.5736,   "lon": 73.7407,   "dwell_min": 45},
+                {"name": "Baga Beach",        "lat": 15.5560,   "lon": 73.7515,   "dwell_min": 30},
+            ])
+
+        with st.expander("✏️  Edit stops", expanded=True):
+            edited = st.data_editor(
+                st.session_state.itin_stops_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "name":      st.column_config.TextColumn("Stop", required=True),
+                    "lat":       st.column_config.NumberColumn("Lat", format="%.6f", min_value=-90.0, max_value=90.0),
+                    "lon":       st.column_config.NumberColumn("Lon", format="%.6f", min_value=-180.0, max_value=180.0),
+                    "dwell_min": st.column_config.NumberColumn("Dwell (min)", min_value=0, max_value=600, step=5),
+                },
+                key="itin_stops_editor",
+            )
+            # persist
+            st.session_state.itin_stops_df = edited
+            cset1, cset2 = st.columns(2)
+            if cset1.button("Reset first stop to my location", use_container_width=True):
+                df = st.session_state.itin_stops_df.copy()
+                if not df.empty:
+                    df.loc[df.index[0], ["lat", "lon"]] = [my["lat"], my["lon"]]
+                    st.session_state.itin_stops_df = df
+                    st.rerun()
+            if cset2.button("Clear all & start fresh", use_container_width=True):
+                st.session_state.itin_stops_df = pd.DataFrame([
+                    {"name": "Start (you)", "lat": my["lat"], "lon": my["lon"], "dwell_min": 0},
+                ])
+                st.rerun()
+
+        c_mode, c_dt, c_opt = st.columns([2, 2, 1.4])
+        with c_mode:
+            mode = st.selectbox(
+                "Routing mode",
+                ["safest", "forecast-safest", "fastest"],
+                index=0, key="itin_mode",
+            )
+        with c_dt:
+            _now = datetime.utcnow()
+            i_date = st.date_input("Depart date", value=_now.date(), key="itin_date")
+            i_time = st.time_input("Depart time", value=_now.time().replace(second=0, microsecond=0), key="itin_time")
+            i_depart = datetime.combine(i_date, i_time)
+        with c_opt:
+            st.write("")
+            st.write("")
+            optimize_order = st.checkbox("Optimize order", value=True, key="itin_opt")
+
+        if st.button("Plan itinerary", type="primary", use_container_width=True, key="itin_plan_btn"):
+            df = st.session_state.itin_stops_df.dropna(subset=["lat", "lon"]).copy()
+            df["name"] = df["name"].fillna("Stop").astype(str)
+            df["dwell_min"] = df["dwell_min"].fillna(0).astype(int)
+            stops = [
+                itn.Stop(
+                    name=str(r["name"]).strip() or f"Stop {i+1}",
+                    lat=float(r["lat"]),
+                    lon=float(r["lon"]),
+                    dwell_min=int(r["dwell_min"]),
+                )
+                for i, (_, r) in enumerate(df.iterrows())
+            ]
+            if len(stops) < 2:
+                st.error("Add at least 2 stops to plan an itinerary.")
+            else:
+                inc_records = inc_df.to_dict("records") if not inc_df.empty else []
+                poi_records = poi_df.to_dict("records") if not poi_df.empty else []
+                forecaster_obj = get_forecaster() if mode == "forecast-safest" else None
+                with st.spinner(f"Planning {len(stops)-1} legs in {mode} mode…"):
+                    plan_obj = itn.plan_itinerary(
+                        stops, i_depart, mode=mode, optimize_order=optimize_order,
+                        incidents=inc_records, geofences=GEOFENCES, pois=poi_records,
+                        forecaster=forecaster_obj,
+                    )
+                st.session_state.itinerary = plan_obj
+
+        itinerary = st.session_state.get("itinerary")
+        if itinerary is None:
+            render_itinerary_empty()
+        else:
+            render_itinerary_summary(itinerary)
+            render_itinerary_timeline(itinerary)
+
+            # Combined map: each leg in a distinct accent
+            palette = [
+                [61, 169, 252], [167, 139, 250], [249, 196, 64],
+                [83, 227, 166], [255, 106, 61], [94, 234, 212],
+                [255, 121, 198], [126, 231, 218],
+            ]
+            extras = []
+            for i, leg in enumerate(itinerary.legs):
+                color = palette[i % len(palette)]
+                extras += _route_path_layer(leg.route, color, glow_width=8, line_width=3)
+            stop_df = pd.DataFrame([
+                {"lat": s.lat, "lon": s.lon, "name": f"{i+1}. {s.name}"}
+                for i, s in enumerate(itinerary.stops)
+            ])
+            extras.append(pdk.Layer(
+                "ScatterplotLayer",
+                data=stop_df,
+                get_position='[lon, lat]',
+                get_fill_color=[83, 227, 166],
+                get_radius=85,
+                pickable=True,
+                stroked=True, get_line_color=[14, 17, 23], line_width_min_pixels=2,
+            ))
+            extras.append(pdk.Layer(
+                "TextLayer",
+                data=stop_df,
+                get_position='[lon, lat]',
+                get_text='name',
+                get_size=12,
+                get_color=[230, 236, 247],
+                get_pixel_offset=[0, -18],
+                billboard=False,
+            ))
+            mid_lat = sum(s.lat for s in itinerary.stops) / len(itinerary.stops)
+            mid_lon = sum(s.lon for s in itinerary.stops) / len(itinerary.stops)
+            view = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=11.5)
+            draw_map_layers(
+                inc_df, bcast_df, poi_df, my,
+                show_heatmap=False, extra_layers=extras, view_state_override=view,
+            )
+            st.caption(
+                "🟢 Stops (numbered in visit order) · coloured polylines = per-leg routes · "
+                "🔴 verified incident · 🟠 risk zone"
+            )
+
+            # Per-leg detail cards
+            st.markdown("##### Legs")
+            render_itinerary_legs(itinerary)
+
+            # Exports
+            cdl1, cdl2, cdl3 = st.columns(3)
+            cdl1.download_button(
+                "Itinerary GPX",
+                data=itn.to_combined_gpx(itinerary, name=f"WaySafe itinerary · {i_depart.strftime('%a %H:%M')}"),
+                file_name="waysafe-itinerary.gpx",
+                mime="application/gpx+xml",
+                use_container_width=True,
+            )
+            cdl2.download_button(
+                "Itinerary iCal (.ics)",
+                data=itn.to_ics(itinerary),
+                file_name="waysafe-itinerary.ics",
+                mime="text/calendar",
+                use_container_width=True,
+            )
+            # Google Maps deeplink across all legs concatenated (down-sampled)
+            combined_coords = []
+            for leg in itinerary.legs:
+                if combined_coords and leg.route.coords:
+                    combined_coords.extend(leg.route.coords[1:])
+                else:
+                    combined_coords.extend(leg.route.coords)
+            cdl3.markdown(
+                f"<a href='{_maps_deeplink(combined_coords)}' target='_blank' "
+                f"style='display:block; text-align:center; padding:9px 12px; border-radius:10px; "
+                f"background:rgba(83,227,166,0.18); color:#53E3A6; font-weight:700; "
+                f"text-decoration:none; border:1px solid rgba(83,227,166,0.36);'>"
+                f"Open full route in Maps ↗</a>",
+                unsafe_allow_html=True,
+            )
+
+            # Best start-window sweep
+            with st.expander("🔮 Find best start window (sweep ±2 h, full re-plan per candidate)"):
+                if st.button("Search ±2 hours at 30-min steps", key="itin_sweep_btn"):
+                    inc_records = inc_df.to_dict("records") if not inc_df.empty else []
+                    poi_records = poi_df.to_dict("records") if not poi_df.empty else []
+                    forecaster_obj = get_forecaster() if itinerary.mode == "forecast-safest" else None
+                    with st.spinner("Re-planning the whole itinerary at 9 candidate departures…"):
+                        windows = itn.find_best_start_window(
+                            itinerary.stops, itinerary.depart_at,
+                            mode=itinerary.mode, span_h=2.0, step_min=30,
+                            incidents=inc_records, geofences=GEOFENCES, pois=poi_records,
+                            forecaster=forecaster_obj, optimize_order=False,
+                        )
+                    render_itinerary_windows(windows, itinerary.depart_at, top_k=5)
+                    best_t, best_plan = windows[0]
+                    if best_t != itinerary.depart_at:
+                        st.info(
+                            f"Best start: **{best_t.strftime('%a %H:%M')}** "
+                            f"(score {best_plan.composite_score}, "
+                            f"+{best_plan.composite_score - itinerary.composite_score} vs your pick). "
+                            "Click *Plan itinerary* with this depart time to switch."
+                        )
+                    else:
+                        st.success("Your chosen depart time is already optimal in this window.")
+
+    # ---------------- Live Trip Companion (round-3 closer)
+    with tabs[3]:
         st.subheader("Live Trip Companion")
         st.caption(
             "Be *with* the user during the trip — proactive geofence + risk-corridor alerts, "
@@ -762,7 +972,7 @@ if role == "Tourist App":
                 st.rerun()
 
     # ---------------- Forecast
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Hazard Forecast")
         st.caption(
             "Empirical-Bayes spatiotemporal model — historical hazards binned by "
@@ -861,7 +1071,7 @@ if role == "Tourist App":
             )
 
     # ---------------- Report Hazard
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -894,7 +1104,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -913,7 +1123,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -940,7 +1150,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip

@@ -2,10 +2,11 @@
 
 WaySafe is a **safety-first navigation & incident-response system** for tourists.
 It scores any location 0–100, plans risk-aware routes (with a temporal-forecast
-mode), and now ships a **Live Trip Companion** that walks the user through the
-journey itself — proactive geofence + risk-corridor alerts, a trusted-contacts
-broadcast loop, and an auto-SOS rule when a traveller stalls in dangerous
-territory.
+mode), threads multiple stops into a single safety-aware day with the new
+**Multi-Stop Itinerary Planner**, and ships a **Live Trip Companion** that
+walks the user through the journey itself — proactive geofence + risk-corridor
+alerts, a trusted-contacts broadcast loop, and an auto-SOS rule when a
+traveller stalls in dangerous territory.
 
 Built on Streamlit + pure-Python physics (no external maps API, no XGBoost,
 no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
@@ -29,13 +30,74 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 - **Forecast-aware safest route** — each edge is priced by the *predicted*
   risk at the time the traveller will reach its midpoint
   (`t = depart + cum_km / 32 km/h`), blended 65/35 with current-time risk.
-- **🆕 Live Trip Companion** — turns a planned route into a live journey
+- **🆕 Multi-Stop Itinerary Planner** — chain N stops into one
+  safety-aware day. Order is solved with a 2-opt over the haversine
+  distance matrix, every leg is priced by the same risk-aware A*, the
+  schedule rolls up into a **Gantt timeline** and the whole plan exports
+  to **iCal** (.ics) so it drops straight into Apple/Google/Outlook
+  calendars with `geo:` deeplinks at every waypoint. A `±2 h` start-window
+  sweep re-plans the entire itinerary at 9 candidate departures and
+  surfaces the safest one.
+- **Live Trip Companion** — turns a planned route into a live journey
   with proactive alerts and trusted-contact broadcasts. Details below.
 - **Authority dashboard** — operational map, category & time-series
   breakdowns, pending-incident queue with verify + broadcast workflow,
   next-24h forecast curve and likely-hotspots panel.
 - **Tamper-evident audit** — Merkle-rollup auditor over incident hashes
   (no blockchain required, anchor on-chain later if needed).
+
+---
+
+## 🗺️ Multi-Stop Itinerary Planner (Day 21)
+
+A tourist day rarely has one destination. The Itinerary tab solves the
+*open-path* travelling-salesman variant — start node fixed (the user),
+remaining stops re-ordered, no return-to-origin — and chains the result
+into one priced schedule.
+
+### Solver
+
+| Step | Algorithm | Cost minimised |
+|---|---|---|
+| 1. seed order | greedy nearest-neighbour from the fixed start | Σ haversine_km |
+| 2. refine | open-path **2-opt** (≤ 12 stops), reverses any sub-tour including the tail | Σ haversine_km |
+| 3. price legs | same `plan_safest / plan_fastest / plan_forecast_route` used for single-route mode | risk-aware A* edge cost |
+
+The depart-time of leg *k* is `arrive_at(k-1) + dwell_min(stop_k-1)` so
+the *forecast-safest* variant correctly times each midpoint along the
+chain.
+
+### Composite itinerary score
+
+```
+score = clip(  Σ(km_i · avg_safety_i) / Σ km_i  −  6 · #(legs with min_safety < 35),  0, 100)
+```
+
+### Exports
+
+- **GPX** — a single file with one `<trk>` per leg and a `<wpt>` per
+  stop (works with every map app).
+- **iCal `.ics`** — one `VEVENT` per **leg** (TRAVEL category) and one
+  per **dwell** (DWELL category). Floating local times, `GEO:` line on
+  every event so calendar UIs deep-link to a map pin. Long
+  `DESCRIPTION` lines are CRLF-folded per RFC-5545.
+- **Maps deeplink** — every leg's coords concatenated and down-sampled
+  to ≤ 9 waypoints, opens the full day in Google Maps.
+
+### UI
+
+- **Hero card** — composite score ring, mode pill, total km / travel
+  time / dwell, breakdown of how many legs fall in each safety band
+  (Safe / Mostly Safe / Caution / High Risk / Danger).
+- **Gantt timeline** — solid travel bars coloured by per-leg safety,
+  hatched teal dwell bars between them, a ruler with `%H:%M` ticks
+  auto-stepped (10/30/60/120 min) to the day's span.
+- **Per-leg cards** — distance, ETA, avg safety, min safety, risky-km,
+  safety band pill, planner notes.
+- **Combined map** — every leg drawn in a distinct accent over the
+  incident heatmap & geofence polygons; stops labelled `N. Name`.
+- **Best start-window sweep** — re-plans the full itinerary at ±2 h
+  around the chosen depart, ranked by composite score.
 
 ---
 
@@ -103,11 +165,12 @@ positions.
 
 ```
 WaySafe/
-│── app.py              # Streamlit shell — Tourist / Authority / Auditor roles, 8 tabs
+│── app.py              # Streamlit shell — Tourist / Authority / Auditor roles, 9 tabs
 │── safety.py           # Live 0–100 score + heatmap weights + point_risk()
 │── routing.py          # A* over priced grid + GPX + forecast-aware variant
 │── forecast.py         # Empirical-Bayes spatiotemporal hazard model
-│── companion.py        # 🆕 Live Trip Companion — trips, alerts, broadcasts
+│── itinerary.py        # 🆕 Multi-stop planner — 2-opt order + iCal/GPX export
+│── companion.py        # Live Trip Companion — trips, alerts, broadcasts
 │── theme.py            # Dark theme + render_* helpers
 │── utils.py            # haversine, point_in_polygon, sha256, build_merkle
 │── data/
@@ -143,9 +206,14 @@ streamlit run app.py
 1. Sidebar → set lat/lon to **15.4925, 73.7825** (Aguada cliffs).
 2. **Plan Route** tab → destination *Baga* (or custom 15.55, 73.77), depart
    at **Sat 22:00**, *Use temporal forecast* on, **Plan routes**.
-3. **Live Trip** tab → pick `safest` (or `forecast-safest`), choose
+3. **Itinerary** tab → keep the seeded five Goa stops (Start · Aguada ·
+   Calangute · Anjuna · Baga) or tweak in the editor, choose
+   `forecast-safest`, **Plan itinerary**. The 2-opt re-orders the stops,
+   the Gantt timeline lays out the day, and `Itinerary iCal (.ics)`
+   downloads a calendar you can drop into Apple/Google/Outlook.
+4. **Live Trip** tab → pick `safest` (or `forecast-safest`), choose
    `4×` simulation, **▶ Start journey**.
-4. Watch:
+5. Watch:
    - departure broadcasts dispatch to the seeded contacts (Aryan, Mom, Roomie),
    - the position dot crawls through the Aguada cliff geofence —
      `geofence_enter` fires with the zone name,
@@ -188,6 +256,11 @@ fire_auto_sos ⇔ stall_min ≥ 5  ∧  in_red_zone
                 ∨ inside any geofence polygon
 ```
 
+**Itinerary composite score**
+```
+score = clip(  Σ(km_i · avg_safety_i) / Σ km_i  −  6 · #(legs with min_safety < 35),  0, 100)
+```
+
 ---
 
 ## 📍 Roadmap
@@ -196,7 +269,7 @@ fire_auto_sos ⇔ stall_min ≥ 5  ∧  in_red_zone
 - [x] Risk-aware A\* router + dual-route UI (round 2)
 - [x] AI-powered hazard forecasting (round 3 opener)
 - [x] **Live Trip Companion + trusted-contacts broadcast** (round 3 closer)
-- [ ] Multi-stop itinerary chaining (visit A → B → C; depart-at optimised)
+- [x] **Multi-stop itinerary chaining** (2-opt order + Gantt + iCal export, Day 21)
 - [ ] Real-time push (web-sockets) instead of file-tail simulation
 - [ ] Mobile-first PWA shell with native geolocation feed
 - [ ] Live traffic / road-closure overlay (HERE or Mapbox)
