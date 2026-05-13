@@ -367,6 +367,148 @@ def inject_theme() -> None:
         .ws-trip-log-title {{ font-size: .9rem; font-weight: 700; color: #D4DAEA; }}
         .ws-trip-log-meta  {{ font-size: .7rem; color:{MUTED}; }}
         .ws-trip-log-stats {{ display:flex; gap: 6px; flex-wrap: wrap; }}
+
+        /* ---------- Multi-stop Itinerary (Day 21) ---------- */
+        .ws-itin-hero {{
+            background: linear-gradient(135deg, rgba(94,234,212,0.10) 0%, rgba(167,139,250,0.10) 100%);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 18px; padding: 18px 22px; margin-bottom: 14px;
+            display: grid; grid-template-columns: auto 1fr auto; gap: 22px; align-items: center;
+        }}
+        .ws-itin-hero-ring {{
+            width: 108px; height: 108px; border-radius: 50%;
+            display:flex; align-items:center; justify-content:center; position: relative; flex-shrink: 0;
+            background: conic-gradient(var(--ring) calc(var(--pct) * 1%), rgba(255,255,255,0.06) 0);
+        }}
+        .ws-itin-hero-ring::after {{
+            content:""; position:absolute; inset:9px; background:{CARD}; border-radius:50%;
+        }}
+        .ws-itin-hero-ring-inner {{ position:relative; z-index:1; text-align:center; }}
+        .ws-itin-hero-ring-val {{ font-size: 1.85rem; font-weight: 800; line-height: 1; }}
+        .ws-itin-hero-ring-lbl {{
+            font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:{MUTED};
+            font-weight:700; margin-top:4px;
+        }}
+        .ws-itin-hero-title {{ font-size: 1.18rem; font-weight: 800; letter-spacing:-0.01em; margin-bottom:2px; }}
+        .ws-itin-hero-sub   {{ font-size: .78rem; color: {MUTED}; }}
+        .ws-itin-hero-stats {{ display:flex; gap: 18px; margin-top: 12px; flex-wrap: wrap; }}
+        .ws-itin-hero-stat  {{ }}
+        .ws-itin-hero-stat-lbl {{
+            font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:{MUTED}; font-weight:700;
+        }}
+        .ws-itin-hero-stat-val {{ font-size:1.05rem; font-weight:800; }}
+        .ws-itin-hero-stat-val small {{ font-size:.62rem; color:{MUTED}; font-weight:600; }}
+        .ws-itin-hero-bands  {{ display:flex; flex-direction:column; gap:6px; }}
+        .ws-itin-hero-band   {{
+            display:inline-flex; align-items:center; gap:8px;
+            font-size:.7rem; color:#D4DAEA; font-weight:600;
+        }}
+        .ws-itin-hero-band-dot {{ width:8px; height:8px; border-radius:50%; }}
+
+        .ws-itin-gantt {{
+            background:{CARD}; border:1px solid rgba(255,255,255,0.06);
+            border-radius:14px; padding:14px 18px; margin-bottom: 12px;
+        }}
+        .ws-itin-gantt-hdr {{
+            display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;
+        }}
+        .ws-itin-gantt-hdr h4 {{ margin:0; font-weight:800; font-size:.95rem; letter-spacing:-0.01em; }}
+        .ws-itin-gantt-hdr .ws-itin-gantt-span {{
+            font-size:.7rem; color:{MUTED}; font-variant-numeric: tabular-nums;
+        }}
+        .ws-itin-gantt-ruler {{
+            position:relative; height: 18px; margin-bottom: 6px;
+            border-bottom:1px dashed rgba(255,255,255,0.10);
+        }}
+        .ws-itin-gantt-tick {{
+            position:absolute; top:0; bottom:0;
+            font-size:.62rem; color:{MUTED}; font-variant-numeric: tabular-nums;
+            transform:translateX(-50%); white-space: nowrap;
+        }}
+        .ws-itin-gantt-row {{
+            position:relative; height: 32px; margin-bottom: 4px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 8px;
+            display:flex; align-items:center;
+        }}
+        .ws-itin-gantt-row-lbl {{
+            position:absolute; left:10px; top:50%; transform:translateY(-50%);
+            font-size:.7rem; font-weight:700; color:#D4DAEA; z-index: 4;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5); pointer-events:none;
+            max-width: 40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }}
+        .ws-itin-gantt-bar {{
+            position:absolute; top:6px; bottom:6px;
+            border-radius: 6px;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), 0 1px 4px rgba(0,0,0,0.25);
+            display:flex; align-items:center; padding: 0 10px;
+            font-size:.66rem; color:rgba(255,255,255,0.92); font-weight:700;
+            font-variant-numeric: tabular-nums;
+            white-space:nowrap; overflow:hidden;
+        }}
+        .ws-itin-gantt-bar.dwell {{
+            background: repeating-linear-gradient(
+                45deg, rgba(94,234,212,0.20) 0 6px, rgba(94,234,212,0.05) 6px 12px
+            );
+            border:1px solid rgba(94,234,212,0.35);
+            color:#7EE7DA;
+        }}
+
+        .ws-itin-leg {{
+            background:{CARD}; border:1px solid rgba(255,255,255,0.06);
+            border-left: 3px solid var(--accent, #3DA9FC);
+            border-radius:12px; padding: 12px 16px; margin-bottom: 8px;
+        }}
+        .ws-itin-leg-hdr {{
+            display:flex; justify-content:space-between; align-items:center; gap: 10px;
+        }}
+        .ws-itin-leg-title {{
+            font-size:.92rem; font-weight:800; color:#E6ECF7; letter-spacing:-0.01em;
+        }}
+        .ws-itin-leg-time {{
+            font-size:.7rem; color:{MUTED}; font-variant-numeric: tabular-nums;
+        }}
+        .ws-itin-leg-bar-track {{
+            height:5px; background:rgba(255,255,255,0.05); border-radius:3px;
+            margin-top:8px; overflow:hidden;
+        }}
+        .ws-itin-leg-bar-fill {{
+            height:100%; border-radius:3px;
+            background: linear-gradient(90deg, #FF3D60 0%, #FF7F50 25%, #F9C440 55%, #53E3A6 90%);
+        }}
+        .ws-itin-leg-stats {{
+            display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top:10px;
+        }}
+        .ws-itin-leg-stat {{ background: rgba(255,255,255,0.03); border-radius:8px; padding: 6px 10px; }}
+        .ws-itin-leg-stat-lbl {{
+            font-size:.56rem; letter-spacing:.14em; text-transform:uppercase; color:{MUTED}; font-weight:700;
+        }}
+        .ws-itin-leg-stat-val {{ font-size:.95rem; font-weight:800; color:#E6ECF7; }}
+        .ws-itin-leg-stat-val small {{ font-size:.6rem; color:{MUTED}; font-weight:600; }}
+        .ws-itin-leg-safety {{
+            display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px;
+            font-size:.68rem; font-weight:800; letter-spacing:.02em;
+        }}
+        .ws-itin-empty {{
+            background:{CARD}; border: 1px dashed rgba(255,255,255,0.12);
+            border-radius:14px; padding: 32px 22px; text-align:center;
+        }}
+        .ws-itin-empty-icon {{ font-size: 2.4rem; margin-bottom: 6px; }}
+        .ws-itin-empty h4 {{ margin: 0 0 4px; font-weight:800; }}
+        .ws-itin-empty p  {{ color:{MUTED}; font-size:.82rem; margin: 0; }}
+        .ws-itin-window-row {{
+            display:flex; align-items:center; gap:12px; padding: 8px 12px;
+            background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);
+            border-radius: 10px; margin-bottom: 6px;
+        }}
+        .ws-itin-window-time {{ font-weight:800; font-size:.85rem; color:#D4DAEA;
+            font-variant-numeric: tabular-nums; min-width: 92px; }}
+        .ws-itin-window-delta {{ font-size:.66rem; color:{MUTED}; min-width: 72px; }}
+        .ws-itin-window-bar {{ flex:1; height:8px; background:rgba(255,255,255,0.05); border-radius:4px; overflow:hidden; }}
+        .ws-itin-window-fill {{ height:100%; border-radius:4px;
+            background: linear-gradient(90deg, var(--accent, #53E3A6), rgba(255,255,255,0.12));
+        }}
+        .ws-itin-window-score {{ font-weight:800; font-variant-numeric: tabular-nums; min-width: 36px; text-align:right; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -958,3 +1100,279 @@ def render_trip_log_row(digest: dict, now) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+# ===================== Itinerary (Day 21) =====================
+
+def _safety_color(score: int) -> str:
+    if score >= 80: return "#53E3A6"
+    if score >= 60: return "#7EE7DA"
+    if score >= 35: return "#F9C440"
+    if score >= 20: return "#FF7F50"
+    return "#FF3D60"
+
+
+def _safety_band(score: int) -> str:
+    if score >= 80: return "Safe"
+    if score >= 60: return "Mostly Safe"
+    if score >= 35: return "Caution"
+    if score >= 20: return "High Risk"
+    return "Danger"
+
+
+def _fmt_dt(dt) -> str:
+    return dt.strftime("%a %H:%M") if dt is not None else "—"
+
+
+def _fmt_hm(dt) -> str:
+    return dt.strftime("%H:%M") if dt is not None else "—"
+
+
+def _fmt_duration(minutes: float) -> str:
+    if minutes is None:
+        return "—"
+    m = int(round(minutes))
+    if m < 60:
+        return f"{m} min"
+    h, rem = divmod(m, 60)
+    return f"{h}h{rem:02d}" if rem else f"{h}h"
+
+
+def render_itinerary_empty(
+    *, hint: str = "Add at least 2 stops, set a depart time, and click **Plan itinerary** to chain them into one safety-aware schedule.",
+) -> None:
+    st.markdown(
+        f"""
+        <div class='ws-itin-empty'>
+          <div class='ws-itin-empty-icon'>🗺️</div>
+          <h4>No itinerary yet</h4>
+          <p>{hint}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_itinerary_summary(plan) -> None:
+    score = plan.composite_score
+    color = _safety_color(score)
+    band = _safety_band(score)
+    n_stops = len(plan.stops)
+    legs = plan.legs
+
+    bands = ""
+    if legs:
+        # mini "legs by safety band" stripe — counts per band
+        buckets = {"Safe": 0, "Mostly Safe": 0, "Caution": 0, "High Risk": 0, "Danger": 0}
+        for l in legs:
+            buckets[_safety_band(l.avg_safety)] += 1
+        rows = "".join(
+            f"<div class='ws-itin-hero-band'>"
+            f"<span class='ws-itin-hero-band-dot' style='background:{_safety_color({'Safe':90,'Mostly Safe':70,'Caution':50,'High Risk':25,'Danger':10}[b])};'></span>"
+            f"{b} · {n}</div>"
+            for b, n in buckets.items() if n
+        )
+        bands = f"<div class='ws-itin-hero-bands'>{rows}</div>"
+
+    mode_label = {"safest": "Safest", "fastest": "Fastest", "forecast-safest": "Forecast-aware"}.get(plan.mode, plan.mode)
+
+    st.markdown(
+        f"""
+        <div class='ws-itin-hero'>
+          <div class='ws-itin-hero-ring' style='--ring:{color}; --pct:{score};'>
+            <div class='ws-itin-hero-ring-inner'>
+              <div class='ws-itin-hero-ring-val' style='color:{color};'>{score}</div>
+              <div class='ws-itin-hero-ring-lbl'>Itinerary score</div>
+            </div>
+          </div>
+          <div>
+            <div class='ws-itin-hero-title'>{n_stops} stops · {plan.total_km:g} km · {_fmt_duration(plan.total_minutes)}</div>
+            <div class='ws-itin-hero-sub'>{mode_label} · departs {_fmt_dt(plan.depart_at)} · arrives {_fmt_hm(plan.arrive_at)} · {band} corridor</div>
+            <div class='ws-itin-hero-stats'>
+              <div class='ws-itin-hero-stat'>
+                <div class='ws-itin-hero-stat-lbl'>Travel</div>
+                <div class='ws-itin-hero-stat-val'>{_fmt_duration(plan.total_travel_min)}</div>
+              </div>
+              <div class='ws-itin-hero-stat'>
+                <div class='ws-itin-hero-stat-lbl'>Dwell</div>
+                <div class='ws-itin-hero-stat-val'>{_fmt_duration(plan.total_dwell_min)}</div>
+              </div>
+              <div class='ws-itin-hero-stat'>
+                <div class='ws-itin-hero-stat-lbl'>Avg safety</div>
+                <div class='ws-itin-hero-stat-val'>{plan.avg_safety}<small>/100</small></div>
+              </div>
+              <div class='ws-itin-hero-stat'>
+                <div class='ws-itin-hero-stat-lbl'>Min safety</div>
+                <div class='ws-itin-hero-stat-val'>{plan.min_safety}<small>/100</small></div>
+              </div>
+              <div class='ws-itin-hero-stat'>
+                <div class='ws-itin-hero-stat-lbl'>Risk km</div>
+                <div class='ws-itin-hero-stat-val'>{plan.danger_km:g}</div>
+              </div>
+            </div>
+          </div>
+          {bands}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_itinerary_timeline(plan) -> None:
+    """Gantt-style horizontal timeline: travel bars coloured by safety,
+    dwell bars hatched teal between them."""
+    if not plan.legs:
+        return
+    from datetime import timedelta as _td
+
+    t0 = plan.depart_at
+    t1 = plan.arrive_at
+    span_min = max(15.0, (t1 - t0).total_seconds() / 60.0)
+
+    def _pct(dt) -> float:
+        return max(0.0, min(100.0, ((dt - t0).total_seconds() / 60.0) / span_min * 100.0))
+
+    # Ticks: pick ~6 evenly spaced ticks (rounded to the nearest 15 / 30 / 60 min).
+    if span_min <= 60: step = 10
+    elif span_min <= 180: step = 30
+    elif span_min <= 360: step = 60
+    else: step = 120
+    ticks_html_parts = []
+    cur = t0
+    while cur <= t1:
+        ticks_html_parts.append(
+            f"<div class='ws-itin-gantt-tick' style='left:{_pct(cur):.2f}%;'>{cur.strftime('%H:%M')}</div>"
+        )
+        cur = cur + _td(minutes=step)
+    ticks_html = "".join(ticks_html_parts)
+
+    rows_html_parts = []
+    for i, leg in enumerate(plan.legs, start=1):
+        left = _pct(leg.depart_at)
+        right = _pct(leg.arrive_at)
+        width = max(0.5, right - left)
+        bar_color = _safety_color(leg.avg_safety)
+        bar_label = (
+            f"{i}. {leg.from_stop.name} → {leg.to_stop.name} · "
+            f"{leg.distance_km:g} km · {_fmt_duration(leg.eta_minutes)} · {leg.avg_safety}/100"
+        )
+        row_inner = (
+            f"<div class='ws-itin-gantt-bar' style='left:{left:.2f}%; width:{width:.2f}%; "
+            f"background: linear-gradient(135deg, {bar_color} 0%, rgba(255,255,255,0.08) 110%); "
+            f"color: rgba(14,17,23,0.92);' title='{bar_label}'>"
+            f"{leg.distance_km:g} km · {leg.avg_safety}"
+            f"</div>"
+        )
+        # dwell block after each leg (except the last)
+        dwell_inner = ""
+        if i < len(plan.legs) and leg.to_stop.dwell_min > 0:
+            dwell_start = leg.arrive_at
+            dwell_end = dwell_start + _td(minutes=leg.to_stop.dwell_min)
+            dl = _pct(dwell_start)
+            dr = _pct(dwell_end)
+            dw = max(0.5, dr - dl)
+            dwell_inner = (
+                f"<div class='ws-itin-gantt-bar dwell' style='left:{dl:.2f}%; width:{dw:.2f}%;' "
+                f"title='Dwell at {leg.to_stop.name} · {leg.to_stop.dwell_min} min'>"
+                f"⏱ {leg.to_stop.dwell_min}m"
+                f"</div>"
+            )
+        rows_html_parts.append(
+            f"<div class='ws-itin-gantt-row'>"
+            f"<div class='ws-itin-gantt-row-lbl'>{i}. {leg.from_stop.name} → {leg.to_stop.name}</div>"
+            f"{row_inner}{dwell_inner}"
+            f"</div>"
+        )
+    rows_html = "".join(rows_html_parts)
+
+    st.markdown(
+        f"""
+        <div class='ws-itin-gantt'>
+          <div class='ws-itin-gantt-hdr'>
+            <h4>Day timeline</h4>
+            <div class='ws-itin-gantt-span'>{_fmt_dt(t0)} → {_fmt_hm(t1)} · {_fmt_duration(plan.total_minutes)}</div>
+          </div>
+          <div class='ws-itin-gantt-ruler'>{ticks_html}</div>
+          {rows_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_itinerary_legs(plan) -> None:
+    if not plan.legs:
+        return
+    for i, leg in enumerate(plan.legs, start=1):
+        color = _safety_color(leg.avg_safety)
+        band = _safety_band(leg.avg_safety)
+        pct_fill = max(2, min(100, leg.avg_safety))
+        notes = " · ".join(leg.route.notes[:2]) if leg.route.notes else ""
+        notes_html = (
+            f"<div style='font-size:.7rem; color:{MUTED}; margin-top:8px;'>{notes}</div>"
+            if notes else ""
+        )
+        st.markdown(
+            f"""
+            <div class='ws-itin-leg' style='--accent:{color};'>
+              <div class='ws-itin-leg-hdr'>
+                <div class='ws-itin-leg-title'>{i}. {leg.from_stop.name} → {leg.to_stop.name}</div>
+                <div class='ws-itin-leg-time'>{_fmt_hm(leg.depart_at)} → {_fmt_hm(leg.arrive_at)}</div>
+              </div>
+              <div class='ws-itin-leg-bar-track'>
+                <div class='ws-itin-leg-bar-fill' style='width:{pct_fill}%;'></div>
+              </div>
+              <div class='ws-itin-leg-stats'>
+                <div class='ws-itin-leg-stat'>
+                  <div class='ws-itin-leg-stat-lbl'>Distance</div>
+                  <div class='ws-itin-leg-stat-val'>{leg.distance_km:g} <small>km</small></div>
+                </div>
+                <div class='ws-itin-leg-stat'>
+                  <div class='ws-itin-leg-stat-lbl'>ETA</div>
+                  <div class='ws-itin-leg-stat-val'>{_fmt_duration(leg.eta_minutes)}</div>
+                </div>
+                <div class='ws-itin-leg-stat'>
+                  <div class='ws-itin-leg-stat-lbl'>Avg safety</div>
+                  <div class='ws-itin-leg-stat-val' style='color:{color};'>{leg.avg_safety}</div>
+                </div>
+                <div class='ws-itin-leg-stat'>
+                  <div class='ws-itin-leg-stat-lbl'>Min safety</div>
+                  <div class='ws-itin-leg-stat-val'>{leg.min_safety}</div>
+                </div>
+              </div>
+              <div style='margin-top:8px;'>
+                <span class='ws-itin-leg-safety' style='background:{color}22; color:{color}; border:1px solid {color}55;'>
+                  ● {band}
+                </span>
+                {('<span class="ws-mini-pill" style="margin-left:4px;">Risky · ' + f'{leg.danger_km:g} km</span>') if leg.danger_km > 0 else ''}
+              </div>
+              {notes_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_itinerary_windows(windows, baseline_time, *, top_k: int = 5) -> None:
+    """Show the top-k start-window candidates as score bars vs the current pick."""
+    if not windows:
+        return
+    top = windows[:top_k]
+    best_score = max(1, top[0][1].composite_score)
+    rows = []
+    for t, plan in top:
+        delta_min = int(round((t - baseline_time).total_seconds() / 60))
+        sign = "" if delta_min == 0 else ("+" if delta_min > 0 else "")
+        delta_lbl = "your pick" if delta_min == 0 else f"{sign}{delta_min} min"
+        width = max(4, int(plan.composite_score * 100 / best_score))
+        accent = _safety_color(plan.composite_score)
+        rows.append(
+            f"<div class='ws-itin-window-row'>"
+            f"<div class='ws-itin-window-time'>{t.strftime('%a %H:%M')}</div>"
+            f"<div class='ws-itin-window-delta'>{delta_lbl}</div>"
+            f"<div class='ws-itin-window-bar'><div class='ws-itin-window-fill' "
+            f"style='width:{width}%; --accent:{accent};'></div></div>"
+            f"<div class='ws-itin-window-score' style='color:{accent};'>{plan.composite_score}</div>"
+            f"</div>"
+        )
+    st.markdown("".join(rows), unsafe_allow_html=True)
