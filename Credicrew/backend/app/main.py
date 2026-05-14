@@ -8,8 +8,9 @@ from app.routers.match import router as match_router
 from app.routers.outreach import router as outreach_router
 from app.routers.interview import router as interview_router
 from app.routers.decision import router as decision_router
+from app.routers.offer import router as offer_router
 
-app = FastAPI(title="Credicrew API", version="0.5.0")
+app = FastAPI(title="Credicrew API", version="0.6.0")
 
 # Allow local dev UI
 app.add_middleware(
@@ -27,6 +28,7 @@ app.include_router(match_router)
 app.include_router(outreach_router)
 app.include_router(interview_router)
 app.include_router(decision_router)
+app.include_router(offer_router)
 
 
 @app.get("/")
@@ -41,5 +43,9 @@ async def root() -> dict[str, str]:
         "interview_ics": "POST /interview/ics",
         "decision_summary": "POST /decision/summary",
         "decision_debrief": "POST /decision/debrief",
+        "offer_benchmark": "POST /offer/benchmark",
+        "offer_simulate": "POST /offer/simulate",
+        "offer_compose": "POST /offer/compose",
+        "offer_full": "POST /offer/full",
         "docs": "/docs",
     }

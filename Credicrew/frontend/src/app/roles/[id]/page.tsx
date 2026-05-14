@@ -585,6 +585,13 @@ export default function RoleDetail() {
                           >
                             {ir && ir.ratedCount > 0 ? 'Open interview' : 'Start interview'}
                           </Link>
+                          <Link
+                            href={`/roles/${role.id}/offer/${c.id}`}
+                            className="rounded-md border border-emerald-400/40 bg-gradient-to-r from-emerald-400/15 to-violet-400/15 px-2.5 py-1 text-[11px] font-medium text-emerald-200 hover:from-emerald-400/25 hover:to-violet-400/25"
+                            title="Open Offer Studio"
+                          >
+                            Offer →
+                          </Link>
                           <button
                             onClick={() => setOutreach({ candidateId: c.id })}
                             className="rounded-md bg-indigo-500 px-2.5 py-1 text-[11px] font-medium text-black hover:bg-indigo-400"
