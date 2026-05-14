@@ -4,14 +4,68 @@ Credicrew is a talent-discovery tool that doesn't stop at "here's a ranked
 list." It runs the **whole hiring loop**: parse a JD, get an explainable
 shortlist, track candidates through statuses, send a tailored outreach
 email, **run the interview** with a JD-tailored prep kit and a weighted
-scorecard, then **decide** in a calibrated comparison studio that ranks
-the entire pool, generates a committee debrief, and exports `.ics` slots
-for the next round — all from a dark, fast, single-page workspace.
+scorecard, **decide** in a calibrated comparison studio that ranks the
+entire pool, then **close** in an Offer Studio that benchmarks comp
+against the market, simulates the candidate's accept-probability live,
+and ships a print-ready offer letter — all from a dark, fast,
+single-page workspace.
 
-The same scoring + email + interview + decision logic runs in the browser
-(for instant UI feedback) and on the FastAPI backend (for programmatic /
-agentic use), so plans, drafts, composite scores, and ranked verdicts are
-byte-for-byte identical wherever they're generated.
+The same scoring + email + interview + decision + offer logic runs in
+the browser (for instant UI feedback) and on the FastAPI backend (for
+programmatic / agentic use), so plans, drafts, composite scores, ranked
+verdicts, and comp benchmarks are byte-for-byte identical wherever
+they're generated.
+
+---
+
+## What's new — Offer Studio (Day 22)
+
+Decision Studio picked the candidate. Offer Studio gets them to sign.
+Day 22 closes the JD → match → outreach → interview → decision → **offer**
+loop with the missing money + math layer.
+
+- **Deterministic compensation benchmark** — P25 / P50 / P75 / P90 base
+  bands derived from a Bengaluru-normalised seniority anchor, a city
+  multiplier (Mumbai 1.05× · Bengaluru 1.00× · Pune 0.92× · Kochi
+  0.78× …), and a skill-rarity premium (Kubernetes / Rust / PyTorch /
+  Kafka / LLM bump +4% each; modern-stack signals — TS / FastAPI /
+  Next.js / Postgres … — bump +1.5% each, capped at +20%). Equity
+  bands by seniority (intern 0% · senior 0.10–0.30% · staff 0.25–0.65%
+  · principal 0.50–1.40% …), target bonus %, and a suggested sign-on
+  that auto-fills 50% of the P50→P75 gap.
+- **Win-probability simulator** — explainable logistic model. Logit is
+  a sum of weighted terms — `+3.5·(base/P50 − 1) + 0.8·(equity/P50 − 1)
+  + 1.8·(signOn/base) − 0.18·rareSkills − 0.45·topTier − 0.2·decay
+  − 0.5·thinData …` — and the UI renders every contribution as a
+  signed bar so you can see *why* the number moves when you drag a
+  slider. σ(logit) → probability, banded `long_shot / uphill /
+  coin_flip / likely / lock`.
+- **Live counterfactual sliders** — drag base, equity %, sign-on, target
+  bonus %, vesting years, cliff. Comp ladder marker snaps to its band
+  position; dial recomputes; factor stack re-orders by magnitude.
+- **Print-ready offer letter** — Markdown composer renders a clean
+  letter (company, role, location, table of comp items, vesting, band
+  position commentary, notes, sign-off) into an in-app preview;
+  `Print / PDF` button uses a dedicated `@media print` stylesheet to
+  swap to light-on-white. `Download .md` ships the Markdown.
+- **iCal offer-expiry event** — generates an RFC-5545 `.ics` for the
+  offer-expiry date with all the comp lines folded into the
+  DESCRIPTION, so your calendar reminds you (and your candidate) before
+  it lapses.
+- **Auto-save drafts** — every slider tweak persists to localStorage
+  under `credicrew:offers:v1`, keyed `${roleId}:${candidateId}`, so you
+  can flip between candidates without losing state.
+- **Backend mirror** — 4 new endpoints on the FastAPI app, all
+  parity-tested against the TS engine. `POST /offer/benchmark` (band +
+  equity + sign-on + bonus from JD/plan + matched skills),
+  `POST /offer/simulate` (win-prob + per-factor logit contributions for
+  a draft), `POST /offer/compose` (Markdown letter), and
+  `POST /offer/full` (one-shot bundle for agentic clients). Pydantic
+  accepts both snake_case and camelCase so curl-driven and TS clients
+  hit the same endpoints.
+- **Deep links** — Decision Studio focus pane gained `Offer Studio →`
+  (gradient emerald→violet). Role-detail shortlist rows gained a
+  per-row `Offer →` button next to *Start interview*.
 
 ---
 
@@ -301,6 +355,35 @@ Build an iCalendar `VCALENDAR` with N `VEVENT`s and stream it as
 header. CRLF-terminated, UTC `Z`-suffixed `DTSTART`/`DTEND`, line-folded
 at 75 octets, `\,;\n\\` escaped per RFC 5545 §3.3.11.
 
+### `POST /offer/benchmark`
+Compensation benchmark from a JD (or pre-parsed plan) + the candidate's
+matched skill list. Returns `{ benchmark: { base: {p25,p50,p75,p90}, equity:
+{pct_p25,pct_p50,pct_p75}, targetBonusPct, signOnSuggested, citymult,
+skillPremium, rationale }, suggested?: OfferDraft }`.
+
+```bash
+curl -X POST http://127.0.0.1:8000/offer/benchmark \
+  -H 'content-type: application/json' \
+  -d '{
+    "jd": "Senior backend engineer (FastAPI + Postgres + Kubernetes) in Bengaluru",
+    "matched_skills": ["fastapi","postgres","kubernetes"]
+  }'
+```
+
+### `POST /offer/simulate`
+Runs the win-probability logistic for a given draft + benchmark.
+Returns `{ benchmark, win: { probability, logit, band, factors[] }, bandPosition }`
+where each `factor` carries a `delta` (its contribution to the logit) so the
+caller can render the explanation. Accepts both snake_case and camelCase
+draft fields (`equity_pct` ≡ `equityPct`, `sign_on` ≡ `signOn`, …).
+
+### `POST /offer/compose`
+Renders the Markdown offer letter. Returns `{ markdown, benchmark }`.
+
+### `POST /offer/full`
+Convenience bundle — runs `benchmark + simulate + compose` in one
+round-trip. Used by agentic clients that don't want three sequential calls.
+
 ### Endpoint map
 
 | Method | Path                  | Purpose                                                 |
@@ -315,6 +398,10 @@ at 75 octets, `\,;\n\\` escaped per RFC 5545 §3.3.11.
 | POST   | `/interview/ics`      | RFC-5545 `.ics` for proposed interview slots            |
 | POST   | `/decision/summary`   | calibrated ranking + verdicts + per-dim stats           |
 | POST   | `/decision/debrief`   | Markdown committee debrief                              |
+| POST   | `/offer/benchmark`    | comp + equity + sign-on benchmark (P25/P50/P75/P90)     |
+| POST   | `/offer/simulate`     | win-probability + per-factor logit contributions        |
+| POST   | `/offer/compose`      | Markdown offer letter                                   |
+| POST   | `/offer/full`         | benchmark + simulate + compose bundle                   |
 
 ---
 
@@ -344,14 +431,17 @@ Credicrew/
 │       │       ├── share/page.tsx  # Import a shared role
 │       │       └── [id]/
 │       │           ├── page.tsx    # Role detail (JD, matches, shortlist, CSV)
-│       │           ├── decision/page.tsx  # Decision Studio (NEW)
-│       │           └── interview/[candidateId]/page.tsx  # Interview workspace
+│       │           ├── decision/page.tsx                 # Decision Studio
+│       │           ├── interview/[candidateId]/page.tsx  # Interview workspace
+│       │           └── offer/[candidateId]/page.tsx      # Offer Studio (NEW)
 │       ├── components/
 │       │   ├── CandidateCard.tsx
+│       │   ├── CompLadder.tsx           # P25→P90 comp band with offer marker
 │       │   ├── DecisionMatrix.tsx       # rubric × candidate heatmap
 │       │   ├── DiversityCard.tsx
 │       │   ├── InterviewStepper.tsx
 │       │   ├── MatchExplain.tsx
+│       │   ├── OfferLetterPreview.tsx   # print-ready offer letter renderer
 │       │   ├── OutreachModal.tsx
 │       │   ├── PipelineAnalytics.tsx    # funnel + conversion rates
 │       │   ├── QuestionCard.tsx
@@ -359,13 +449,15 @@ Credicrew/
 │       │   ├── RoleCard.tsx
 │       │   ├── RubricSlider.tsx
 │       │   ├── SlotProposer.tsx         # iCal slot picker
-│       │   └── StatusPill.tsx
+│       │   ├── StatusPill.tsx
+│       │   └── WinProbabilityDial.tsx   # SVG dial + signed factor bars
 │       └── lib/
 │           ├── csv.ts              # tiny RFC-4180 writer + downloader
 │           ├── decision.ts         # calibrated ranking · flags · debrief
 │           ├── ics.ts              # RFC-5545 minimal generator
 │           ├── interview.ts        # rubric · question bank · scorecard
 │           ├── match.ts            # TS match engine (parity w/ backend)
+│           ├── offer.ts            # comp band · win-prob · letter (parity w/ backend)
 │           ├── outreach.ts         # TS email composer (parity w/ backend)
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
@@ -378,10 +470,13 @@ Credicrew/
 - Server-persisted roles (Postgres) so they survive across browsers.
 - LLM-assisted JD parsing for messy real-world specs (still fall back to
   the deterministic path).
+- Per-role "team peer parity" check — flag offers that drift too far
+  from the team's existing accepted offers at similar interview composite.
 - ~~iCal export for an "Interview" status with proposed slots.~~ ✅ Day 17.
 - ~~CSV export of a shortlist for ATS handoff.~~ ✅ Day 12.
 - ~~Interview kit: tailored prompts, weighted rubric, scorecard, hire/no-hire signal.~~ ✅ Day 12.
 - ~~Decision Studio: calibrated comparison, hire signal, committee debrief.~~ ✅ Day 17.
+- ~~Offer Studio: comp benchmarking, accept-probability simulator, print-ready letter.~~ ✅ Day 22.
 
 ---
 
