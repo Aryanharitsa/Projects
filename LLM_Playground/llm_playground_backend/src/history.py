@@ -189,6 +189,123 @@ def save_run(arena: Dict[str, Any], prompt: str, system_prompt: str = "") -> str
     return run_id
 
 
+def update_consensus(run_id: str, consensus_payload: Dict[str, Any]) -> bool:
+    """Attach a multi-judge consensus result to an existing run.
+
+    The full consensus block (panel verdicts + agreement + per-judge breakdown)
+    lands at ``payload.consensus``. We *also* synthesize a back-compat
+    ``payload.judge`` view from panel means so the existing History list/
+    detail rendering keeps working with no awareness of consensus runs — the
+    indexed ``judge_provider`` / ``judge_model`` / ``judge_winner`` /
+    ``judge_top_score`` columns get a "consensus" sentinel and the mean-of-
+    panel score for the top candidate.
+    """
+    if not run_id:
+        return False
+
+    consensus: List[Dict[str, Any]] = consensus_payload.get("consensus") or []
+    rubric:    List[Dict[str, Any]] = consensus_payload.get("rubric") or []
+    leaderboard: List[Dict[str, Any]] = consensus_payload.get("leaderboard") or []
+    panel_meta: Dict[str, Any] = consensus_payload.get("panel_meta") or {}
+    judges = consensus_payload.get("judges") or []
+
+    # Back-compat verdicts: mean composite + mean per-criterion. We round
+    # per-criterion means to int for the existing 1-5 bar rendering, but keep
+    # the float in payload.consensus for richer panel UIs.
+    crit_keys = [r["name"] for r in rubric]
+    compat_verdicts: List[Dict[str, Any]] = []
+    for v in consensus:
+        rounded_scores: Dict[str, int] = {}
+        for k in crit_keys:
+            cell = (v.get("per_criterion") or {}).get(k) or {}
+            mean = cell.get("mean", 1)
+            try:
+                rounded_scores[k] = max(1, min(5, int(round(float(mean)))))
+            except (TypeError, ValueError):
+                rounded_scores[k] = 1
+        top_rat = (v.get("rationales") or [None])[0]
+        compat_verdicts.append({
+            "candidate":  v["candidate"],
+            "provider":   v.get("provider"),
+            "model":      v.get("model"),
+            "scores":     rounded_scores,
+            "rationale":  (top_rat.get("text") if isinstance(top_rat, dict) else "") or "",
+            "composite":  int(round(v.get("composite_mean") or 0)),
+        })
+
+    compat_leaderboard = [
+        {
+            "candidate": row["candidate"],
+            "model":     row["model"],
+            "provider":  row["provider"],
+            "composite": int(round(row.get("composite_mean") or 0)),
+        }
+        for row in leaderboard
+    ]
+
+    top = compat_leaderboard[0] if compat_leaderboard else None
+    judge_winner = f"{top.get('provider','?')}:{top.get('model','?')}" if top else None
+    judge_top_score = float(top["composite"]) if top else None
+
+    panel_label = f"consensus({panel_meta.get('n_judges', len(judges))})"
+
+    with _DB_LOCK, _conn() as con:
+        row = con.execute("SELECT payload FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return False
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        payload["consensus"] = {
+            "rubric":         rubric,
+            "consensus":      consensus,
+            "leaderboard":    leaderboard,
+            "winner":         consensus_payload.get("winner"),
+            "agreement":      consensus_payload.get("agreement"),
+            "judges":         judges,
+            "judges_failed":  consensus_payload.get("judges_failed") or [],
+            "panel_meta":     panel_meta,
+        }
+        payload["judge"] = {
+            "rubric":      rubric,
+            "verdicts":    compat_verdicts,
+            "leaderboard": compat_leaderboard,
+            "winner":      consensus_payload.get("winner"),
+            "judge": {
+                "provider":      panel_label,
+                "model":         f"{len(judges)} judges",
+                "latency":       panel_meta.get("max_latency"),
+                "input_tokens":  panel_meta.get("total_input_tokens"),
+                "output_tokens": panel_meta.get("total_output_tokens"),
+                "total_tokens": (
+                    (panel_meta.get("total_input_tokens") or 0)
+                    + (panel_meta.get("total_output_tokens") or 0)
+                ),
+                "cost_usd":      panel_meta.get("total_cost_usd"),
+            },
+        }
+        con.execute(
+            """UPDATE runs
+               SET judged = 1,
+                   judge_provider = ?,
+                   judge_model = ?,
+                   judge_winner = ?,
+                   judge_top_score = ?,
+                   payload = ?
+               WHERE id = ?""",
+            (
+                panel_label,
+                f"{len(judges)} judges",
+                judge_winner,
+                judge_top_score,
+                json.dumps(payload, ensure_ascii=False),
+                run_id,
+            ),
+        )
+    return True
+
+
 def update_judge(run_id: str, judge_payload: Dict[str, Any]) -> bool:
     """Attach a judge result to an existing run. Returns False if the run
     has been deleted in the meantime — the judge call still succeeded, we

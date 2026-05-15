@@ -140,6 +140,12 @@ const App = () => {
   const [judging, setJudging] = useState(false);
   const [judgeResults, setJudgeResults] = useState(null); // { rubric, verdicts, leaderboard, winner, judge }
   const [judgeError, setJudgeError] = useState('');
+  // --- Multi-judge consensus state ---
+  // Each entry { id, provider, model } — when non-empty the "Judge responses"
+  // button fans the same prompt out to every entry (plus the primary judge)
+  // in parallel and surfaces a consensus leaderboard + agreement stats.
+  const [judgePanel, setJudgePanel] = useState([]);  // additional judges beyond the primary
+  const [consensusResults, setConsensusResults] = useState(null);
 
   // --- Settings Modal State ---
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -645,6 +651,7 @@ const App = () => {
     setArenaRunning(true);
     setArenaResults(null);
     setJudgeResults(null);
+    setConsensusResults(null);
     setJudgeError('');
     try {
       const payload = {
@@ -694,21 +701,56 @@ const App = () => {
     toast.success("Rubric reset to defaults");
   };
 
+  // Build the full judge roster from the primary picker + the panel list,
+  // de-duped on `${provider}:${model}` while preserving order.
+  const buildJudgeRoster = () => {
+    const seen = new Set();
+    const out = [];
+    const push = (p, m) => {
+      const prov = (p || '').trim();
+      const mdl = (m || '').trim();
+      if (!prov || !mdl) return;
+      const key = `${prov}:${mdl}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ provider: prov, model: mdl });
+    };
+    push(judgeProvider, judgeModel);
+    judgePanel.forEach(j => push(j.provider, j.model));
+    return out;
+  };
+
+  const addPanelJudge = () => {
+    setJudgePanel(p => [
+      ...p,
+      { id: `j${Date.now()}`, provider: 'OpenAI', model: 'gpt-4o' },
+    ]);
+  };
+  const updatePanelJudge = (id, patch) => {
+    setJudgePanel(p => p.map(j => (j.id === id ? { ...j, ...patch } : j)));
+  };
+  const removePanelJudge = (id) => {
+    setJudgePanel(p => p.filter(j => j.id !== id));
+  };
+
   const runJudge = async () => {
     if (!arenaResults) return;
-    if (!judgeProvider || !judgeModel.trim()) {
-      toast.error("Pick a judge provider and model");
+    const roster = buildJudgeRoster();
+    if (roster.length === 0) {
+      toast.error("Pick at least one judge provider and model");
       return;
     }
     if (rubric.length === 0) {
       toast.error("Rubric is empty");
       return;
     }
+    const isConsensus = roster.length >= 2;
     setJudging(true);
     setJudgeError('');
     setJudgeResults(null);
+    setConsensusResults(null);
     try {
-      const payload = {
+      const basePayload = {
         prompt: arenaPrompt,
         system_prompt: systemPrompt,
         candidates: arenaResults.results.map(r => ({
@@ -720,14 +762,25 @@ const App = () => {
         // Tying back to the persisted row lets the History tab show the
         // verdict without us re-deriving the leaderboard there.
         run_id: arenaResults.request_id,
-        judge:  { provider: judgeProvider, model: judgeModel.trim() },
         rubric: rubric.map(r => ({ name: r.name, description: r.description, weight: Number(r.weight) || 0 })),
       };
-      const res = await ApiService.judge(payload);
-      if (!res.success) throw new Error(res.error || 'Judge call failed');
-      setJudgeResults(res);
-      const winnerName = res.leaderboard?.[0]?.model || '—';
-      toast.success(`Judge complete — top: ${winnerName}`);
+      if (isConsensus) {
+        const res = await ApiService.judgeConsensus({ ...basePayload, judges: roster });
+        if (!res.success) throw new Error(res.error || 'Consensus call failed');
+        setConsensusResults(res);
+        const top = res.leaderboard?.[0];
+        const kappa = res.agreement?.overall?.fleiss_kappa;
+        const kappaStr = kappa == null ? '' : ` · κ=${kappa}`;
+        toast.success(
+          `Panel of ${roster.length} judges — top: ${top?.model || '—'} (${top?.composite_mean ?? '—'})${kappaStr}`
+        );
+      } else {
+        const res = await ApiService.judge({ ...basePayload, judge: roster[0] });
+        if (!res.success) throw new Error(res.error || 'Judge call failed');
+        setJudgeResults(res);
+        const winnerName = res.leaderboard?.[0]?.model || '—';
+        toast.success(`Judge complete — top: ${winnerName}`);
+      }
     } catch (e) {
       setJudgeError(e.message);
       toast.error(`Judge error: ${e.message}`);
@@ -747,6 +800,7 @@ const App = () => {
         system_prompt: systemPrompt,
         ...arenaResults,
         judge: judgeResults || undefined,
+        consensus: consensusResults || undefined,
       }, null, 2)],
       { type: 'application/json' },
     );
@@ -763,12 +817,40 @@ const App = () => {
     c == null ? '—' : c < 0.0001 ? `$${(c * 1000).toFixed(3)}m` : `$${c.toFixed(4)}`;
 
   // Build a verdict-by-candidate-index map for fast lookups in the Arena cards.
+  // When consensus is active we synthesise a single-judge-shaped verdict from
+  // the panel means so the existing per-card ScoreBars / rationale rendering
+  // works untouched.
   const verdictByCandidate = (() => {
+    if (consensusResults?.consensus) {
+      const m = {};
+      const rb = consensusResults.rubric || [];
+      consensusResults.consensus.forEach(v => {
+        const scores = {};
+        rb.forEach(r => {
+          const cell = v.per_criterion?.[r.name];
+          scores[r.name] = cell ? Math.max(1, Math.min(5, Math.round(cell.mean))) : 1;
+        });
+        const topRat = (v.rationales && v.rationales[0]) || null;
+        m[v.candidate] = {
+          candidate: v.candidate,
+          provider:  v.provider,
+          model:     v.model,
+          scores,
+          rationale: topRat ? `${topRat.judge}: ${topRat.text}` : '',
+          composite: Math.round(v.composite_mean || 0),
+        };
+      });
+      return m;
+    }
     if (!judgeResults?.verdicts) return {};
     const m = {};
     judgeResults.verdicts.forEach(v => { m[v.candidate] = v; });
     return m;
   })();
+
+  // For per-card rendering of consensus rubric (use consensus rubric if set).
+  const activeRubric = consensusResults?.rubric || judgeResults?.rubric;
+  const activeWinner = consensusResults?.winner ?? judgeResults?.winner;
 
   // ScoreRing — conic-gradient ring rendering 0-100 composite score.
   const ScoreRing = ({ value = 0, size = 56, label = "", trophy = false }) => {
@@ -1267,27 +1349,39 @@ const App = () => {
                           {rubricEditorOpen ? 'Hide rubric' : 'Edit rubric'}
                         </Button>
                       )}
-                      {arenaResults && (
-                        <Button
-                          onClick={runJudge}
-                          disabled={judging || arenaResults.results.every(r => r.status !== 'success')}
-                          size="sm"
-                          className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:opacity-90 gap-1"
-                          title="Score every candidate with an LLM judge"
-                        >
-                          {judging ? (
-                            <>
-                              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              Scoring…
-                            </>
-                          ) : (
-                            <>
-                              <Gavel className="w-4 h-4" />
-                              {judgeResults ? 'Re-judge' : 'Judge responses'}
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      {arenaResults && (() => {
+                        const rosterSize = buildJudgeRoster().length;
+                        const isPanel = rosterSize >= 2;
+                        const hasResult = judgeResults || consensusResults;
+                        const label = isPanel
+                          ? (hasResult ? `Re-judge · panel of ${rosterSize}` : `Run consensus · ${rosterSize} judges`)
+                          : (hasResult ? 'Re-judge' : 'Judge responses');
+                        return (
+                          <Button
+                            onClick={runJudge}
+                            disabled={judging || arenaResults.results.every(r => r.status !== 'success')}
+                            size="sm"
+                            className={
+                              isPanel
+                                ? "bg-gradient-to-r from-fuchsia-500 via-orange-500 to-amber-500 text-white hover:opacity-90 gap-1"
+                                : "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:opacity-90 gap-1"
+                            }
+                            title={isPanel ? `Fan out the rubric to ${rosterSize} judges in parallel and aggregate` : 'Score every candidate with an LLM judge'}
+                          >
+                            {judging ? (
+                              <>
+                                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                {isPanel ? `Polling ${rosterSize} judges…` : 'Scoring…'}
+                              </>
+                            ) : (
+                              <>
+                                <Gavel className="w-4 h-4" />
+                                {label}
+                              </>
+                            )}
+                          </Button>
+                        );
+                      })()}
                       {arenaResults && (
                         <Button onClick={downloadArena} size="sm" variant="outline" className="gap-1">
                           <Download className="w-4 h-4" /> Export JSON
@@ -1361,27 +1455,78 @@ const App = () => {
                             </Button>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                            <div>
-                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">Judge provider</Label>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">
+                                Judge panel — fans out in parallel · ≥ 2 enables consensus
+                              </Label>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                {buildJudgeRoster().length} judge{buildJudgeRoster().length === 1 ? '' : 's'}
+                              </span>
+                            </div>
+
+                            {/* Primary judge row */}
+                            <div className="grid grid-cols-12 gap-2 items-center bg-white/80 rounded-lg p-2 border border-amber-100">
+                              <div className="col-span-1 grid place-items-center">
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 rounded px-1 py-0.5">#1</span>
+                              </div>
                               <Select value={judgeProvider} onValueChange={setJudgeProvider}>
-                                <SelectTrigger className="h-8 mt-1 bg-white"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="col-span-3 h-7 bg-white text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="OpenAI">OpenAI</SelectItem>
                                   <SelectItem value="Anthropic">Anthropic</SelectItem>
                                   <SelectItem value="Google">Google</SelectItem>
                                 </SelectContent>
                               </Select>
-                            </div>
-                            <div className="sm:col-span-2">
-                              <Label className="text-[10px] uppercase tracking-wide text-amber-800">Judge model</Label>
                               <Input
                                 value={judgeModel}
                                 onChange={e => setJudgeModel(e.target.value)}
                                 placeholder="e.g. claude-3-5-sonnet-latest"
-                                className="h-8 mt-1 bg-white text-xs"
+                                className="col-span-7 h-7 text-xs font-mono"
                               />
+                              <div className="col-span-1" />
                             </div>
+
+                            {/* Extra panel judges */}
+                            {judgePanel.map((j, idx) => (
+                              <div key={j.id} className="grid grid-cols-12 gap-2 items-center bg-white/80 rounded-lg p-2 border border-amber-100">
+                                <div className="col-span-1 grid place-items-center">
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 rounded px-1 py-0.5">#{idx + 2}</span>
+                                </div>
+                                <Select value={j.provider} onValueChange={(v) => updatePanelJudge(j.id, { provider: v })}>
+                                  <SelectTrigger className="col-span-3 h-7 bg-white text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="OpenAI">OpenAI</SelectItem>
+                                    <SelectItem value="Anthropic">Anthropic</SelectItem>
+                                    <SelectItem value="Google">Google</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Input
+                                  value={j.model}
+                                  onChange={e => updatePanelJudge(j.id, { model: e.target.value })}
+                                  placeholder="model name"
+                                  className="col-span-7 h-7 text-xs font-mono"
+                                />
+                                <Button
+                                  onClick={() => removePanelJudge(j.id)}
+                                  size="sm" variant="ghost"
+                                  className="col-span-1 h-7 p-1 text-red-500 hover:text-red-600"
+                                  title="Remove judge"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+
+                            <Button
+                              onClick={addPanelJudge}
+                              size="sm" variant="outline"
+                              className="h-7 gap-1 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                              disabled={judgePanel.length >= 5}
+                              title={judgePanel.length >= 5 ? 'Max 6 judges (1 primary + 5 panel)' : 'Add a panel judge'}
+                            >
+                              <Plus className="w-3 h-3" /> Add judge to panel
+                            </Button>
                           </div>
 
                           <div className="space-y-2">
@@ -1499,6 +1644,191 @@ const App = () => {
                         </div>
                       )}
 
+                      {/* Multi-judge consensus panel */}
+                      {consensusResults && consensusResults.leaderboard?.length > 0 && (() => {
+                        const pm = consensusResults.panel_meta || {};
+                        const ag = consensusResults.agreement || {};
+                        const overall = ag.overall || {};
+                        const kappa = overall.fleiss_kappa;
+                        const kappaLabel =
+                          kappa == null      ? '—'          :
+                          kappa >= 0.81      ? 'almost perfect' :
+                          kappa >= 0.61      ? 'substantial' :
+                          kappa >= 0.41      ? 'moderate'    :
+                          kappa >= 0.21      ? 'fair'        :
+                          kappa >= 0         ? 'slight'      : 'disagreement';
+                        const kappaColor =
+                          kappa == null      ? 'bg-gray-100 text-gray-600' :
+                          kappa >= 0.61      ? 'bg-emerald-100 text-emerald-800' :
+                          kappa >= 0.21      ? 'bg-amber-100 text-amber-800' :
+                                               'bg-rose-100 text-rose-800';
+                        // Most-contested = highest composite std.
+                        const mostContested = [...consensusResults.consensus]
+                          .sort((a, b) => (b.composite_std || 0) - (a.composite_std || 0))[0];
+
+                        return (
+                          <div className="rounded-xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 via-amber-50/40 to-orange-50 p-4 space-y-4">
+                            {/* Header */}
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Gavel className="w-4 h-4 text-fuchsia-700" />
+                                <span className="text-sm font-semibold text-fuchsia-900">
+                                  Panel consensus — {pm.n_judges} judges
+                                </span>
+                                {pm.n_failed > 0 && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                                    {pm.n_failed} failed
+                                  </span>
+                                )}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${kappaColor}`}
+                                      title="Fleiss' kappa: 1=perfect agreement, 0=chance, <0=systematic disagreement">
+                                  κ = {kappa == null ? '—' : kappa.toFixed(2)} · {kappaLabel}
+                                </span>
+                                <span className="text-[10px] text-fuchsia-700/80 font-mono">
+                                  ±{overall.mean_composite_std?.toFixed?.(1) ?? overall.mean_composite_std} avg spread
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-fuchsia-700/80 font-mono">
+                                {pm.max_latency}s parallel · {formatCost(pm.total_cost_usd)}
+                              </div>
+                            </div>
+
+                            {/* Leaderboard with confidence bars (min-max range overlay) */}
+                            <div className="space-y-1.5">
+                              {consensusResults.leaderboard.map((row, rank) => {
+                                const colors = PROVIDER_COLORS[row.provider] || { dot: 'bg-gray-400', text: 'text-gray-700' };
+                                const mean = row.composite_mean || 0;
+                                const lo = row.composite_min || 0;
+                                const hi = row.composite_max || 0;
+                                return (
+                                  <div key={row.candidate} className="grid grid-cols-12 items-center gap-2 bg-white/80 rounded-lg px-3 py-2 ring-1 ring-fuchsia-100">
+                                    <div className="col-span-1 text-[11px] font-bold text-fuchsia-800 flex items-center gap-1">
+                                      {rank === 0 ? <Award className="w-3.5 h-3.5 text-amber-500" /> : <span className="w-3.5 inline-block text-center">#{rank+1}</span>}
+                                    </div>
+                                    <div className="col-span-3 flex items-center gap-2 min-w-0">
+                                      <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                                      <span className={`text-[11px] font-semibold ${colors.text}`}>{row.provider}</span>
+                                    </div>
+                                    <div className="col-span-3 text-xs font-mono text-gray-700 truncate" title={row.model}>
+                                      {row.model}
+                                    </div>
+                                    {/* Range bar: gray min-max range, coloured mean tick */}
+                                    <div className="col-span-3 h-2 bg-gray-100 rounded-full relative overflow-visible">
+                                      <div
+                                        className="absolute top-0 h-2 rounded-full bg-gray-300"
+                                        style={{ left: `${lo}%`, width: `${Math.max(0, hi - lo)}%` }}
+                                        title={`range ${lo}–${hi}`}
+                                      />
+                                      <div
+                                        className="absolute -top-0.5 h-3 w-1 rounded"
+                                        style={{
+                                          left: `calc(${mean}% - 2px)`,
+                                          background: `hsl(${Math.round(mean * 1.2)} 80% 45%)`,
+                                        }}
+                                        title={`panel mean ${mean}`}
+                                      />
+                                    </div>
+                                    <div className="col-span-2 flex items-center justify-end gap-2 text-xs">
+                                      <span className="font-mono tabular-nums text-gray-800">{mean}</span>
+                                      <span className="text-[10px] font-mono text-gray-400">±{row.composite_std}</span>
+                                      {row.winner_votes > 0 && (
+                                        <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                          {row.winner_votes}/{row.n_judges}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Two-up: per-criterion agreement + per-judge breakdown */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="bg-white/70 rounded-lg p-3 ring-1 ring-fuchsia-100">
+                                <div className="text-[11px] uppercase tracking-wide text-fuchsia-800 font-semibold mb-2">
+                                  Per-criterion agreement (Fleiss' κ)
+                                </div>
+                                <div className="space-y-1.5">
+                                  {(consensusResults.rubric || []).map(r => {
+                                    const cell = ag.per_criterion?.[r.name];
+                                    const k = cell?.fleiss_kappa;
+                                    const pct = k == null ? 0 : Math.max(0, Math.min(100, (k + 0.2) / 1.2 * 100));
+                                    const hue = k == null ? 0 : Math.max(0, Math.min(140, (k + 0.2) * 100));
+                                    return (
+                                      <div key={r.name} className="flex items-center gap-2">
+                                        <div className="text-[10px] uppercase tracking-wide text-gray-600 w-[88px] truncate" title={r.description}>
+                                          {r.name}
+                                        </div>
+                                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full"
+                                            style={{ width: `${pct}%`, background: `hsl(${hue} 80% 50%)` }}
+                                          />
+                                        </div>
+                                        <div className="text-[10px] font-mono tabular-nums w-10 text-right text-gray-700">
+                                          {k == null ? '—' : k.toFixed(2)}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="bg-white/70 rounded-lg p-3 ring-1 ring-fuchsia-100">
+                                <div className="text-[11px] uppercase tracking-wide text-fuchsia-800 font-semibold mb-2">
+                                  Per-judge top pick · vs panel mean #1
+                                </div>
+                                <div className="space-y-1.5">
+                                  {(ag.per_judge || []).map((pj, idx) => {
+                                    const topModel = consensusResults.consensus[pj.their_top]?.model || '?';
+                                    const colors = PROVIDER_COLORS[pj.provider] || { dot: 'bg-gray-400', text: 'text-gray-700' };
+                                    return (
+                                      <div key={idx} className="flex items-center gap-2 text-[11px]">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+                                        <span className={`font-semibold ${colors.text} min-w-0 truncate`} title={pj.judge}>
+                                          {pj.model}
+                                        </span>
+                                        <ChevronRight className="w-3 h-3 text-gray-400 shrink-0" />
+                                        <span className="font-mono text-gray-700 truncate flex-1" title={topModel}>
+                                          {topModel}
+                                        </span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0
+                                          ${pj.agrees_with_panel ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                          {pj.agrees_with_panel ? '✓ agrees' : '✗ dissents'}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                  {pm.n_failed > 0 && consensusResults.judges_failed?.length > 0 && (
+                                    <div className="pt-1.5 border-t border-rose-100 mt-1.5 space-y-1">
+                                      {consensusResults.judges_failed.map((jf, idx) => (
+                                        <div key={`f${idx}`} className="text-[10px] text-rose-700 flex items-start gap-1.5">
+                                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                                          <span className="font-mono">{jf.provider} · {jf.model}</span>
+                                          <span className="text-rose-600/80 truncate">{jf.error}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Most-contested highlight */}
+                            {mostContested && mostContested.composite_std > 0 && (
+                              <div className="text-[11px] flex items-center gap-2 px-3 py-2 bg-amber-50/70 border border-amber-200 rounded-lg">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                <span className="text-amber-900">
+                                  Most contested: <span className="font-mono font-semibold">{mostContested.model}</span> —
+                                  judges spread {mostContested.composite_min}-{mostContested.composite_max}
+                                  {' '}(±{mostContested.composite_std} from mean {mostContested.composite_mean}).
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {/* Headline metrics */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
@@ -1531,7 +1861,8 @@ const App = () => {
                           const isCheapest = arenaResults.winners?.cheapest === r.model;
                           const isVerbose = arenaResults.winners?.most_verbose === r.model;
                           const verdict = verdictByCandidate[i];
-                          const isJudgeWinner = judgeResults?.winner === i;
+                          const isJudgeWinner = activeWinner === i;
+                          const consensusCand = consensusResults?.consensus?.[i];
                           return (
                             <div
                               key={i}
@@ -1581,11 +1912,24 @@ const App = () => {
                                   <ScoreRing
                                     value={verdict.composite}
                                     size={52}
-                                    label="score"
+                                    label={consensusCand ? 'panel μ' : 'score'}
                                     trophy={isJudgeWinner}
                                   />
                                   <div className="flex-1 min-w-0">
-                                    <ScoreBars scores={verdict.scores} rubric={judgeResults.rubric} />
+                                    <ScoreBars scores={verdict.scores} rubric={activeRubric} />
+                                    {consensusCand && (
+                                      <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-amber-800/90 flex-wrap">
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-100 font-mono">
+                                          ±{consensusCand.composite_std}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded bg-gray-100 font-mono">
+                                          {consensusCand.composite_min}-{consensusCand.composite_max}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800">
+                                          🥇 {consensusCand.winner_votes}/{consensusCand.n_judges} judges
+                                        </span>
+                                      </div>
+                                    )}
                                     {verdict.rationale && (
                                       <div className="mt-1.5 text-[11px] italic text-gray-600 leading-snug line-clamp-2" title={verdict.rationale}>
                                         “{verdict.rationale}”
