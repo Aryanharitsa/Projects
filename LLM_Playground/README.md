@@ -1,15 +1,116 @@
 # 🧪 LLM Playground
 
 A side‑by‑side LLM evaluation studio. Run the **same prompt** against multiple
-frontier models in parallel, score them with an LLM‑as‑judge, **vote on them
-yourself**, and keep **every run** in a queryable, comparable history — all
-in one view.
+frontier models in parallel, score them with an LLM‑as‑judge (or a **panel of
+judges**), **vote on them yourself**, and keep **every run** in a queryable,
+comparable history — all in one view.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Personal Chatbot Arena (blind A/B voting → ELO)
+## 🆕 What's new — Multi‑Judge Consensus (panel of K judges → agreement stats)
+
+> Round‑5. A single judge is biased — self‑preference, format prejudice,
+> "longer must be better." A panel isn't. Now you can run up to **6 judges**
+> on the same Arena run, in parallel, and see where they agree and where
+> they don't.
+
+Open the rubric editor and you'll see a new **Judge panel** — the primary
+judge picker is row #1, and a `+ Add judge to panel` button adds rows up to
+#6. When the roster has ≥ 2 judges, the **Judge responses** button morphs
+into **Run consensus · K judges** (fuchsia gradient instead of amber) and
+fans the same judge prompt out to every judge in parallel — wall time is
+the slowest judge, not the sum.
+
+The consensus card surfaces:
+
+- **Confidence-bar leaderboard** — per candidate: panel mean composite,
+  std‑dev, full min–max range overlay, and a `votes/n_judges` chip showing
+  how many judges put it at #1. Sorted by mean (ties broken by winner-votes).
+- **Per‑criterion Fleiss' kappa** — categorical inter‑rater agreement on
+  each 1–5 rubric criterion, with κ ≥ 0.61 painted green (substantial),
+  0.21–0.61 amber (moderate / fair), < 0.21 rose (slight / disagreement).
+  Hover for the Landis‑Koch label.
+- **Per‑judge top pick** — each judge's #1 next to the panel‑mean #1 with a
+  ✓ agrees / ✗ dissents chip per judge.
+- **Most-contested** highlight — the candidate with the highest composite
+  std-dev gets called out: judges spread X–Y (±σ from mean μ).
+- **Failed judges** surface inline (missing key, upstream error) — the
+  panel runs with whoever responded.
+- Per Arena card, the score ring shows `panel μ` instead of `score`, with
+  `±std`, the min-max range, and the `winner_votes/n` chip in a row below.
+
+### How the math works
+
+```
+composite_i,j = Σ_c ((s_i,j,c − 1) / 4) · w_c   × 100      # per judge i, candidate j
+mean_j        = (1/K) · Σ_i composite_i,j                  # panel mean
+σ_j           = sample std dev across K judges
+winner_votes_j = | { i : argmax_j composite_i,j } |        # # of judges who picked j
+```
+
+For Fleiss' κ on criterion c, judges' 1–5 scores are categorical:
+
+```
+P_e = Σ_k p_k²              (chance agreement from category marginals)
+P̄   = (1/N) · Σ_j P_j        (mean per-item agreement)
+κ_c = (P̄ − P_e) / (1 − P_e)  ∈ [−1, 1]
+```
+
+`κ = 1` is perfect agreement; `0` is chance; negative is systematic
+disagreement (judges who pick *different* categories item-to-item). Overall
+κ is the mean of per-criterion κs.
+
+The full consensus block is persisted onto the Arena run under
+`payload.consensus`; a back‑compat `payload.judge` is also written from the
+panel means so the History tab keeps rendering the run with no special
+casing.
+
+### `POST /api/judge/consensus`
+
+```json
+{
+  "prompt":        "...",
+  "system_prompt": "...",
+  "candidates":    [{"provider":"OpenAI","model":"gpt-4o","response":"...","status":"success"}, ...],
+  "judges":        [{"provider":"Anthropic","model":"claude-3-5-sonnet-latest"},
+                    {"provider":"OpenAI",   "model":"gpt-4o"},
+                    {"provider":"Google",   "model":"gemini-1.5-pro"}],
+  "rubric":        [{"name":"Correctness","description":"...","weight":0.35}, ...],
+  "run_id":        "<existing arena run id>"
+}
+```
+
+Response (truncated):
+
+```json
+{
+  "success":   true,
+  "rubric":    [...],
+  "consensus": [{ "candidate": 0, "provider": "...", "model": "...",
+                  "composite_mean": 82.5, "composite_std": 4.2,
+                  "composite_min": 78, "composite_max": 87,
+                  "per_criterion": {"Correctness": {"mean": 4.66, "std": 0.47, "votes":[5,5,4]}, ...},
+                  "winner_votes": 2, "n_judges": 3,
+                  "rationales": [{"judge":"...","text":"..."}, ...] }, ...],
+  "leaderboard": [...],
+  "winner": 0,
+  "agreement": {
+    "per_criterion": {"Correctness": {"fleiss_kappa": 0.42}, ...},
+    "overall": {"fleiss_kappa": 0.37, "mean_composite_std": 4.2, "panel_winner": 0, "n_judges": 3},
+    "per_judge": [{"provider":"...","model":"...","their_top":0,"agrees_with_panel":true}, ...]
+  },
+  "judges": [...],
+  "judges_failed": [],
+  "panel_meta": {"n_judges": 3, "n_failed": 0, "max_latency": 4.1,
+                 "total_cost_usd": 0.018, "total_input_tokens": 3200, "total_output_tokens": 950}
+}
+```
+
+---
+
+## 🏛️ Personal Chatbot Arena (still here · Round 4)
 
 > Round‑4. Your own LMSYS‑style arena, fed by your own runs.
 
@@ -170,6 +271,7 @@ to **Vote** and start judging blind. **History** persists everything.
 | POST   | `/api/chat`                | single‑provider chat (returns `cost_usd` in debug)     |
 | POST   | `/api/compare`             | **Arena** — parallel fan‑out, winners, total cost      |
 | POST   | `/api/judge`               | **LLM‑as‑judge** — score Arena responses with rubric   |
+| POST   | `/api/judge/consensus`     | **Panel judge** — K judges in parallel + κ agreement   |
 | GET    | `/api/history`             | paginated, filterable list of runs                     |
 | GET    | `/api/history/:run_id`     | full payload for one run (responses + judge)           |
 | POST   | `/api/history/:run_id/meta`| set `tag` / `note` / `starred` on a run                |
@@ -213,11 +315,11 @@ LLM_Playground/
 │   └── src/
 │       ├── main.py                  # Flask app + CORS + static host
 │       ├── pricing.py               # per-model $/1M token table
-│       ├── judge.py                 # rubric + LLM-as-judge engine + JSON parser
-│       ├── history.py               # SQLite-backed run store + diff/stats engine
-│       ├── vote_arena.py            # ⬅ NEW · ELO replay + pair sampler + agreement
+│       ├── judge.py                 # rubric + single + ⬅ NEW consensus judge engine + Fleiss' κ
+│       ├── history.py               # SQLite-backed run store + diff/stats + consensus persistence
+│       ├── vote_arena.py            # ELO replay + pair sampler + agreement
 │       ├── routes/
-│       │   ├── llm.py               # /chat, /compare, /judge, /history/*, /arena/*, /pricing, …
+│       │   ├── llm.py               # /chat, /compare, /judge[/consensus], /history/*, /arena/*, …
 │       │   ├── keys.py              # /key-status, /save-keys
 │       │   └── user.py
 │       ├── providers/               # OpenAI / Anthropic / Gemini / August
@@ -240,7 +342,7 @@ LLM_Playground/
 - Prompt library with diff'd versions
 - ~~Auto‑eval rubrics (LLM‑as‑judge) with exportable scoring sheets~~ ✅ shipped
 - ~~Persisted judged runs as a queryable history~~ ✅ shipped
-- Multi‑judge consensus (run K judges, average scores, surface disagreement)
+- ~~Multi‑judge consensus (run K judges, average scores, surface disagreement)~~ ✅ shipped
 - Saved comparisons → permalinks
 - Vote-driven prompt regeneration ("which prompts move ELO most?")
 

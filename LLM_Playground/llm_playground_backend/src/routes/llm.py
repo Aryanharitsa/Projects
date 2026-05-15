@@ -11,7 +11,7 @@ import requests
 from src.models.user import User
 from src.providers.provider_factory import ProviderFactory
 from src.pricing import estimate_cost, get_pricing_table
-from src.judge import DEFAULT_RUBRIC, judge_compare
+from src.judge import DEFAULT_RUBRIC, judge_compare, judge_consensus_compare
 from src import history
 from src import vote_arena
 
@@ -414,6 +414,92 @@ def judge():
                 history.update_judge(run_id, payload)
             except Exception as save_err:  # noqa: BLE001
                 current_app.logger.warning(f"history.update_judge failed: {save_err}")
+
+        return jsonify(payload), status
+    except Exception as e:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/judge/consensus', methods=['POST'])
+def judge_consensus():
+    """Score a set of Arena responses with a **panel** of K LLM judges.
+
+    Fans the same judge prompt out to every judge in parallel, then folds
+    their verdicts into a consensus leaderboard with confidence bars, an
+    inter-judge agreement card (Fleiss' kappa per criterion + overall mean
+    composite std), and a per-judge agreement-with-panel breakdown.
+
+    Request body:
+        {
+          "prompt":        "<user prompt that produced the responses>",
+          "system_prompt": "<optional original system prompt>",
+          "candidates":    [ {provider, model, response, status?}, ... ],
+          "judges":        [ {provider, model}, ... ]    # ≥ 2
+          "rubric":        [ {name, description, weight}, ... ]  # optional
+          "run_id":        "<existing arena run id>"             # optional
+        }
+    """
+    try:
+        data = request.get_json() or {}
+        prompt = (data.get('prompt') or '').strip()
+        system_prompt = data.get('system_prompt') or ''
+        candidates = data.get('candidates') or []
+        rubric = data.get('rubric')
+        judges_in = data.get('judges') or []
+
+        scoreable = []
+        for c in candidates:
+            if not isinstance(c, dict):
+                continue
+            scoreable.append({
+                'provider': c.get('provider', ''),
+                'model':    c.get('model', ''),
+                'response': c.get('response', '') if c.get('status', 'success') == 'success' else '',
+                'status':   c.get('status', 'success'),
+            })
+
+        if len(scoreable) < 1:
+            return jsonify({'success': False, 'error': 'No candidates provided'}), 400
+
+        # Clean judge list — drop empties and duplicates while preserving order.
+        seen = set()
+        judges = []
+        for j in judges_in:
+            if not isinstance(j, dict):
+                continue
+            prov = (j.get('provider') or '').strip()
+            mdl = (j.get('model') or '').strip()
+            if not prov or not mdl:
+                continue
+            key = f"{prov}:{mdl}"
+            if key in seen:
+                continue
+            seen.add(key)
+            judges.append({'provider': prov, 'model': mdl})
+
+        if len(judges) < 2:
+            return jsonify({
+                'success': False,
+                'error':   'Need at least 2 distinct judges for consensus (provider+model pair)',
+            }), 400
+
+        payload, status = judge_consensus_compare(
+            user_prompt=prompt,
+            system_prompt=system_prompt,
+            candidates=scoreable,
+            judges=judges,
+            rubric=rubric,
+            provider_factory=provider_factory,
+        )
+
+        # Attach consensus to the persisted Arena run so History surfaces it.
+        run_id = (data.get('run_id') or '').strip() or None
+        if status == 200 and payload.get('success') and run_id:
+            try:
+                history.update_consensus(run_id, payload)
+            except Exception as save_err:  # noqa: BLE001
+                current_app.logger.warning(f"history.update_consensus failed: {save_err}")
 
         return jsonify(payload), status
     except Exception as e:  # noqa: BLE001

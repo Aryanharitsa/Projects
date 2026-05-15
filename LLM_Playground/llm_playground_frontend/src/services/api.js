@@ -118,6 +118,18 @@ class ApiService {
     });
   }
 
+  // Score a finished Arena run with a *panel* of K judges in parallel.
+  // Returns a consensus leaderboard with mean ± std composites, inter-judge
+  // agreement (Fleiss' kappa per criterion + overall), and per-judge breakdown.
+  // Payload: { prompt, system_prompt, candidates:[...],
+  //            judges:[{provider,model}, ...], rubric:[...], run_id? }
+  async judgeConsensus(payload) {
+    return this.request('/judge/consensus', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Run History ──────────────────────────────────────────────────────────
   // Every Arena run is auto-persisted server-side; these endpoints power the
   // History tab (list / detail / tag / star / delete / stats / diff).
