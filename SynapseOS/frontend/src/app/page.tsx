@@ -11,6 +11,8 @@ import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { SearchBar } from "@/components/SearchBar";
 import { TopicPalette } from "@/components/TopicPalette";
+import { TrailPlayer } from "@/components/TrailPlayer";
+import { TrailsPanel } from "@/components/TrailsPanel";
 import { api } from "@/lib/api";
 import type {
   ChatTurn,
@@ -18,6 +20,8 @@ import type {
   Graph as GraphT,
   GraphNode,
   OrphanSuggestion,
+  Trail,
+  TrailDraftStep,
 } from "@/lib/types";
 
 const edgeKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
@@ -34,6 +38,19 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefBadge, setBriefBadge] = useState(false);
+
+  // Trails — the active trail (when the player is open) flows up here
+  // so the canvas can paint trail mode (dim + overlay polyline) and so
+  // the sidebar can highlight the active trail.
+  const [trailPlayerOpen, setTrailPlayerOpen] = useState(false);
+  const [trailPlayerId, setTrailPlayerId] = useState<number | null>(null);
+  const [trailPlayerMode, setTrailPlayerMode] = useState<"play" | "build">(
+    "play",
+  );
+  const [trailStarter, setTrailStarter] = useState<TrailDraftStep[] | null>(null);
+  const [activeTrail, setActiveTrail] = useState<Trail | null>(null);
+  const [trailFocusId, setTrailFocusId] = useState<number | null>(null);
+  const [trailsListVersion, setTrailsListVersion] = useState(0);
 
   const refreshGraph = useCallback(async () => {
     try {
@@ -138,12 +155,58 @@ export default function Page() {
     return out.size > 0 ? out : null;
   }, [chatTurn]);
 
+  // The ordered sequence Graph needs to paint the trail overlay.
+  // Null whenever the player is closed or no steps exist yet so the
+  // canvas reverts to its normal styling.
+  const trailSequence = useMemo(() => {
+    if (!trailPlayerOpen || !activeTrail) return null;
+    if (activeTrail.steps.length === 0) return null;
+    return activeTrail.steps.map((s) => ({
+      id: s.note_id,
+      isSynapseToNext: s.is_synapse_to_next,
+    }));
+  }, [trailPlayerOpen, activeTrail]);
+
+  const openNewTrail = useCallback((starter?: TrailDraftStep[] | null) => {
+    setTrailPlayerId(null);
+    setTrailPlayerMode("build");
+    setTrailStarter(starter ?? null);
+    setTrailPlayerOpen(true);
+  }, []);
+
+  const openTrailForPlay = useCallback((id: number) => {
+    setTrailPlayerId(id);
+    setTrailPlayerMode("play");
+    setTrailStarter(null);
+    setTrailPlayerOpen(true);
+  }, []);
+
+  const openTrailForEdit = useCallback((id: number) => {
+    setTrailPlayerId(id);
+    setTrailPlayerMode("build");
+    setTrailStarter(null);
+    setTrailPlayerOpen(true);
+  }, []);
+
+  const handleTrailClose = useCallback(() => {
+    setTrailPlayerOpen(false);
+    setActiveTrail(null);
+    setTrailFocusId(null);
+    setTrailStarter(null);
+  }, []);
+
+  const handleTrailFocusNote = useCallback((node: GraphNode | null) => {
+    setTrailFocusId(node?.id ?? null);
+    if (node) setSelected(node);
+  }, []);
+
   return (
     <main className="min-h-screen flex flex-col">
       <Header
         stats={graph?.stats ?? null}
         apiOk={apiOk}
         chatActive={chatTurn !== null}
+        trailActive={trailPlayerOpen}
         onOpenBrief={() => setBriefOpen(true)}
         briefBadge={briefBadge}
       />
@@ -162,6 +225,17 @@ export default function Page() {
         onTouchedAny={() => setBriefBadge(false)}
       />
 
+      <TrailPlayer
+        open={trailPlayerOpen}
+        trailId={trailPlayerId}
+        initialMode={trailPlayerMode}
+        startSteps={trailStarter}
+        onFocusNote={handleTrailFocusNote}
+        onTrailChange={setActiveTrail}
+        onMutated={() => setTrailsListVersion((v) => v + 1)}
+        onClose={handleTrailClose}
+      />
+
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
         <aside className="col-span-12 lg:col-span-3 space-y-5">
           <NoteComposer onCreate={handleCreate} />
@@ -178,6 +252,19 @@ export default function Page() {
               setPathEdges(keys);
               if (path.length > 0) setSelected(path[path.length - 1]);
             }}
+            onSavePath={(path) => {
+              if (path.length === 0) return;
+              openNewTrail(
+                path.map((p) => ({ note_id: p.id, caption: "" })),
+              );
+            }}
+          />
+          <TrailsPanel
+            refreshKey={trailsListVersion}
+            activeTrailId={activeTrail?.id ?? null}
+            onOpenPlay={openTrailForPlay}
+            onOpenNew={() => openNewTrail(null)}
+            onOpenEdit={openTrailForEdit}
           />
           <HelpCard />
         </aside>
@@ -191,6 +278,8 @@ export default function Page() {
               chatTraversalEdges={chatTraversalEdges}
               chatTraversalNodes={chatTraversalNodes}
               isolatedCommunity={isolated}
+              trailSequence={trailSequence}
+              trailFocusId={trailFocusId}
               onSelect={(n) => setSelected(n)}
             />
           </div>
@@ -212,6 +301,23 @@ export default function Page() {
             selected={selected}
             onSelect={setSelected}
             onDelete={handleDelete}
+            trailCanAppend={trailPlayerOpen && activeTrail !== null}
+            trailCanStart={!trailPlayerOpen}
+            onAddToTrail={async (id) => {
+              if (!activeTrail) return;
+              try {
+                const updated = await api.appendTrailStep(activeTrail.id, {
+                  note_id: id,
+                });
+                setActiveTrail(updated);
+                setTrailsListVersion((v) => v + 1);
+              } catch {
+                /* surfaced inside the player on save */
+              }
+            }}
+            onStartTrailHere={(id) =>
+              openNewTrail([{ note_id: id, caption: "" }])
+            }
           />
         </aside>
       </div>

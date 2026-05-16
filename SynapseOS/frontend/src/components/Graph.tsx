@@ -20,6 +20,16 @@ type Props = {
   // crossing the boundary are faded. The graph still renders everything,
   // it just lets the user mentally "lift" one cluster out of the rest.
   isolatedCommunity: number | null;
+  // Trail mode — when `trailSequence` is non-null, dim everything
+  // outside the trail and draw an overlay polyline through the steps
+  // (solid for synapse hops, dashed for leaps). The current step gets
+  // a pulsing amber halo so the eye knows "you are here".
+  //
+  // The overlay is rendered in `onRenderFramePost` over the node
+  // positions chosen by the force layout, so leaps (which don't exist
+  // as actual graph edges) get drawn just like real synapses.
+  trailSequence: Array<{ id: number; isSynapseToNext: boolean }> | null;
+  trailFocusId: number | null;
   onSelect: (node: GraphNode) => void;
 };
 
@@ -39,8 +49,29 @@ export function Graph({
   chatTraversalEdges,
   chatTraversalNodes,
   isolatedCommunity,
+  trailSequence,
+  trailFocusId,
   onSelect,
 }: Props) {
+  // Derived sets for the link-painters. We do this here instead of in
+  // the parent because the link-color function runs many times per
+  // frame; building the sets in a parent hook would mean recreating
+  // them on unrelated re-renders.
+  const trailNodes = useMemo(() => {
+    if (!trailSequence || trailSequence.length === 0) return null;
+    return new Set(trailSequence.map((s) => s.id));
+  }, [trailSequence]);
+
+  const trailEdgesSynapse = useMemo(() => {
+    if (!trailSequence || trailSequence.length < 2) return null;
+    const s = new Set<string>();
+    for (let i = 0; i < trailSequence.length - 1; i++) {
+      if (trailSequence[i].isSynapseToNext) {
+        s.add(edgeKey(trailSequence[i].id, trailSequence[i + 1].id));
+      }
+    }
+    return s.size > 0 ? s : null;
+  }, [trailSequence]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
 
@@ -77,6 +108,7 @@ export function Graph({
     return () => clearTimeout(t);
   }, [fgData.nodes.length]);
 
+
   return (
     <div
       ref={wrapRef}
@@ -102,12 +134,16 @@ export function Graph({
           d3VelocityDecay={0.3}
           linkWidth={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
+            if (trailEdgesSynapse?.has(k)) return 2.6;
             if (highlightPath?.has(k)) return 2.2;
             if (chatTraversalEdges?.has(k)) return 1.8;
             return 0.8 + l.strength * 1.8;
           }}
           linkColor={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
+            // Trail (amber/pink gradient feel) wins over everything —
+            // it's the user's most explicit "look here" annotation.
+            if (trailEdgesSynapse?.has(k)) return "rgba(251,191,36,0.98)";
             // Path tracer (amber) wins over chat traversal (cyan) if
             // both happen to fire for the same edge.
             if (highlightPath?.has(k)) return "rgba(251,191,36,0.95)";
@@ -119,8 +155,15 @@ export function Graph({
             const isolatedHit =
               isolatedCommunity == null ||
               (ca === isolatedCommunity && cb === isolatedCommunity);
+            // Trail mode dims every non-trail edge to roughly the same
+            // alpha as the cluster-isolation feature uses, so the trail
+            // reads as the only path the user should follow.
+            const trailHit =
+              trailNodes == null ||
+              (trailNodes.has(su) && trailNodes.has(tu));
             const baseAlpha = 0.25 + l.strength * 0.55;
-            const alpha = isolatedHit ? baseAlpha : baseAlpha * 0.18;
+            let alpha = isolatedHit ? baseAlpha : baseAlpha * 0.18;
+            if (trailNodes && !trailHit) alpha = baseAlpha * 0.12;
             // Edges within a community pick up that community's color;
             // cross-community edges stay neutral violet so they don't
             // shout over the cluster colors.
@@ -132,6 +175,7 @@ export function Graph({
           }}
           linkDirectionalParticles={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
+            if (trailEdgesSynapse?.has(k)) return 5;
             if (highlightPath?.has(k)) return 4;
             if (chatTraversalEdges?.has(k)) return 3;
             return 0;
@@ -139,10 +183,24 @@ export function Graph({
           linkDirectionalParticleSpeed={0.006}
           linkDirectionalParticleColor={(l: any) => {
             const k = edgeKey(linkId(l.source), linkId(l.target));
+            if (trailEdgesSynapse?.has(k)) return "rgba(251,191,36,0.95)";
             if (highlightPath?.has(k)) return "rgba(251,191,36,0.95)";
             return "rgba(34,211,238,0.92)";
           }}
           linkDirectionalParticleWidth={2}
+          onRenderFramePost={
+            trailSequence && trailSequence.length > 0
+              ? (ctx: CanvasRenderingContext2D, globalScale: number) => {
+                  paintTrailOverlay(
+                    ctx,
+                    globalScale,
+                    trailSequence,
+                    fgData.nodes,
+                    trailFocusId,
+                  );
+                }
+              : undefined
+          }
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, scale: number) => {
             const n = node as FGNode;
             const radius = 5 + Math.min(8, n.degree * 0.8) + n.weight * 4;
@@ -150,7 +208,11 @@ export function Graph({
             const fill = n.community_color ?? DEFAULT_FILL;
             const isolated =
               isolatedCommunity != null && (n.community ?? -2) !== isolatedCommunity;
-            const alpha = isolated ? 0.18 : 1.0;
+            // Trail mode dims any node not in the trail to roughly the
+            // same alpha as the cluster-isolation feature, so the trail
+            // is the only readable structure on the canvas.
+            const dimmedByTrail = trailNodes != null && !trailNodes.has(n.id);
+            const alpha = isolated || dimmedByTrail ? 0.18 : 1.0;
 
             // Glow halo
             const grad = ctx.createRadialGradient(
@@ -240,6 +302,81 @@ export function Graph({
 
 function linkId(side: number | FGNode): number {
   return typeof side === "number" ? side : side.id;
+}
+
+/**
+ * Draws the trail polyline + focus halo on top of the force layout.
+ *
+ * Why an overlay (vs. just lighting up the existing edges):
+ *   - "Leap" hops in a trail are jumps between two notes that have no
+ *     edge in the synapse graph at the current τ. We still want them
+ *     visible — that's the whole point of a curated trail — so we
+ *     synthesize the geometry from the live node positions and paint
+ *     a dashed segment between them.
+ *
+ * Synapse-aligned hops are drawn solid in amber over the existing
+ * synapse edge (which the link-painter already highlighted), giving
+ * them a satisfying "rail" look without the overlay needing to know
+ * about the underlying edge.
+ */
+function paintTrailOverlay(
+  ctx: CanvasRenderingContext2D,
+  globalScale: number,
+  trailSequence: Array<{ id: number; isSynapseToNext: boolean }>,
+  nodes: FGNode[],
+  focusId: number | null,
+) {
+  const posById = new Map<number, FGNode>();
+  for (const n of nodes) posById.set(n.id, n);
+
+  // Polyline through consecutive trail steps.
+  for (let i = 0; i < trailSequence.length - 1; i++) {
+    const a = posById.get(trailSequence[i].id);
+    const b = posById.get(trailSequence[i + 1].id);
+    if (!a || !b || a.x == null || a.y == null || b.x == null || b.y == null) continue;
+    const synapse = trailSequence[i].isSynapseToNext;
+    ctx.save();
+    ctx.lineCap = "round";
+    if (synapse) {
+      ctx.strokeStyle = "rgba(251,191,36,0.92)";
+      ctx.lineWidth = 2.8 / globalScale;
+      ctx.setLineDash([]);
+    } else {
+      ctx.strokeStyle = "rgba(236,72,153,0.78)";
+      ctx.lineWidth = 2.0 / globalScale;
+      ctx.setLineDash([6 / globalScale, 5 / globalScale]);
+    }
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Focus halo — pulsing amber ring around the current step.
+  if (focusId != null) {
+    const f = posById.get(focusId);
+    if (f && f.x != null && f.y != null) {
+      const radius = 5 + Math.min(8, f.degree * 0.8) + f.weight * 4;
+      // Tie the pulse to wall-clock time so it animates without us
+      // having to drive a render loop. Period ~1.6s.
+      const phase = ((Date.now() % 1600) / 1600) * Math.PI * 2;
+      const pulse = (Math.sin(phase) + 1) / 2; // 0..1
+      const outer = radius + (3 + 4 * pulse) / globalScale;
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(251,191,36,${0.55 + 0.4 * pulse})`;
+      ctx.lineWidth = 2 / globalScale;
+      ctx.arc(f.x, f.y, outer, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(251,191,36,${0.18 + 0.18 * pulse})`;
+      ctx.lineWidth = 1 / globalScale;
+      ctx.arc(f.x, f.y, outer + 6 / globalScale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 }
 
 function hexToRgba(hex: string, alpha: number): string {

@@ -50,6 +50,18 @@ threshold live, and watch your topical clusters discover themselves.
   exact synapses that contributed light up cyan on the canvas.
   **Default mode is extractive (zero-dep). Optional LLM mode** when
   `SYNAPSE_LLM_KEY` is set — same citation contract.
+- **Trails — show your thinking, replayable.** Save an investigation as
+  an ordered walk through your notes ("here's how I got from
+  *embeddings as memory* to *vector DBs are just indexes*"), with an
+  optional caption per stop. The canvas dims everything outside the
+  trail and overlays an amber polyline through the stops — solid where
+  the walk rides a real synapse at the current τ, dashed where it
+  *leaps* across a gap. Press **▶ play** for an auto-advancing
+  film-strip view of your own reasoning; hit **⤓ markdown** to export
+  a self-contained portable artifact. Build a trail by hand, or seed
+  one from a `PathFinder` result with one click. Every step shows
+  cluster, tags, caption, snippet, and the cosine strength to the
+  next stop.
 - **Daily Brief — your second brain, on a rotation.** Spaced-revisit
   engine surfaces ~5 notes per day you should re-engage with: stale
   hub notes, orphans the graph forgot, and a forced cross-cluster
@@ -215,6 +227,44 @@ to a small LLM under a strict citation contract ("answer ONLY from
 these notes, cite inline as `[#N]`, say so plainly if missing"). On
 network/LLM failure we silently fall back to extractive with a notice.
 
+### Trails
+
+A trail is an ordered list of `(note_id, caption)` steps. It's the
+user explicitly *showing their thinking*: a syllabus, an investigation,
+a derivation. Trails persist in their own SQLite table — the notes
+themselves stay untouched — and resolve at read time against the live
+synapse graph, so a trail's "health" reflects the current τ.
+
+```
+health(trail) = (# consecutive steps that ride a synapse) / hops
+```
+
+A 100% trail is a synapse-walk — every step rides an edge the canvas
+would have drawn anyway. A 0% trail is a leap-walk — the user is
+asserting a connection the embedding model doesn't see. Both are
+useful annotations; neither is "wrong".
+
+Each step exposes:
+
+- **`strength_to_next`** — raw cosine to the following step, even if
+  it's a leap. The player renders a colored bar so the reader can
+  feel which transitions are tight vs. loose.
+- **`is_synapse_to_next`** — `strength_to_next >= τ`. Used to pick
+  the overlay style (solid amber vs. dashed pink).
+- **Cluster + color** — picked up from the live graph so the player
+  card matches the canvas palette without an extra join.
+
+The **builder** suggests the tail's strongest synapse neighbors as
+one-click next steps. Empty-trail draft? It surfaces the highest-
+weight (most central) notes as starting points so you never face a
+blank canvas. The **player** auto-advances every 4.2 s in play mode
+and supports `← / → / space` for keyboard nav.
+
+**Markdown export** (`GET /trails/{id}/export.md`) renders each stop
+as a `## N. Title` block with cluster, tags, caption, snippet, and a
+`→ cosine 0.42 · synapse` (or `⤳ … · leap`) annotation between stops.
+The export is portable — readers don't need to know SynapseOS exists.
+
 ### Daily Brief
 
 Every PKM tool fails the same way: notes get written once, never re-read.
@@ -289,6 +339,14 @@ Zero new Python deps — `urllib.request` does the HTTP.
 | `POST` | `/chat`                      | Graph-aware RAG. Body: `{ query, mode?, k_seed?, hops?, include_community_anchors? }`. Response: `{ answer, citations[], traversal: { seeds, expansions }, model, mode_used, latency_ms, llm_available, notice? }` |
 | `GET`  | `/brief?k=&date=`            | Today's revisit picks: `{ date, k, total_notes, picks: [ { note_id, title, snippet, score, reasons[], prompt, connections[], cluster_*, days_since_seen, is_orphan } ], stats }`. `date` defaults to today UTC. |
 | `POST` | `/notes/{id}/touch`          | Mark a note as just re-engaged with; refreshes `last_seen_at`. `{ ok, note_id, last_seen_at }` |
+| `GET`  | `/trails`                    | List trails (title, step count, health badge, no bodies)                          |
+| `POST` | `/trails`                    | Create. Body: `{ title, description?, steps: [{ note_id, caption? }], origin? }` |
+| `GET`  | `/trails/{id}?threshold&top_k` | Resolve: steps with title, snippet, tags, caption, cluster, strength_to_next   |
+| `PATCH`| `/trails/{id}`               | Partial update: any of `{ title?, description?, steps? }`. Full step replace.   |
+| `POST` | `/trails/{id}/append`        | Append one step. `{ note_id, caption? }`                                         |
+| `DEL`  | `/trails/{id}`               | Delete the trail. Notes are untouched.                                            |
+| `GET`  | `/trails/{id}/suggest_next?k=`| Top synapse neighbors of the tail that aren't already on the trail              |
+| `GET`  | `/trails/{id}/export.md`     | Self-contained Markdown export with cosine-annotated transitions                  |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -350,6 +408,9 @@ Incremental moves for future rotation days:
       *(shipped)*
 - [x] **Daily Brief** — spaced-revisit picks with journal prompts and
       cross-cluster bridge suggestions, idempotent per day *(shipped)*
+- [x] **Trails** — curated, replayable walks through the graph with
+      auto-suggested next steps, dashed-leap overlay, and portable
+      Markdown export *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

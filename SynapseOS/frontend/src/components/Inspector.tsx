@@ -8,9 +8,25 @@ type Props = {
   selected: GraphNode | null;
   onSelect: (node: GraphNode) => void;
   onDelete: (id: number) => Promise<void>;
+  /** Trail UX hooks — only shown when the player is open. When no
+   *  trail is yet saved (`canAppend === false` but `canStart === true`),
+   *  we expose "start trail here" instead so the user can seed a
+   *  fresh draft from the inspected note. */
+  trailCanAppend?: boolean;
+  trailCanStart?: boolean;
+  onAddToTrail?: (id: number) => void;
+  onStartTrailHere?: (id: number) => void;
 };
 
-export function Inspector({ selected, onSelect, onDelete }: Props) {
+export function Inspector({
+  selected,
+  onSelect,
+  onDelete,
+  trailCanAppend,
+  trailCanStart,
+  onAddToTrail,
+  onStartTrailHere,
+}: Props) {
   const [neighbors, setNeighbors] = useState<Neighbor[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -66,13 +82,33 @@ export function Inspector({ selected, onSelect, onDelete }: Props) {
             ))}
           </div>
         </div>
-        <button
-          onClick={() => onDelete(selected.id)}
-          title="delete note"
-          className="text-xs text-ink-400 hover:text-synapse-pink transition px-2 py-1 rounded ring-1 ring-white/5"
-        >
-          delete
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {trailCanAppend && onAddToTrail && (
+            <button
+              onClick={() => onAddToTrail(selected.id)}
+              title="append this note to the active trail"
+              className="text-[10px] font-mono uppercase tracking-[0.12em] rounded-full px-2.5 py-1 ring-1 ring-synapse-amber/40 text-synapse-amber hover:ring-synapse-amber hover:text-ink-100 transition"
+            >
+              + trail
+            </button>
+          )}
+          {!trailCanAppend && trailCanStart && onStartTrailHere && (
+            <button
+              onClick={() => onStartTrailHere(selected.id)}
+              title="start a new trail from this note"
+              className="text-[10px] font-mono uppercase tracking-[0.12em] rounded-full px-2.5 py-1 ring-1 ring-synapse-amber/30 text-synapse-amber/90 hover:ring-synapse-amber hover:text-ink-100 transition"
+            >
+              ◇ trail
+            </button>
+          )}
+          <button
+            onClick={() => onDelete(selected.id)}
+            title="delete note"
+            className="text-xs text-ink-400 hover:text-synapse-pink transition px-2 py-1 rounded ring-1 ring-white/5"
+          >
+            delete
+          </button>
+        </div>
       </div>
 
       <p className="mt-4 text-sm text-ink-100/90 leading-relaxed whitespace-pre-wrap">
