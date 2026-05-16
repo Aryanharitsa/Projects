@@ -179,3 +179,88 @@ class BriefOut(BaseModel):
     total_notes: int
     picks: list[BriefPickOut]
     stats: dict
+
+
+# ----------------------------------------------------------------- trails
+
+
+class TrailStepIn(BaseModel):
+    note_id: int = Field(..., ge=1)
+    caption: str = Field(default="", max_length=400)
+
+
+class TrailIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=140)
+    description: str = Field(default="", max_length=1000)
+    steps: list[TrailStepIn] = Field(default_factory=list)
+    origin: Literal["manual", "path", "chat"] = "manual"
+
+
+class TrailPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=140)
+    description: str | None = Field(default=None, max_length=1000)
+    steps: list[TrailStepIn] | None = None
+
+
+class TrailAppend(BaseModel):
+    note_id: int = Field(..., ge=1)
+    caption: str = Field(default="", max_length=400)
+
+
+class TrailStepOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    caption: str
+    exists: bool
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    strength_to_next: float | None = None
+    is_synapse_to_next: bool = False
+
+
+class TrailOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    origin: str
+    created_at: str
+    updated_at: str
+    threshold: float
+    top_k: int
+    health: float
+    total_strength: float
+    missing_count: int
+    clusters_touched: list[int]
+    steps: list[TrailStepOut]
+
+
+class TrailSummaryOut(BaseModel):
+    id: int
+    title: str
+    description: str
+    origin: str
+    created_at: str
+    updated_at: str
+    step_count: int
+    health: float
+    missing_count: int
+
+
+class TrailSuggestionOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    strength: float
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class TrailSuggestionsOut(BaseModel):
+    trail_id: int
+    threshold: float
+    suggestions: list[TrailSuggestionOut]

@@ -169,3 +169,68 @@ export type Brief = {
   picks: BriefPick[];
   stats: { considered?: number; orphan_count?: number; clusters_touched?: number };
 };
+
+// ----------------------------------------------------------------- trails
+
+export type TrailOrigin = "manual" | "path" | "chat";
+
+export type TrailStep = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  tags: string[];
+  caption: string;
+  exists: boolean;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  strength_to_next: number | null;
+  is_synapse_to_next: boolean;
+};
+
+export type Trail = {
+  id: number;
+  title: string;
+  description: string;
+  origin: TrailOrigin;
+  created_at: string;
+  updated_at: string;
+  threshold: number;
+  top_k: number;
+  health: number;            // 0..1
+  total_strength: number;
+  missing_count: number;
+  clusters_touched: number[];
+  steps: TrailStep[];
+};
+
+export type TrailSummary = {
+  id: number;
+  title: string;
+  description: string;
+  origin: TrailOrigin;
+  created_at: string;
+  updated_at: string;
+  step_count: number;
+  health: number;
+  missing_count: number;
+};
+
+export type TrailSuggestion = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  tags: string[];
+  strength: number;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+};
+
+export type TrailSuggestions = {
+  trail_id: number;
+  threshold: number;
+  suggestions: TrailSuggestion[];
+};
+
+export type TrailDraftStep = { note_id: number; caption: string };

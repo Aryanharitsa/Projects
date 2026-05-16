@@ -10,6 +10,11 @@ import type {
   OrphanSuggestion,
   PathResult,
   SearchHit,
+  Trail,
+  TrailDraftStep,
+  TrailOrigin,
+  TrailSummary,
+  TrailSuggestions,
 } from "./types";
 
 const BASE =
@@ -105,4 +110,46 @@ export const api = {
       `/notes/${id}/touch`,
       { method: "POST" },
     ),
+
+  listTrails: () => j<TrailSummary[]>(`/trails`),
+
+  getTrail: (id: number) => j<Trail>(`/trails/${id}`),
+
+  createTrail: (payload: {
+    title: string;
+    description?: string;
+    steps?: TrailDraftStep[];
+    origin?: TrailOrigin;
+  }) =>
+    j<Trail>(`/trails`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: payload.title,
+        description: payload.description ?? "",
+        steps: payload.steps ?? [],
+        origin: payload.origin ?? "manual",
+      }),
+    }),
+
+  updateTrail: (
+    id: number,
+    payload: { title?: string; description?: string; steps?: TrailDraftStep[] },
+  ) =>
+    j<Trail>(`/trails/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  appendTrailStep: (id: number, payload: { note_id: number; caption?: string }) =>
+    j<Trail>(`/trails/${id}/append`, {
+      method: "POST",
+      body: JSON.stringify({ note_id: payload.note_id, caption: payload.caption ?? "" }),
+    }),
+
+  deleteTrail: (id: number) => j<void>(`/trails/${id}`, { method: "DELETE" }),
+
+  trailSuggestions: (id: number, k = 5) =>
+    j<TrailSuggestions>(`/trails/${id}/suggest_next?k=${k}`),
+
+  trailExportUrl: (id: number) => `${BASE}/trails/${id}/export.md`,
 };

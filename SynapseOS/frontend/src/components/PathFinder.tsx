@@ -7,11 +7,15 @@ import type { GraphNode, PathResult } from "@/lib/types";
 type Props = {
   nodes: GraphNode[];
   onHighlight: (edgeKeys: Set<string> | null, nodes: GraphNode[]) => void;
+  /** Optional: hand the just-traced path to the trail builder. The
+   *  callback receives the ordered nodes; the page wires them through
+   *  to a fresh `TrailPlayer` draft. */
+  onSavePath?: (path: GraphNode[]) => void;
 };
 
 const keyOf = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
-export function PathFinder({ nodes, onHighlight }: Props) {
+export function PathFinder({ nodes, onHighlight, onSavePath }: Props) {
   const [src, setSrc] = useState<number | "">("");
   const [dst, setDst] = useState<number | "">("");
   const [result, setResult] = useState<PathResult | null>(null);
@@ -79,9 +83,20 @@ export function PathFinder({ nodes, onHighlight }: Props) {
       )}
       {result && result.found && (
         <div className="mt-2 space-y-1.5 animate-fade-in">
-          <div className="text-[10px] font-mono text-ink-300">
-            cost {result.cost.toFixed(3)} · {result.path.length - 1} hop
-            {result.path.length - 1 === 1 ? "" : "s"}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[10px] font-mono text-ink-300">
+              cost {result.cost.toFixed(3)} · {result.path.length - 1} hop
+              {result.path.length - 1 === 1 ? "" : "s"}
+            </div>
+            {onSavePath && result.path.length >= 2 && (
+              <button
+                onClick={() => onSavePath(result.path.map((p) => p.node))}
+                className="text-[10px] font-mono uppercase tracking-[0.14em] rounded-full px-2.5 py-0.5 ring-1 ring-synapse-amber/40 text-synapse-amber hover:ring-synapse-amber hover:text-ink-100 transition"
+                title="save this path as a replayable trail"
+              >
+                save as trail
+              </button>
+            )}
           </div>
           <ol className="space-y-1">
             {result.path.map((step, i) => (
