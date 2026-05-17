@@ -3,18 +3,39 @@
 **Trusted Identity & Transaction Authentication Network.**
 Document-grade KYC + on-chain attestation + a deterministic, explainable AML
 risk engine **with built-in sanctions screening**, a real **case management
-workflow**, and a **network-intelligence layer** that catches money-laundering
-patterns single-account scoring misses.
+workflow**, a **network-intelligence layer** that catches money-laundering
+patterns single-account scoring misses, **and** — as of day-25 — a
+**network panel that lives inside the case detail itself**, so an analyst
+opening any case sees the resolved-entity subgraph, the counterparties
+driving the score, and a "what if we clear this?" simulation without ever
+leaving the workflow.
 
-> **Day-20 — Network Intelligence.** Per-account scoring sees one account at
-> a time. Real laundering is networked: a clean-looking account that
-> transacts heavily with a sanctioned shell is *still* suspicious, and a
-> "Trident Exports" string spread across `M1`, `M2`, `M3` is *one* hand.
-> The new `/network` route resolves those entities, propagates risk along
-> the money flow via a biased PageRank, and lets you **ablate any node** to
-> see what the picture looks like without them. A per-account
-> **attribution** view runs leave-one-counterparty-out so you can point at
-> exactly which partners drive an account's risk.
+> **Day-25 — Network-aware Case Detail.** Day-20 shipped network
+> intelligence as a standalone `/network` route, but the case workflow
+> (day-15) and the network engine were still two doors away. They are
+> now one door. When a case is opened the AML console snapshots the
+> 1-hop neighbourhood around the subject account, and the case detail
+> auto-runs entity resolution + biased PageRank + leave-one-counterparty
+> out against that snapshot the moment the page mounts. The new
+> `CaseNetworkPanel` shows:
+>
+> - **solo vs network risk** — and the lift from peer effects so an
+>   account looking *clean by itself* but tainted by neighbours surfaces
+>   as visibly suspicious
+> - the **1-hop entity subgraph** (deterministic FR layout) centred on
+>   the case's resolved entity, with the existing `RiskGraph` visuals
+> - **per-counterparty attribution bars** — member-aware: when the
+>   subject is an aggregate cluster like `M1+M2 → Trident Exports`,
+>   leave-one-out runs across all members at once with per-member
+>   baseline scores listed
+> - **"if cleared" deltas** — ablate this case's entity, rerun the
+>   whole pipeline, report the network-avg change, alerted-count flip,
+>   and the **peers that depend most** on the subject (sorted by
+>   biggest network drop)
+>
+> Two endpoints make it work — `GET /aml/cases/{id}/network` runs against
+> the persisted snapshot, `POST /aml/cases/{id}/network/clearing`
+> accepts caller-supplied transactions for the override path.
 >
 > All deterministic — same input → same clusters, same propagated scores,
 > same layout coordinates. No ML, no embeddings, no animation jitter.
@@ -48,6 +69,8 @@ patterns single-account scoring misses.
 | **Network analyse** | `POST /aml/network/analyze` | Cluster entities + propagate risk + return graph + layout |
 | **Network counterfactual** | `POST /aml/network/counterfactual` | Ablate entities, rescore, return per-entity deltas |
 | **Network attribution** | `POST /aml/network/attribution` | Leave-one-counterparty-out lift per account |
+| **Case network panel** | `GET  /aml/cases/{id}/network` | Auto-runs entity resolution + propagation + member-aware attribution + "if cleared" deltas against the case's snapshotted neighbourhood |
+| **Case network clearing** | `POST /aml/cases/{id}/network/clearing` | Override path — runs the case panel against caller-supplied transactions (for the AML console when no snapshot exists) |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -243,6 +266,86 @@ a truncated view never silently drops the most important signal.
 
 ---
 
+## Case-aware network panel, in detail
+
+The case workflow (day-15) and the network engine (day-20) shipped as
+two surfaces with no link between them. From day-25 the case detail
+auto-runs the network engine against a **persisted neighbourhood
+snapshot** of the transactions that triggered the alert, so the moment
+an analyst opens a case they see the *picture*, not just the per-account
+factors.
+
+### Snapshot persistence
+
+When a case is opened (one-off or bulk), the AML service slices the
+1-hop neighbourhood around the subject:
+
+- every transaction whose `account_id` or `counterparty` is the subject
+- plus every transaction *between* the subject's direct counterparties
+  (the induced subgraph over the subject + direct neighbours)
+
+It persists that subset into a new `case_transactions(case_id PK, …)`
+table — JSON column for the payload, scalar mirrors for `tx_count` and
+`counterparty_count`, cap of `TITAN_CASE_TX_SNAPSHOT_CAP=1500` rows.
+Most-recent-first truncation when over budget. Older callers that don't
+attach transactions still open cases as before; the case panel just
+shows an empty-state with a "re-promote with the source attached" hint.
+
+### What the panel runs
+
+```
+GET /aml/cases/{id}/network?hops=1
+```
+
+1. Reads the snapshot.
+2. Runs the standard `analyze(...)` on the subset — entity resolution
+   (Union-Find on name similarity + counterparty Jaccard) + biased
+   PageRank + deterministic FR layout.
+3. Crops to a **22-node / 80-edge BFS subgraph** centred on the case's
+   resolved entity (`CASE_PANEL_MAX_NODES` / `…_EDGES` in `network.py`).
+   Edges over the cap are sorted by aggregate amount so the most
+   material flows always survive.
+4. Runs **member-aware attribution** — when the subject is a
+   multi-member aggregate cluster, leave-one-counterparty-out runs
+   across all members at once. The cluster baseline is `max(member
+   scores)` (matches the seed-risk convention used in propagation), and
+   each contribution reports the cluster-level drop. Internal
+   member-to-member edges are kept constant (intra-cluster wiring isn't
+   a counterparty).
+5. Runs a **"clear this case" counterfactual** — ablate the subject's
+   entire entity, rerun the pipeline, return:
+   - `network_avg_before/after`
+   - `alerted_before/after` (count of entities ≥60 network risk)
+   - **`peer_lifts`** — the top-8 entities sorted by *most-negative*
+     `network_delta`. These are the peers whose risk drops the most
+     when the subject is removed: the answer to *"who depends on this
+     account?"*
+
+### Override path
+
+If the case has no snapshot (legacy data, or the caller wants a
+recompute against a different weights override), `POST
+/aml/cases/{id}/network/clearing` runs the same pipeline against
+caller-supplied transactions. The AML console uses it as a fallback
+when the page renders a case that was opened before snapshots existed.
+
+### Frontend
+
+`CaseNetworkPanel.tsx` is mounted between the evidence snapshot and the
+sanctions hits panel on every case detail page. It renders:
+
+- 4 headline tiles (solo risk · network risk + lift caption · "if
+  cleared" Δ avg · alerted-count flip + txs-removed caption)
+- the BFS subgraph via the existing `RiskGraph` SVG (no new chart deps),
+  centred on the subject
+- per-member breakdown when the subject is aggregate
+- counterparty attribution bars (amber = positive lift, teal = negative)
+- peer-lifts list (teal-down chips for biggest peer drops)
+- 0/1/2 hop segmented control + manual refresh + "open in full network →"
+  deep-link
+
+---
+
 ## Frontend
 
 | Route | Purpose |
@@ -251,7 +354,7 @@ a truncated view never silently drops the most important signal.
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, **+ case promotion (per-row chip and bulk header button)**, + `Network →` deep-link |
 | `/network` | **(new)** Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
-| `/cases/{id}` | Big alert ring, priority/SLA pills, frozen evidence snapshot (factor bars + tx graph), sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail, attached SAR with collapsible markdown view |
+| `/cases/{id}` | Big alert ring, priority/SLA pills, frozen evidence snapshot (factor bars + tx graph), **network panel** auto-running entity resolution + propagation + member-aware attribution + "if cleared" deltas on the case's snapshot, sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail, attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
 | `/kyc` | PDF dropzone, animated 3-stage pipeline, on-chain receipt with deep-link to explorer |
 | `/attestations` | Search by `docHash`, live `Attested` event feed, click-through to detail |
@@ -259,7 +362,7 @@ a truncated view never silently drops the most important signal.
 Built with Next.js 14 + Tailwind + a small set of inline SVG components
 (`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`, `PriorityDot`,
 `AgePill`, `Timeline`, `CasesNavPill`, `RiskGraph`, `EntityCard`,
-`DeltaBar`). No charting libs.
+`DeltaBar`, `CaseNetworkPanel`). No charting libs.
 
 ---
 
@@ -351,8 +454,10 @@ apps/
     sar.py              markdown narrative + structured payload
     cases.py            SQLite-backed case store + workflow engine + SLA
     network.py          entity resolution + biased PageRank + counterfactual + attribution
+                         + case_panel(): one-shot per-case surface
+                         + attribution_for_entity(): member-aware leave-one-out
     data/sanctions.json bundled illustrative watchlist
-    data/cases.sqlite3  case persistence (gitignored, per-deployment)
+    data/cases.sqlite3  case + case_transactions persistence (gitignored, per-deployment)
   frontend/         Next.js 14 console (dark theme, glass UI)
     app/network/page.tsx        entity graph + counterfactual + attribution
     app/cases/page.tsx          queue: kanban + stats + filters
@@ -365,6 +470,7 @@ apps/
     components/RiskGraph.tsx        force graph with risk-coloured nodes + arrows
     components/EntityCard.tsx       sidebar row with conic-gradient ring + ablate toggle
     components/DeltaBar.tsx         diverging-bar visualisation for signed deltas
+    components/CaseNetworkPanel.tsx in-case network surface: subgraph + attribution + "if cleared" tiles
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -381,5 +487,10 @@ datasets/           sample inputs
 - **Phase 3** — Zero-knowledge attestation circuits (prove "I am attested
   by V" without revealing the docHash); GraphQL subgraph for the explorer;
   OAuth + analyst RBAC; live alerting / web-hooks on case state changes;
-  member-chooser for attribution on aggregate clusters; expose network
-  intelligence as a case-detail panel (auto-run when a case is opened).
+  ~~member-chooser for attribution on aggregate clusters~~ (✅ shipped,
+  day-25 — `attribution_for_entity()` runs leave-one-out across all
+  members of an aggregate cluster, with per-member baseline scores);
+  ~~expose network intelligence as a case-detail panel (auto-run when a
+  case is opened)~~ (✅ shipped, day-25 — `CaseNetworkPanel` mounts on
+  every case detail and runs against a persisted neighbourhood
+  snapshot).

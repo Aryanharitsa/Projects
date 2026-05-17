@@ -148,7 +148,24 @@ CREATE TABLE IF NOT EXISTS case_events (
 
 CREATE INDEX IF NOT EXISTS idx_case_events_case
     ON case_events(case_id, created_at);
+
+CREATE TABLE IF NOT EXISTS case_transactions (
+    case_id           TEXT PRIMARY KEY REFERENCES cases(id) ON DELETE CASCADE,
+    transactions_json TEXT NOT NULL,
+    tx_count          INTEGER NOT NULL DEFAULT 0,
+    counterparty_count INTEGER NOT NULL DEFAULT 0,
+    weights_json      TEXT,
+    sanctions_threshold REAL,
+    created_at        REAL NOT NULL
+);
 """
+
+# Cap per-case transaction snapshots so a noisy account with thousands of
+# hits doesn't bloat the SQLite row. We always keep 1-hop neighbourhood
+# (transactions touching the subject *or* its direct counterparties) and
+# truncate by recency when over budget. The cap is high enough that the
+# subgraph re-analysis still produces a stable propagated picture.
+CASE_TX_SNAPSHOT_CAP = int(os.environ.get("TITAN_CASE_TX_SNAPSHOT_CAP", "1500"))
 
 
 _lock = threading.Lock()
@@ -295,8 +312,17 @@ def open_case(
     *,
     opened_by: str = "TITAN-AUTOMATED",
     note: Optional[str] = None,
+    transactions: Optional[List[Dict[str, Any]]] = None,
+    weights: Optional[Dict[str, float]] = None,
+    sanctions_threshold: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Open a fresh case from a frozen account report snapshot."""
+    """Open a fresh case from a frozen account report snapshot.
+
+    If ``transactions`` is supplied, the 1-hop neighbourhood around
+    ``account_id`` is snapshotted into the ``case_transactions`` table so
+    the case detail's network panel can re-run analysis later without the
+    caller having to re-supply the original batch.
+    """
     if "account_id" not in account_report:
         raise ValueError("account_report.account_id required")
 
@@ -309,6 +335,17 @@ def open_case(
     # as new cases (the workflow resets).
     existing = _existing_active_case(aid, now)
     if existing:
+        # If the caller now has transactions and the existing case didn't
+        # capture them, upgrade the snapshot — useful when the AML console
+        # re-promotes the same account with the input CSV attached.
+        if transactions and not _has_tx_snapshot(existing["id"]):
+            try:
+                _save_tx_snapshot(
+                    existing["id"], aid, transactions,
+                    weights=weights, sanctions_threshold=sanctions_threshold,
+                )
+            except Exception:
+                pass
         return existing
 
     alert = _alert_score(account_report)
@@ -354,9 +391,22 @@ def open_case(
                 ts=now,
             )
             conn.commit()
-            return _row_to_case(conn.execute("SELECT * FROM cases WHERE id=?", (cid,)).fetchone())
+            case = _row_to_case(conn.execute("SELECT * FROM cases WHERE id=?", (cid,)).fetchone())
         finally:
             conn.close()
+
+    # Snapshot transactions outside the open() transaction — failures
+    # here are non-fatal (the case is still openable, the network panel
+    # just degrades to a "no transactions snapshotted" state).
+    if transactions:
+        try:
+            _save_tx_snapshot(
+                cid, aid, transactions,
+                weights=weights, sanctions_threshold=sanctions_threshold,
+            )
+        except Exception:
+            pass
+    return case
 
 
 def bulk_open_from_score(
@@ -364,17 +414,25 @@ def bulk_open_from_score(
     *,
     min_priority: str = "medium",
     opened_by: str = "TITAN-AUTOMATED",
+    transactions: Optional[List[Dict[str, Any]]] = None,
+    weights: Optional[Dict[str, float]] = None,
+    sanctions_threshold: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Walk a /aml/score response, open one case per qualifying account.
 
     `min_priority` filters by the *case priority* (derived from
     alert_score), not the raw band — so a sanctions hit on a low-risk
     account still surfaces.
+
+    If ``transactions`` is supplied, each opened case persists a
+    1-hop-neighbourhood snapshot of that batch so the case-detail
+    network panel can run analysis without re-supplying the input.
     """
     accounts = score_response.get("accounts") or []
     threshold = PRIORITIES.index(min_priority) if min_priority in PRIORITIES else 2
     opened: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
+    snapshotted = 0
     for acc in accounts:
         alert = _alert_score(acc)
         prio = _priority_for(alert)
@@ -382,13 +440,21 @@ def bulk_open_from_score(
             skipped.append({"account_id": acc.get("account_id"), "reason": "below_threshold",
                             "priority": prio})
             continue
-        case = open_case(acc, opened_by=opened_by)
+        case = open_case(
+            acc, opened_by=opened_by,
+            transactions=transactions,
+            weights=weights,
+            sanctions_threshold=sanctions_threshold,
+        )
         opened.append(case)
+        if transactions:
+            snapshotted += 1
     return {
         "opened": opened,
         "skipped": skipped,
         "total_accounts": len(accounts),
         "min_priority": min_priority,
+        "snapshotted": snapshotted,
     }
 
 
@@ -629,9 +695,137 @@ def delete_case(case_id: str) -> bool:
     conn = _connect()
     try:
         with _lock:
+            conn.execute("DELETE FROM case_transactions WHERE case_id=?", (case_id,))
             cur = conn.execute("DELETE FROM cases WHERE id=?", (case_id,))
             conn.commit()
             return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Transaction snapshots — feed the case-detail network panel
+# ---------------------------------------------------------------------------
+
+
+def _has_tx_snapshot(case_id: str) -> bool:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM case_transactions WHERE case_id=?", (case_id,),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def _slice_neighbourhood(
+    account_id: str,
+    transactions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Keep transactions touching ``account_id`` or any of its 1-hop
+    counterparties. Truncate by recency (lexicographic ISO timestamp) when
+    over ``CASE_TX_SNAPSHOT_CAP`` so noisy accounts don't blow up storage.
+    """
+    aid = str(account_id)
+    direct: Set[str] = {aid}
+    # First pass: find direct counterparties.
+    for r in transactions:
+        if str(r.get("account_id")) == aid:
+            cp = r.get("counterparty")
+            if cp is not None:
+                direct.add(str(cp))
+        elif str(r.get("counterparty")) == aid:
+            cp = r.get("account_id")
+            if cp is not None:
+                direct.add(str(cp))
+    # Second pass: any tx where both endpoints are in the direct set OR
+    # one endpoint is the subject.
+    kept: List[Dict[str, Any]] = []
+    for r in transactions:
+        a = str(r.get("account_id") or "")
+        b = str(r.get("counterparty") or "")
+        if a == aid or b == aid:
+            kept.append(r)
+        elif a in direct and b in direct:
+            kept.append(r)
+    if len(kept) <= CASE_TX_SNAPSHOT_CAP:
+        return kept
+    # Most-recent-first truncation. Falls back to original order if
+    # timestamps are missing/unparseable.
+    def _key(row: Dict[str, Any]) -> str:
+        return str(row.get("timestamp") or "")
+    kept.sort(key=_key, reverse=True)
+    return kept[:CASE_TX_SNAPSHOT_CAP]
+
+
+def _save_tx_snapshot(
+    case_id: str,
+    account_id: str,
+    transactions: List[Dict[str, Any]],
+    *,
+    weights: Optional[Dict[str, float]] = None,
+    sanctions_threshold: Optional[float] = None,
+) -> Dict[str, Any]:
+    sliced = _slice_neighbourhood(account_id, transactions or [])
+    cps: Set[str] = set()
+    for r in sliced:
+        for k in ("account_id", "counterparty"):
+            v = r.get(k)
+            if v is not None:
+                cps.add(str(v))
+    payload = json.dumps(sliced, separators=(",", ":"))
+    weights_json = json.dumps(weights, separators=(",", ":")) if weights else None
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO case_transactions
+                    (case_id, transactions_json, tx_count, counterparty_count,
+                     weights_json, sanctions_threshold, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (case_id, payload, len(sliced), len(cps),
+                 weights_json, sanctions_threshold, _now()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {
+        "case_id": case_id,
+        "tx_count": len(sliced),
+        "counterparty_count": len(cps),
+    }
+
+
+def get_case_transactions(case_id: str) -> Optional[Dict[str, Any]]:
+    """Return the persisted neighbourhood snapshot, or None if absent."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM case_transactions WHERE case_id=?", (case_id,),
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            txs = json.loads(row["transactions_json"]) if row["transactions_json"] else []
+        except json.JSONDecodeError:
+            txs = []
+        try:
+            wts = json.loads(row["weights_json"]) if row["weights_json"] else None
+        except json.JSONDecodeError:
+            wts = None
+        return {
+            "case_id": row["case_id"],
+            "transactions": txs,
+            "tx_count": row["tx_count"],
+            "counterparty_count": row["counterparty_count"],
+            "weights": wts,
+            "sanctions_threshold": row["sanctions_threshold"],
+            "created_at": row["created_at"],
+            "created_at_iso": _iso(row["created_at"]),
+        }
     finally:
         conn.close()
 
@@ -806,8 +1000,8 @@ def _minimal_snapshot(account_report: Dict[str, Any]) -> Dict[str, Any]:
 
 __all__ = [
     "STATUSES", "TERMINAL_STATUSES", "TRANSITIONS", "PRIORITIES",
-    "SLA_WARN_HOURS", "SLA_BREACH_HOURS",
+    "SLA_WARN_HOURS", "SLA_BREACH_HOURS", "CASE_TX_SNAPSHOT_CAP",
     "open_case", "bulk_open_from_score", "list_cases", "get_case",
     "transition", "assign", "add_note", "attach_sar", "delete_case",
-    "stats", "assignees",
+    "stats", "assignees", "get_case_transactions",
 ]

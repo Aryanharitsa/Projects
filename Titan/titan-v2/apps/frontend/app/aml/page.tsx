@@ -147,7 +147,11 @@ export default function AMLPage() {
   const onPromoteOne = useCallback(async (acc: AccountReport) => {
     setCasePromote((p) => ({ ...p, busy: true, error: null }));
     try {
-      const out = await openCase(acc, { opened_by: "AML-CONSOLE" });
+      const out = await openCase(acc, {
+        opened_by: "AML-CONSOLE",
+        transactions: txs,
+        weights: Object.keys(weights).length ? weights : undefined,
+      });
       setOpenedFor((m) => ({ ...m, [acc.account_id]: out.case.id }));
       setCasePromote({
         busy: false,
@@ -163,7 +167,7 @@ export default function AMLPage() {
         error: e.message || "Failed to open case",
       }));
     }
-  }, []);
+  }, [txs, weights]);
 
   const onPromoteAll = useCallback(async () => {
     if (!resp) return;
@@ -172,6 +176,8 @@ export default function AMLPage() {
       const out = await bulkOpenCases(resp, {
         min_priority: "medium",
         opened_by: "AML-CONSOLE",
+        transactions: txs,
+        weights: Object.keys(weights).length ? weights : undefined,
       });
       const newMap: Record<string, string> = { ...openedFor };
       out.opened.forEach((c: CaseSummary) => {
@@ -192,7 +198,7 @@ export default function AMLPage() {
         error: e.message || "Bulk open failed",
       }));
     }
-  }, [resp, openedFor]);
+  }, [resp, openedFor, txs, weights]);
 
   const onSar = useCallback(async () => {
     if (!selectedReport) return;

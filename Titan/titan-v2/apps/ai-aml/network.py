@@ -935,13 +935,305 @@ def attribution(
 
 
 # ---------------------------------------------------------------------------
+# Attribution — member-aware (aggregate clusters)
+# ---------------------------------------------------------------------------
+
+
+def attribution_for_entity(
+    rows: List[Dict[str, Any]],
+    *,
+    entity_id: str,
+    members: List[str],
+    weights: Optional[Dict[str, float]] = None,
+    sanctions_threshold: Optional[float] = None,
+    max_report: int = ATTRIB_MAX_REPORT,
+) -> Dict[str, Any]:
+    """Member-aware leave-one-counterparty-out for an aggregate entity.
+
+    For a single-member entity this delegates to :func:`attribution`. For
+    a multi-member cluster (an entity resolution merged ``M1, M2, M3``
+    into a single hand) we treat the cluster as one super-node and ablate
+    each external counterparty once. Internal edges (member↔member)
+    aren't counterparties — they're intra-cluster wiring and we keep them
+    constant, which is the inversion analysts expect.
+
+    Per-member attributions are also reported so reviewers can see which
+    member of the merged hand drives the lift, and the cluster's baseline
+    score is the *max* of contained members (matching the seed-risk
+    convention used in :func:`propagate_risk`).
+    """
+    members = list(members) if members else [entity_id]
+    if len(members) <= 1:
+        out = attribution(
+            rows,
+            members[0] if members else entity_id,
+            weights=weights,
+            sanctions_threshold=sanctions_threshold,
+            max_report=max_report,
+        )
+        out["entity_id"] = entity_id
+        out["members"] = members
+        out["is_aggregate"] = False
+        return out
+
+    member_set = set(members)
+    baseline = _score_or_passthrough(rows, None, weights, sanctions_threshold)
+    base_by_id = {a["account_id"]: a for a in baseline.get("accounts", [])}
+    per_member: List[Dict[str, Any]] = []
+    for m in members:
+        ba = base_by_id.get(m)
+        per_member.append({
+            "member_id": m,
+            "baseline_score": ba["risk_score"] if ba else 0.0,
+            "band": ba["band"] if ba else "low",
+        })
+    cluster_baseline = max((m["baseline_score"] for m in per_member), default=0.0)
+    cluster_band = max(per_member, key=lambda m: m["baseline_score"])["band"] if per_member else "low"
+
+    # External counterparties = parties outside the cluster that touch
+    # any member at least once.
+    related = [
+        r for r in rows
+        if (r.get("account_id") in member_set) ^ (r.get("counterparty") in member_set)
+    ]
+    counterparties: Set[str] = set()
+    for r in related:
+        cp = r["counterparty"] if r.get("account_id") in member_set else r.get("account_id")
+        if cp is not None and cp not in member_set:
+            counterparties.add(str(cp))
+
+    contributions: List[Dict[str, Any]] = []
+    for cp in counterparties:
+        # Drop every transaction between *any* cluster member and this cp.
+        kept = [
+            r for r in rows
+            if not (
+                (r.get("account_id") in member_set and r.get("counterparty") == cp)
+                or (r.get("account_id") == cp and r.get("counterparty") in member_set)
+            )
+        ]
+        cf_resp = risk_engine.score_accounts(
+            kept,
+            weights_override=weights,
+            sanctions_threshold=(
+                sanctions_threshold
+                if sanctions_threshold is not None
+                else risk_engine.SANCTIONS_HIT_THRESHOLD
+            ),
+        )
+        cf_by_id = {a["account_id"]: a for a in cf_resp.get("accounts", [])}
+        cluster_after = max(
+            (cf_by_id[m]["risk_score"] for m in members if m in cf_by_id),
+            default=0.0,
+        )
+        removed = [
+            r for r in related
+            if (r.get("account_id") in member_set and r.get("counterparty") == cp)
+            or (r.get("account_id") == cp and r.get("counterparty") in member_set)
+        ]
+        contributions.append({
+            "counterparty": cp,
+            "tx_count": len(removed),
+            "amount_total": round(sum(float(r.get("amount", 0) or 0) for r in removed), 2),
+            "score_with": cluster_baseline,
+            "score_without": cluster_after,
+            "lift": round(cluster_baseline - cluster_after, 2),
+        })
+    contributions.sort(key=lambda c: c["lift"], reverse=True)
+    return {
+        "account_id": entity_id,
+        "entity_id": entity_id,
+        "display_name": entity_id,
+        "members": members,
+        "is_aggregate": True,
+        "per_member": per_member,
+        "baseline_score": cluster_baseline,
+        "baseline_band": cluster_band,
+        "counterparties": contributions[:max_report],
+        "engine": "titan-network/0.2.0",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Case-detail network panel — auto-run analysis around a single account
+# ---------------------------------------------------------------------------
+
+
+# 1-hop subgraph cap (kept smaller than MAX_NODES so the case panel stays
+# inspectable without scrolling).
+CASE_PANEL_MAX_NODES = 22
+CASE_PANEL_MAX_EDGES = 80
+
+
+def _subgraph_around(
+    entities: List[Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+    center_id: str,
+    *,
+    hops: int = 1,
+    max_nodes: int = CASE_PANEL_MAX_NODES,
+    max_edges: int = CASE_PANEL_MAX_EDGES,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """BFS-bounded induced subgraph centred on ``center_id``.
+
+    Nodes are kept in BFS order until ``max_nodes`` is hit; edges are
+    filtered to those whose endpoints survived, then truncated by
+    aggregate amount so the most material flows always make the cut.
+    """
+    adj: Dict[str, Set[str]] = defaultdict(set)
+    for e in edges:
+        adj[e["src"]].add(e["dst"])
+        adj[e["dst"]].add(e["src"])
+    if center_id not in {e["id"] for e in entities}:
+        return [], []
+    seen: Set[str] = {center_id}
+    frontier: List[str] = [center_id]
+    for _ in range(max(0, hops)):
+        nxt: List[str] = []
+        for u in frontier:
+            for v in adj.get(u, ()):  # type: ignore[arg-type]
+                if v not in seen:
+                    seen.add(v)
+                    nxt.append(v)
+                    if len(seen) >= max_nodes:
+                        break
+            if len(seen) >= max_nodes:
+                break
+        if not nxt or len(seen) >= max_nodes:
+            break
+        frontier = nxt
+    kept_nodes = [e for e in entities if e["id"] in seen]
+    kept_edges = [e for e in edges if e["src"] in seen and e["dst"] in seen]
+    if len(kept_edges) > max_edges:
+        kept_edges = sorted(kept_edges, key=lambda e: -float(e["amount"]))[:max_edges]
+    return kept_nodes, kept_edges
+
+
+def case_panel(
+    rows: List[Dict[str, Any]],
+    *,
+    account_id: str,
+    weights: Optional[Dict[str, float]] = None,
+    sanctions_threshold: Optional[float] = None,
+    hops: int = 1,
+    score_response: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """One-shot network surface for a case detail page.
+
+    Runs the full analysis once, locates the subject's resolved entity,
+    crops the graph to its 1-hop neighbourhood, runs attribution (member
+    aware), and runs a "clear this case" counterfactual that ablates the
+    subject's entire entity (so an aggregate cluster's ablation removes
+    every member's transactions in one shot).
+
+    Returns a dict shaped for ``CaseNetworkPanel.tsx``.
+    """
+    if not rows:
+        return {
+            "ok": True,
+            "available": False,
+            "reason": "no transactions snapshotted",
+            "account_id": account_id,
+        }
+    full = analyze(
+        rows,
+        score_response=score_response,
+        weights=weights,
+        sanctions_threshold=sanctions_threshold,
+    )
+    entities = full.get("entities", [])
+    edges = full.get("edges", [])
+
+    # Locate the subject. The case's account_id is one party; the entity
+    # it belongs to may be itself (single-member) or an aggregate cluster.
+    subject_entity = next(
+        (e for e in entities if account_id in e.get("members", [])),
+        None,
+    )
+    if subject_entity is None:
+        return {
+            "ok": True,
+            "available": False,
+            "reason": f"account_id {account_id!r} not present in analysed graph",
+            "account_id": account_id,
+            "summary": full.get("summary"),
+        }
+
+    sub_nodes, sub_edges = _subgraph_around(
+        entities, edges, subject_entity["id"], hops=hops,
+    )
+
+    # Attribution — member aware so an aggregate cluster's contributors
+    # are reported against the cluster baseline, not a single member.
+    attrib = attribution_for_entity(
+        rows,
+        entity_id=subject_entity["id"],
+        members=subject_entity.get("members", [account_id]),
+        weights=weights,
+        sanctions_threshold=sanctions_threshold,
+    )
+
+    # Clearing counterfactual — ablate the subject's entity and report
+    # the network-wide impact. Reuses the just-computed `full` as
+    # baseline so we don't re-run analyse twice.
+    cf = counterfactual(
+        rows,
+        ablate_entity_ids=[subject_entity["id"]],
+        baseline=full,
+        weights=weights,
+        sanctions_threshold=sanctions_threshold,
+    )
+    subject_delta = next(
+        (d for d in cf.get("deltas", []) if d["entity_id"] == subject_entity["id"]),
+        None,
+    )
+
+    # Top neighbour lift — who *gains* the most when the subject is in
+    # place vs ablated. Sorted ascending by network_delta (most-negative
+    # first = biggest drop when ablated = strongest peer dependency on
+    # the subject).
+    peer_lifts = [
+        d for d in cf.get("deltas", [])
+        if d["entity_id"] != subject_entity["id"]
+    ]
+    peer_lifts.sort(key=lambda d: d["network_delta"])  # ascending: biggest drops first
+
+    return {
+        "ok": True,
+        "available": True,
+        "account_id": account_id,
+        "subject": subject_entity,
+        "subgraph": {
+            "entities": sub_nodes,
+            "edges": sub_edges,
+            "node_count": len(sub_nodes),
+            "edge_count": len(sub_edges),
+            "truncated_nodes": len(sub_nodes) < len(
+                [e for e in entities if e["id"] in {n["id"] for n in sub_nodes}]
+            ),
+        },
+        "attribution": attrib,
+        "clearing": {
+            "ablated_entity_id": subject_entity["id"],
+            "subject_self_delta": subject_delta,
+            "peer_lifts": peer_lifts[:8],
+            "summary": cf.get("summary"),
+            "txs_removed": cf.get("txs_removed", 0),
+        },
+        "full_summary": full.get("summary"),
+        "params": full.get("params"),
+        "engine": "titan-network/0.2.0",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Surface-level rules dump (mirrors risk.get_rules)
 # ---------------------------------------------------------------------------
 
 
 def get_rules() -> Dict[str, Any]:
     return {
-        "version": "titan-network/0.1.0",
+        "version": "titan-network/0.2.0",
         "entity_resolution": {
             "name_tau": NAME_TAU,
             "counterparty_tau": COUNTERPARTY_TAU,
@@ -958,4 +1250,9 @@ def get_rules() -> Dict[str, Any]:
             "iterations": LAYOUT_ITER,
         },
         "caps": {"max_nodes": MAX_NODES, "max_edges": MAX_EDGES},
+        "case_panel": {
+            "subgraph_max_nodes": CASE_PANEL_MAX_NODES,
+            "subgraph_max_edges": CASE_PANEL_MAX_EDGES,
+            "default_hops": 1,
+        },
     }

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AgePill from "../../../components/AgePill";
 import { Avatar } from "../../../components/CaseCard";
+import CaseNetworkPanel from "../../../components/CaseNetworkPanel";
 import FactorBars from "../../../components/FactorBars";
 import PriorityDot, { PRIORITY_LABEL } from "../../../components/PriorityDot";
 import ScoreRing from "../../../components/ScoreRing";
@@ -394,6 +395,11 @@ export default function CaseDetailPage() {
               </div>
             </div>
           </div>
+
+          <CaseNetworkPanel
+            caseId={c.id}
+            accountId={c.account_id}
+          />
 
           {c.snapshot.sanctions_hits.length > 0 && (
             <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.04] p-4">
