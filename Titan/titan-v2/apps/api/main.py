@@ -417,3 +417,30 @@ async def aml_network_attribution(payload: Dict[str, Any]) -> Dict[str, Any]:
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()
+
+
+# ----- Case-aware network panel (round-5, day-25) pass-through
+
+
+@app.get("/aml/cases/{case_id}/network")
+async def aml_cases_network(case_id: str, hops: int = 1) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/cases/{case_id}/network",
+            params={"hops": hops},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/cases/{case_id}/network/clearing")
+async def aml_cases_network_clearing(case_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"{AML_SVC}/aml/cases/{case_id}/network/clearing",
+            json=payload,
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()

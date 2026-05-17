@@ -70,6 +70,26 @@ def init_db() -> None:
         if "last_seen_at" not in cols:
             con.execute("ALTER TABLE notes ADD COLUMN last_seen_at TEXT")
 
+        # Trails: curated, replayable walks through the synapse graph.
+        # `steps` is a JSON array of `{note_id, caption}` dicts; we store
+        # it as TEXT so the order is preserved without an additional
+        # join table. Reads are O(trail_size) which is fine — trails are
+        # human-curated and rarely exceed a couple dozen steps.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trails (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                title      TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                steps      TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                origin     TEXT NOT NULL DEFAULT 'manual'
+            )
+            """
+        )
+        con.execute("CREATE INDEX IF NOT EXISTS idx_trails_updated ON trails(updated_at)")
+
 
 def add_note(title: str, body: str, tags: list[str]) -> int:
     vec = embed(f"{title}\n\n{body}")
@@ -158,3 +178,118 @@ def _row_to_note(row: sqlite3.Row) -> dict:
 
 def bulk_add(items: Iterable[tuple[str, str, list[str]]]) -> list[int]:
     return [add_note(t, b, g) for (t, b, g) in items]
+
+
+# ---------------------------------------------------------------- trails
+
+def _normalize_steps(steps: list[dict]) -> list[dict]:
+    """Clean + de-duplicate consecutive repeats. Empty captions allowed."""
+    out: list[dict] = []
+    last_id: int | None = None
+    for s in steps or []:
+        nid = int(s.get("note_id"))
+        cap = (s.get("caption") or "").strip()
+        if nid == last_id:
+            # Collapse accidental double-clicks. Keep the newer caption if
+            # the older one was empty so the user's intent isn't lost.
+            if cap and not out[-1].get("caption"):
+                out[-1]["caption"] = cap
+            continue
+        out.append({"note_id": nid, "caption": cap})
+        last_id = nid
+    return out
+
+
+def _row_to_trail(row: sqlite3.Row) -> dict:
+    return {
+        "id": int(row["id"]),
+        "title": row["title"],
+        "description": row["description"],
+        "steps": json.loads(row["steps"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "origin": row["origin"],
+    }
+
+
+def add_trail(
+    title: str,
+    description: str,
+    steps: list[dict],
+    origin: str = "manual",
+) -> int:
+    now = _iso_now()
+    payload = json.dumps(_normalize_steps(steps))
+    with _conn() as con:
+        cur = con.execute(
+            "INSERT INTO trails(title, description, steps, created_at, updated_at, origin) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (title.strip() or "Untitled trail", description.strip(), payload, now, now, origin),
+        )
+        return int(cur.lastrowid)
+
+
+def list_trails() -> list[dict]:
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT * FROM trails ORDER BY updated_at DESC, id DESC"
+        ).fetchall()
+        return [_row_to_trail(r) for r in rows]
+
+
+def get_trail(trail_id: int) -> dict | None:
+    with _conn() as con:
+        row = con.execute("SELECT * FROM trails WHERE id = ?", (trail_id,)).fetchone()
+        return _row_to_trail(row) if row else None
+
+
+def update_trail(
+    trail_id: int,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    steps: list[dict] | None = None,
+) -> bool:
+    """Partial update. Returns False if the trail doesn't exist."""
+    with _conn() as con:
+        row = con.execute("SELECT * FROM trails WHERE id = ?", (trail_id,)).fetchone()
+        if not row:
+            return False
+        new_title = (title.strip() if title is not None else row["title"]) or "Untitled trail"
+        new_desc = description.strip() if description is not None else row["description"]
+        new_steps = (
+            json.dumps(_normalize_steps(steps))
+            if steps is not None
+            else row["steps"]
+        )
+        con.execute(
+            "UPDATE trails SET title=?, description=?, steps=?, updated_at=? WHERE id=?",
+            (new_title, new_desc, new_steps, _iso_now(), trail_id),
+        )
+        return True
+
+
+def append_trail_step(trail_id: int, note_id: int, caption: str = "") -> bool:
+    with _conn() as con:
+        row = con.execute("SELECT steps FROM trails WHERE id = ?", (trail_id,)).fetchone()
+        if not row:
+            return False
+        steps = json.loads(row["steps"])
+        steps.append({"note_id": int(note_id), "caption": (caption or "").strip()})
+        con.execute(
+            "UPDATE trails SET steps=?, updated_at=? WHERE id=?",
+            (json.dumps(_normalize_steps(steps)), _iso_now(), trail_id),
+        )
+        return True
+
+
+def delete_trail(trail_id: int) -> bool:
+    with _conn() as con:
+        cur = con.execute("DELETE FROM trails WHERE id = ?", (trail_id,))
+        return cur.rowcount > 0
+
+
+def trails_count() -> int:
+    with _conn() as con:
+        (n,) = con.execute("SELECT COUNT(*) FROM trails").fetchone()
+        return int(n)
