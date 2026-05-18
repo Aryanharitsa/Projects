@@ -509,6 +509,205 @@ def inject_theme() -> None:
             background: linear-gradient(90deg, var(--accent, #53E3A6), rgba(255,255,255,0.12));
         }}
         .ws-itin-window-score {{ font-weight:800; font-variant-numeric: tabular-nums; min-width: 36px; text-align:right; }}
+
+        /* ===== Sentinel — live risk-pulse + cluster cards ===== */
+        .ws-sent-hero {{
+            position: relative;
+            background: linear-gradient(135deg, rgba(22,26,35,0.95) 0%, rgba(14,17,23,0.95) 100%);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 18px;
+            padding: 22px 26px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }}
+        .ws-sent-hero-glow {{
+            position: absolute; inset: -40%;
+            background: radial-gradient(circle at 35% 0%, var(--pulse-glow, rgba(83,227,166,0.18)) 0%, transparent 60%);
+            z-index: 0; pointer-events: none;
+        }}
+        .ws-sent-hero-inner {{
+            position: relative; z-index: 1;
+            display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+        }}
+        .ws-sent-pulse-dot {{
+            width: 88px; height: 88px; border-radius: 50%;
+            background: radial-gradient(circle, var(--pulse-hue, #53E3A6) 0%, rgba(0,0,0,0) 72%);
+            display: flex; align-items: center; justify-content: center;
+            color: #0E1117; font-weight: 900; font-size: .9rem; letter-spacing: .06em;
+            position: relative;
+            flex-shrink: 0;
+        }}
+        .ws-sent-pulse-dot::before, .ws-sent-pulse-dot::after {{
+            content:""; position:absolute; inset: 18px;
+            border-radius: 50%;
+            border: 2px solid var(--pulse-hue, #53E3A6);
+            animation: ws-sent-pulse 2.4s infinite ease-out;
+            opacity: 0;
+        }}
+        .ws-sent-pulse-dot::after {{ animation-delay: 1.2s; }}
+        @keyframes ws-sent-pulse {{
+            0%   {{ transform: scale(.85); opacity: .8; }}
+            70%  {{ transform: scale(1.9); opacity: 0; }}
+            100% {{ transform: scale(1.9); opacity: 0; }}
+        }}
+        .ws-sent-pulse-core {{
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--pulse-hue, #53E3A6);
+            box-shadow: 0 0 18px var(--pulse-hue, #53E3A6);
+            z-index: 1;
+        }}
+        .ws-sent-status-block {{ display: flex; flex-direction: column; min-width: 180px; }}
+        .ws-sent-status-kicker {{
+            font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+            color: {MUTED}; font-weight: 700;
+        }}
+        .ws-sent-status-label {{
+            font-size: 1.85rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em;
+            color: var(--pulse-hue, #53E3A6);
+            margin-top: 2px;
+        }}
+        .ws-sent-headline {{ color: #C7CDDC; font-size: .88rem; margin-top: 3px; }}
+        .ws-sent-stats {{ display: flex; gap: 26px; margin-left: auto; flex-wrap: wrap; }}
+        .ws-sent-stat {{ text-align: center; min-width: 64px; }}
+        .ws-sent-stat-val {{
+            font-weight: 800; font-size: 1.5rem; line-height: 1; color: #E6E9F2;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-sent-stat-lbl {{
+            font-size: .62rem; letter-spacing: .14em; text-transform: uppercase;
+            color: {MUTED}; margin-top: 4px;
+        }}
+        .ws-sent-counters {{
+            display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+            position: relative; z-index: 1;
+        }}
+        .ws-sent-chip {{
+            display: inline-flex; gap: 6px; align-items: center;
+            padding: 4px 10px; border-radius: 999px; font-size: .72rem; font-weight: 700;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+            color: #D4DAEA;
+        }}
+        .ws-sent-chip-dot {{ width: 8px; height: 8px; border-radius: 50%; }}
+
+        /* Cluster card */
+        .ws-sent-cluster {{
+            background: {CARD}; border: 1px solid rgba(255,255,255,0.06); border-radius: 14px;
+            padding: 14px 16px; margin-bottom: 10px; position: relative;
+            border-left: 3px solid var(--accent, #53E3A6);
+        }}
+        .ws-sent-cluster-head {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
+        .ws-sent-cluster-icon {{ font-size: 1.55rem; line-height: 1; }}
+        .ws-sent-cluster-title {{ font-weight: 800; font-size: 1.05rem; color: #E6E9F2; }}
+        .ws-sent-cluster-sub {{ color: {MUTED}; font-size: .76rem; margin-top: 2px; }}
+        .ws-sent-cluster-status {{
+            margin-left: auto;
+            padding: 3px 12px; border-radius: 999px; font-size: .66rem; font-weight: 800;
+            letter-spacing: .12em; text-transform: uppercase;
+            background: var(--accent-bg, rgba(83,227,166,0.14));
+            color: var(--accent, #53E3A6);
+            border: 1px solid var(--accent-bd, rgba(83,227,166,0.32));
+        }}
+
+        .ws-sent-velbar-wrap {{ margin-top: 12px; position: relative; padding-top: 14px; }}
+        .ws-sent-velbar {{
+            height: 7px; background: rgba(255,255,255,0.05);
+            border-radius: 4px; overflow: hidden; position: relative;
+        }}
+        .ws-sent-velbar-fill {{
+            height: 100%; border-radius: 4px;
+            background: linear-gradient(90deg, var(--accent), rgba(255,255,255,0.12));
+        }}
+        .ws-sent-velbar-baseline {{
+            position: absolute; top: 12px; bottom: 1px;
+            width: 2px; background: rgba(255,255,255,0.42);
+            border-radius: 1px;
+        }}
+        .ws-sent-velbar-baseline-lbl {{
+            position: absolute; top: -2px; font-size: .56rem; font-weight: 700;
+            color: rgba(255,255,255,0.55); letter-spacing: .05em;
+            transform: translateX(-50%);
+        }}
+        .ws-sent-vel-meta {{
+            display: flex; justify-content: space-between;
+            font-size: .68rem; color: {MUTED}; margin-top: 6px;
+        }}
+        .ws-sent-vel-current {{ color: var(--accent, #53E3A6); font-weight: 700; }}
+
+        .ws-sent-statgrid {{
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px;
+        }}
+        .ws-sent-statgrid-cell {{
+            background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 8px; padding: 8px 10px;
+        }}
+        .ws-sent-statgrid-val {{
+            font-weight: 800; font-size: 1.05rem; color: #E6E9F2;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-sent-statgrid-lbl {{
+            font-size: .58rem; letter-spacing: .1em; text-transform: uppercase;
+            color: {MUTED}; margin-top: 2px;
+        }}
+
+        .ws-sent-spark-wrap {{
+            margin-top: 12px; padding-top: 10px;
+            border-top: 1px dashed rgba(255,255,255,0.06);
+        }}
+        .ws-sent-spark-kicker {{
+            font-size: .58rem; letter-spacing: .1em; text-transform: uppercase;
+            color: {MUTED}; margin-bottom: 6px;
+        }}
+        .ws-sent-sparkline {{
+            display: flex; align-items: flex-end; gap: 1px; height: 30px;
+        }}
+        .ws-sent-spark-bar {{
+            flex: 1; min-height: 2px;
+            background: var(--accent);
+            border-radius: 1px 1px 0 0; opacity: 0.85;
+        }}
+        .ws-sent-spark-bar.empty {{ background: rgba(255,255,255,0.04); opacity: 1; }}
+        .ws-sent-spark-axis {{
+            display: flex; justify-content: space-between;
+            font-size: .55rem; color: {MUTED}; margin-top: 3px;
+        }}
+
+        .ws-sent-mix {{ display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }}
+        .ws-sent-mix-tag {{
+            padding: 2px 9px; border-radius: 999px; font-size: .68rem;
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+            color: #C7CDDC;
+        }}
+
+        .ws-sent-action {{
+            margin-top: 12px; padding: 9px 14px; border-radius: 10px;
+            background: var(--action-bg, rgba(83,227,166,0.08));
+            border-left: 2px solid var(--accent, #53E3A6);
+            font-size: .84rem; color: #D4DAEA; line-height: 1.4;
+        }}
+
+        .ws-sent-empty {{
+            background: rgba(83,227,166,0.05); border: 1px dashed rgba(83,227,166,0.28);
+            border-radius: 14px; padding: 36px 20px; text-align: center; color: #B8C0D2;
+            margin: 14px 0;
+        }}
+        .ws-sent-empty-title {{
+            font-size: 1.15rem; font-weight: 800; color: #E6E9F2; margin-bottom: 6px;
+            letter-spacing: -0.01em;
+        }}
+
+        /* Watch banner (Map tab) */
+        .ws-sent-banner {{
+            display: flex; align-items: center; gap: 12px;
+            background: linear-gradient(90deg, var(--banner-bg, rgba(255,127,80,0.14)) 0%, rgba(0,0,0,0) 70%);
+            border: 1px solid var(--banner-bd, rgba(255,127,80,0.30));
+            border-left: 4px solid var(--banner-hue, #FF7F50);
+            border-radius: 10px;
+            padding: 10px 14px; margin-bottom: 10px;
+        }}
+        .ws-sent-banner-icon {{ font-size: 1.4rem; line-height: 1; }}
+        .ws-sent-banner-text {{ font-weight: 700; color: #E6E9F2; flex: 1; }}
+        .ws-sent-banner-text small {{ font-weight: 500; color: {MUTED}; margin-left: 8px; }}
+        .ws-sent-banner-meta {{ color: {MUTED}; font-size: .78rem; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1376,3 +1575,232 @@ def render_itinerary_windows(windows, baseline_time, *, top_k: int = 5) -> None:
             f"</div>"
         )
     st.markdown("".join(rows), unsafe_allow_html=True)
+
+
+# ===== Sentinel =====
+
+def _sentinel_status_hue(status: str) -> str:
+    return {
+        "Critical": "#FF3D60",
+        "Active":   "#FF7F50",
+        "Watch":    "#F9C440",
+        "Calm":     "#53E3A6",
+    }.get(status, MUTED)
+
+
+def _cluster_status_hue(status: str) -> str:
+    return {
+        "Critical": "#FF3D60",
+        "Emerging": "#FF7F50",
+        "Steady":   "#F9C440",
+        "Cooling":  "#53E3A6",
+    }.get(status, MUTED)
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha:.3f})"
+
+
+def render_sentinel_pulse(pulse) -> None:
+    """Hero card for the global Risk Pulse — status badge, headline, counters."""
+    hue = _sentinel_status_hue(pulse.status)
+    glow = _hex_to_rgba(hue, 0.22)
+
+    counter_specs = [
+        ("Critical", pulse.n_critical, "#FF3D60"),
+        ("Emerging", pulse.n_emerging, "#FF7F50"),
+        ("Steady",   pulse.n_steady,   "#F9C440"),
+        ("Cooling",  pulse.n_cooling,  "#53E3A6"),
+    ]
+    chips = "".join(
+        f"<div class='ws-sent-chip'>"
+        f"<span class='ws-sent-chip-dot' style='background:{c};'></span>"
+        f"{lbl} · <span style='font-variant-numeric:tabular-nums;'>{n}</span>"
+        f"</div>"
+        for lbl, n, c in counter_specs
+    )
+
+    dom = ""
+    if pulse.dominant_category:
+        from sentinel import CATEGORY_ICON  # local import to avoid cycle on theme-only callers
+        ic = CATEGORY_ICON.get(pulse.dominant_category, "")
+        dom = f"{ic} {pulse.dominant_category}"
+
+    st.markdown(
+        f"""
+        <div class="ws-sent-hero" style="--pulse-hue:{hue}; --pulse-glow:{glow};">
+          <div class="ws-sent-hero-glow"></div>
+          <div class="ws-sent-hero-inner">
+            <div class="ws-sent-pulse-dot">
+              <div class="ws-sent-pulse-core"></div>
+            </div>
+            <div class="ws-sent-status-block">
+              <div class="ws-sent-status-kicker">Risk Pulse</div>
+              <div class="ws-sent-status-label">{pulse.status}</div>
+              <div class="ws-sent-headline">{pulse.headline}</div>
+            </div>
+            <div class="ws-sent-stats">
+              <div class="ws-sent-stat">
+                <div class="ws-sent-stat-val">{pulse.n_clusters}</div>
+                <div class="ws-sent-stat-lbl">Clusters</div>
+              </div>
+              <div class="ws-sent-stat">
+                <div class="ws-sent-stat-val">{pulse.recent_window_count}</div>
+                <div class="ws-sent-stat-lbl">Last {pulse.recent_days}d</div>
+              </div>
+              <div class="ws-sent-stat">
+                <div class="ws-sent-stat-val">{pulse.baseline_window_count}</div>
+                <div class="ws-sent-stat-lbl">Prior {pulse.baseline_days}d</div>
+              </div>
+              <div class="ws-sent-stat">
+                <div class="ws-sent-stat-val">{pulse.velocity:.2f}×</div>
+                <div class="ws-sent-stat-lbl">Velocity</div>
+              </div>
+            </div>
+          </div>
+          <div class="ws-sent-counters">{chips}{('<div class=ws-sent-chip>Mostly · ' + dom + '</div>') if dom else ''}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sentinel_watch_banner(pulse) -> None:
+    """One-line banner used on the Map tab to surface emerging hotspots globally."""
+    if pulse.status == "Calm":
+        return
+    hue = _sentinel_status_hue(pulse.status)
+    bg = _hex_to_rgba(hue, 0.14)
+    bd = _hex_to_rgba(hue, 0.30)
+    icon = {"Critical": "🚨", "Active": "⚠️", "Watch": "👀", "Calm": "✅"}.get(pulse.status, "👀")
+    if pulse.status == "Critical":
+        msg = f"Sentinel: <strong>CRITICAL</strong> — {pulse.n_critical} hotspot(s) erupting now."
+    elif pulse.status == "Active":
+        msg = f"Sentinel: <strong>ACTIVE</strong> — {pulse.n_emerging} emerging hotspot(s)."
+    else:
+        msg = f"Sentinel: <strong>WATCH</strong> — {pulse.headline}."
+    st.markdown(
+        f"""
+        <div class="ws-sent-banner" style="--banner-hue:{hue}; --banner-bg:{bg}; --banner-bd:{bd};">
+          <div class="ws-sent-banner-icon">{icon}</div>
+          <div class="ws-sent-banner-text">{msg}<small>open the <em>Sentinel</em> tab for cluster intel</small></div>
+          <div class="ws-sent-banner-meta">{pulse.recent_window_count} incidents · {pulse.recent_days} d window</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sentinel_empty(*, hint: str = "No incident clusters at the current ε / min-samples threshold. Loosen the parameters in the sidebar or wait for more reports.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-sent-empty">
+          <div class="ws-sent-empty-title">Sentinel idle 🟢</div>
+          <div>{hint}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_sparkline(counts, accent: str, *, window_label: str) -> str:
+    if not counts:
+        return ""
+    mx = max(counts) or 1
+    bars = "".join(
+        f"<div class='ws-sent-spark-bar{(' empty' if v == 0 else '')}' "
+        f"style='height:{int(2 + (v / mx) * 26)}px;'></div>"
+        for v in counts
+    )
+    n = len(counts)
+    return (
+        f"<div class='ws-sent-spark-wrap' style='--accent:{accent};'>"
+        f"<div class='ws-sent-spark-kicker'>Activity · last {window_label}</div>"
+        f"<div class='ws-sent-sparkline'>{bars}</div>"
+        f"<div class='ws-sent-spark-axis'>"
+        f"<span>{n}d ago</span><span>peak {mx}</span><span>today</span>"
+        f"</div></div>"
+    )
+
+
+def render_sentinel_clusters(clusters, user_loc, *, recommended_action_fn=None) -> None:
+    """Render the per-cluster intel cards.
+
+    `user_loc` is a dict with `lat`/`lon`. `recommended_action_fn(cluster, lat, lon) -> str`
+    is injected from sentinel.py to avoid a hard import cycle.
+    """
+    if not clusters:
+        render_sentinel_empty()
+        return
+
+    from sentinel import CATEGORY_ICON  # local import
+
+    for c in clusters:
+        accent = _cluster_status_hue(c.status)
+        accent_bg = _hex_to_rgba(accent, 0.16)
+        accent_bd = _hex_to_rgba(accent, 0.36)
+        action_bg = _hex_to_rgba(accent, 0.08)
+
+        # velocity bar: cap visualisation at 4× for sanity, but show numeric
+        cap = 4.0
+        width_pct = min(100, int(round(c.velocity / cap * 100)))
+        baseline_left = 25.0  # 1.0 / 4.0 → 25%
+
+        # 4-cell stat grid
+        statgrid = "".join([
+            f"<div class='ws-sent-statgrid-cell'><div class='ws-sent-statgrid-val'>{c.recent_count}</div><div class='ws-sent-statgrid-lbl'>Recent ({c.recent_window_days}d)</div></div>",
+            f"<div class='ws-sent-statgrid-cell'><div class='ws-sent-statgrid-val'>{c.baseline_count}</div><div class='ws-sent-statgrid-lbl'>Prior ({c.baseline_window_days}d)</div></div>",
+            f"<div class='ws-sent-statgrid-cell'><div class='ws-sent-statgrid-val'>{c.severity_mean:.1f}<span style='color:{MUTED}; font-size:.7rem; font-weight:600;'> /5</span></div><div class='ws-sent-statgrid-lbl'>Severity</div></div>",
+            f"<div class='ws-sent-statgrid-cell'><div class='ws-sent-statgrid-val'>{int(round(c.verified_frac * 100))}<span style='color:{MUTED}; font-size:.7rem; font-weight:600;'> %</span></div><div class='ws-sent-statgrid-lbl'>Verified</div></div>",
+        ])
+
+        mix_html = "".join(
+            f"<div class='ws-sent-mix-tag'>{CATEGORY_ICON.get(cat, '·')} {cat} <strong>×{n}</strong></div>"
+            for cat, n in c.category_mix
+        )
+
+        action = recommended_action_fn(c, user_loc["lat"], user_loc["lon"]) if recommended_action_fn else ""
+        action_html = f"<div class='ws-sent-action' style='--accent:{accent}; --action-bg:{action_bg};'>{action}</div>" if action else ""
+
+        spark = _render_sparkline(c.daily_counts, accent, window_label=f"{c.recent_window_days} d")
+
+        peak_lbl = f"peak {c.peak_hour:02d}:00" if c.peak_hour is not None else "no peak"
+        last_lbl = c.last_seen.strftime("%a %d %b · %H:%M") if c.last_seen else "—"
+        sub = (
+            f"center {c.center_lat:.4f}, {c.center_lon:.4f} · radius {c.radius_km:g} km · "
+            f"last seen {last_lbl} ({c.days_since_last:.1f} d ago) · {peak_lbl}"
+        )
+
+        st.markdown(
+            f"""
+            <div class="ws-sent-cluster"
+                 style="--accent:{accent}; --accent-bg:{accent_bg}; --accent-bd:{accent_bd};">
+              <div class="ws-sent-cluster-head">
+                <div class="ws-sent-cluster-icon">{c.icon}</div>
+                <div>
+                  <div class="ws-sent-cluster-title">Cluster #{c.id + 1} · {c.dominant_category.title()} <span style="color:{MUTED}; font-weight:600;">· {c.count} incidents</span></div>
+                  <div class="ws-sent-cluster-sub">{sub}</div>
+                </div>
+                <div class="ws-sent-cluster-status">{c.status}</div>
+              </div>
+
+              <div class="ws-sent-velbar-wrap">
+                <div class="ws-sent-velbar-baseline-lbl" style="left:{baseline_left}%;">1.0×</div>
+                <div class="ws-sent-velbar"><div class="ws-sent-velbar-fill" style="width:{width_pct}%;"></div></div>
+                <div class="ws-sent-velbar-baseline" style="left:{baseline_left}%;"></div>
+                <div class="ws-sent-vel-meta">
+                  <span>recent {c.recent_rate:.2f}/d · baseline {c.baseline_rate:.2f}/d</span>
+                  <span class="ws-sent-vel-current">{c.velocity:.2f}× baseline</span>
+                </div>
+              </div>
+
+              <div class="ws-sent-statgrid">{statgrid}</div>
+              <div class="ws-sent-mix">{mix_html}</div>
+              {spark}
+              {action_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

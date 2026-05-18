@@ -25,9 +25,12 @@ from theme import (
     render_itinerary_empty, render_itinerary_summary,
     render_itinerary_timeline, render_itinerary_legs,
     render_itinerary_windows,
+    render_sentinel_pulse, render_sentinel_clusters, render_sentinel_empty,
+    render_sentinel_watch_banner,
 )
 import companion as cp
 import itinerary as itn
+import sentinel as sn
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -295,14 +298,37 @@ if role == "Tourist App":
     if safety.band in ("High Risk", "Danger"):
         st.warning(f"⚠️ {safety.band} zone — review factors above and consider an alternate route.")
 
+    # ---------------- Sentinel: shared cluster computation (Day 26)
+    # Computed once per rerun and used by both the Map watch-banner and the
+    # full Sentinel tab so the two surfaces never disagree.
+    if "sentinel_params" not in st.session_state:
+        st.session_state.sentinel_params = {
+            "eps_km": sn.DEFAULT_EPS_KM,
+            "min_samples": sn.DEFAULT_MIN_SAMPLES,
+            "recent_days": 30,
+            "baseline_days": 60,
+        }
+    _sp = st.session_state.sentinel_params
+    _inc_records = inc_df.to_dict("records") if not inc_df.empty else []
+    sent_clusters, sent_noise = sn.cluster_incidents(
+        _inc_records,
+        eps_km=_sp["eps_km"], min_samples=_sp["min_samples"],
+        recent_days=_sp["recent_days"], baseline_days=_sp["baseline_days"],
+    )
+    sent_pulse = sn.compute_risk_pulse(
+        sent_clusters, _inc_records,
+        recent_days=_sp["recent_days"], baseline_days=_sp["baseline_days"],
+    )
+
     tab_labels = [
         "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
-        "Report Hazard", "Alerts", "SOS", "Trip Log",
+        "Sentinel", "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
 
     # ---------------- Map
     with tabs[0]:
+        render_sentinel_watch_banner(sent_pulse)
         draw_map_layers(inc_df, bcast_df, poi_df, my, show_heatmap=st.session_state.show_heatmap)
         st.caption("🔴 verified incident · 🟡 pending · 🟢 help POI · 🟠 risk zone · 🔵 active broadcast")
 
@@ -1070,8 +1096,138 @@ if role == "Tourist App":
                 f"**{top['top_category']}**."
             )
 
-    # ---------------- Report Hazard
+    # ---------------- Sentinel (Day 26)
     with tabs[5]:
+        st.subheader("🛰️ Sentinel — Live Cluster Intel")
+        st.caption(
+            "DBSCAN over haversine groups raw incidents into discrete hotspots; each "
+            "cluster is then **graded by velocity** — recent rate vs its own historical "
+            "baseline — so you see what's *escalating right now*, not just where activity "
+            "has accumulated."
+        )
+
+        render_sentinel_pulse(sent_pulse)
+
+        with st.expander("Sentinel parameters", expanded=False):
+            cA, cB, cC, cD = st.columns(4)
+            with cA:
+                new_eps = st.number_input(
+                    "Cluster radius ε (km)",
+                    min_value=0.10, max_value=3.00, value=float(_sp["eps_km"]), step=0.05,
+                    help="Two incidents within ε kilometres count as the same cluster (DBSCAN).",
+                )
+            with cB:
+                new_min = st.number_input(
+                    "Min samples", min_value=2, max_value=15,
+                    value=int(_sp["min_samples"]), step=1,
+                    help="Minimum incidents in an ε-ball to form a cluster core.",
+                )
+            with cC:
+                new_recent = st.number_input(
+                    "Recent window (days)", min_value=1, max_value=120,
+                    value=int(_sp["recent_days"]), step=1,
+                    help="Numerator of velocity — what counts as 'now'.",
+                )
+            with cD:
+                new_baseline = st.number_input(
+                    "Baseline window (days)", min_value=7, max_value=365,
+                    value=int(_sp["baseline_days"]), step=1,
+                    help="Denominator of velocity — the historical reference period that "
+                         "ends where the recent window begins.",
+                )
+            if (new_eps, new_min, new_recent, new_baseline) != (
+                _sp["eps_km"], _sp["min_samples"], _sp["recent_days"], _sp["baseline_days"]
+            ):
+                st.session_state.sentinel_params = {
+                    "eps_km": float(new_eps),
+                    "min_samples": int(new_min),
+                    "recent_days": int(new_recent),
+                    "baseline_days": int(new_baseline),
+                }
+                st.rerun()
+
+        if not sent_clusters:
+            render_sentinel_empty(
+                hint=(
+                    f"No clusters at ε={_sp['eps_km']:g} km · min-samples={_sp['min_samples']}. "
+                    "Try loosening the parameters in the expander above."
+                ),
+            )
+        else:
+            # Cluster map: halo polygons + status-coloured centre markers + faint incident dots
+            cluster_rows = [{
+                "lat": c.center_lat, "lon": c.center_lon,
+                "name": f"#{c.id+1} · {c.dominant_category}",
+                "category": f"  ·  {c.status} · ×{c.velocity:.2f}",
+                "radius_m": max(80, int(c.radius_km * 1000 * 0.6)),
+            } for c in sent_clusters]
+            cluster_df = pd.DataFrame(cluster_rows)
+
+            extras = []
+            for c in sent_clusters:
+                hue = sn.STATUS_HUE.get(c.status, "#8892A6")
+                h = hue.lstrip("#")
+                r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+                ring = sn.cluster_polygon(c)
+                extras.append(pdk.Layer(
+                    "PolygonLayer",
+                    data=[{"polygon": ring, "name": f"#{c.id+1} {c.dominant_category}",
+                           "category": f"  ·  {c.status} · ×{c.velocity:.2f}"}],
+                    get_polygon="polygon",
+                    get_fill_color=[r, g, b, 40],
+                    get_line_color=[r, g, b, 230],
+                    line_width_min_pixels=2,
+                    pickable=True,
+                ))
+            extras.append(pdk.Layer(
+                "ScatterplotLayer",
+                data=cluster_df,
+                get_position='[lon, lat]',
+                get_fill_color=[230, 233, 242, 220],
+                get_line_color=[14, 17, 23],
+                stroked=True,
+                line_width_min_pixels=2,
+                get_radius='radius_m',
+                radius_min_pixels=8,
+                pickable=True,
+            ))
+
+            # Re-centre on the cluster centroid for a clean overview
+            mid_lat = sum(c.center_lat for c in sent_clusters) / len(sent_clusters)
+            mid_lon = sum(c.center_lon for c in sent_clusters) / len(sent_clusters)
+            view = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=11.3)
+            draw_map_layers(
+                inc_df, bcast_df, poi_df, my,
+                show_heatmap=False, extra_layers=extras, view_state_override=view,
+            )
+            st.caption(
+                "🔴 critical · 🟠 emerging · 🟡 steady · 🟢 cooling — halo radius matches the "
+                "cluster's geographic spread; centre dot size = recent count."
+            )
+
+            # Cluster cards
+            render_sentinel_clusters(
+                sent_clusters, my,
+                recommended_action_fn=sn.recommended_action,
+            )
+
+            # Nearest-hotspot mini-callout (proximity intel for the user's location)
+            nc = sn.nearest_cluster(sent_clusters, my["lat"], my["lon"])
+            if nc:
+                cl, d_edge = nc
+                if d_edge == 0:
+                    st.warning(
+                        f"📍 Your current location is **inside** cluster #{cl.id+1} "
+                        f"({cl.dominant_category}, {cl.status}, ×{cl.velocity:.2f} baseline)."
+                    )
+                else:
+                    st.info(
+                        f"📍 Nearest cluster: **#{cl.id+1} · {cl.dominant_category}** "
+                        f"({cl.status}, ×{cl.velocity:.2f}) — **{d_edge:g} km** from its edge."
+                    )
+
+    # ---------------- Report Hazard
+    with tabs[6]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -1104,7 +1260,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -1123,7 +1279,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -1150,7 +1306,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip
