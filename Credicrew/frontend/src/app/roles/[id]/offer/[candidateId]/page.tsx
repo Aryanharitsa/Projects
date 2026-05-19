@@ -30,6 +30,17 @@ import { buildCalendar } from '@/lib/ics';
 import CompLadder, { fmtMoney } from '@/components/CompLadder';
 import WinProbabilityDial, { FactorBars } from '@/components/WinProbabilityDial';
 import OfferLetterPreview from '@/components/OfferLetterPreview';
+import PeerParityPanel from '@/components/PeerParityPanel';
+import PeerPoolDrawer from '@/components/PeerPoolDrawer';
+import {
+  addPeer,
+  computePeerParity,
+  ensureSeeded,
+  makePeerId,
+  removePeer,
+  type PeerOffer,
+} from '@/lib/peer_parity';
+import { buildSeed } from '@/lib/peer_seed';
 
 const TONE_RING: Record<string, string> = {
   rose: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
@@ -97,7 +108,11 @@ export default function OfferStudio() {
   const [hiringManager, setHiringManager] = useState('');
   const [copiedLetter, setCopiedLetter] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [peers, setPeers] = useState<PeerOffer[]>([]);
+  const [poolOpen, setPoolOpen] = useState(false);
+  const [publishFlash, setPublishFlash] = useState(false);
   const initRef = useRef(false);
+  const peerSeedRef = useRef(false);
 
   useEffect(() => {
     if (!roleId) return;
@@ -153,6 +168,14 @@ export default function OfferStudio() {
     const t = window.setTimeout(() => setSavedFlash(false), 700);
     return () => window.clearTimeout(t);
   }, [role, draft, candidateId]);
+
+  // Seed + load peer pool once per role.
+  useEffect(() => {
+    if (!role || peerSeedRef.current) return;
+    peerSeedRef.current = true;
+    const pool = ensureSeeded(role.id, buildSeed);
+    setPeers(pool);
+  }, [role]);
 
   const interviewSummary: ScorecardSummary | null = useMemo(() => {
     if (!interview) return null;
@@ -240,6 +263,69 @@ export default function OfferStudio() {
       expiresOn: isoDateAfterDays(14),
     });
   }, [benchmark]);
+
+  const parity = useMemo(() => {
+    if (!draft) return null;
+    return computePeerParity(
+      {
+        composite: interviewSummary?.composite ?? null,
+        base: draft.base,
+        equityPct: draft.equityPct,
+        signOn: draft.signOn,
+        targetBonusPct: draft.targetBonusPct,
+        candidateName: candidate?.name,
+      },
+      peers,
+    );
+  }, [draft, interviewSummary, peers, candidate]);
+
+  const onPublishPeer = useCallback(() => {
+    if (!role || !candidate || !draft) return;
+    const peer: PeerOffer = {
+      id: makePeerId(),
+      candidateName: candidate.name,
+      roleName: role.name,
+      seniority: role.plan.seniority ?? 'mid',
+      location: (role.plan.location ?? candidate.location ?? 'unknown').toLowerCase(),
+      composite: interviewSummary?.composite ?? null,
+      base: draft.base,
+      equityPct: draft.equityPct,
+      signOn: draft.signOn,
+      targetBonusPct: draft.targetBonusPct,
+      acceptedAt: new Date().toISOString().slice(0, 10),
+      source: 'observed',
+    };
+    const next = addPeer(role.id, peer);
+    setPeers(next);
+    setPublishFlash(true);
+    window.setTimeout(() => setPublishFlash(false), 1400);
+  }, [role, candidate, draft, interviewSummary]);
+
+  const onAddPeer = useCallback((peer: PeerOffer) => {
+    if (!role) return;
+    setPeers(addPeer(role.id, peer));
+  }, [role]);
+
+  const onRemovePeer = useCallback((peerId: string) => {
+    if (!role) return;
+    setPeers(removePeer(role.id, peerId));
+  }, [role]);
+
+  const onClearInversion = useCallback(() => {
+    if (!parity || !draft || parity.inversions.length === 0) return;
+    // Snap proposed total cash to the top inversion peer's total - 2%.
+    const top = parity.inversions[0];
+    const peer = top.peer;
+    const peerTotal = peer.base + peer.signOn + peer.base * (peer.targetBonusPct / 100);
+    const targetTotal = peerTotal * 0.98;
+    // Apportion the drop to base (the largest mover), keep sign-on/bonus as is.
+    const currentTotal = draft.base + draft.signOn + draft.base * (draft.targetBonusPct / 100);
+    const drop = currentTotal - targetTotal;
+    if (drop <= 0) return;
+    const factor = 1 + draft.targetBonusPct / 100;
+    const newBase = Math.max(1, Math.round((draft.base * factor - drop) / factor));
+    setDraft({ ...draft, base: newBase });
+  }, [parity, draft]);
 
   if (!ready) {
     return (
@@ -610,6 +696,19 @@ export default function OfferStudio() {
           </div>
         </section>
 
+        {/* Peer parity */}
+        {parity && (
+          <section className="mt-10 print:hidden">
+            <PeerParityPanel
+              result={parity}
+              onOpenPool={() => setPoolOpen(true)}
+              onPublish={onPublishPeer}
+              onClearInversion={parity.inversions.length > 0 ? onClearInversion : undefined}
+              publishLabel={publishFlash ? 'Added ✓' : 'Publish to peer pool'}
+            />
+          </section>
+        )}
+
         {/* Letter preview */}
         <section className="mt-10">
           <div className="mb-3 flex items-center justify-between print:hidden">
@@ -626,6 +725,14 @@ export default function OfferStudio() {
           <OfferLetterPreview markdown={letterMd} />
         </section>
       </div>
+
+      <PeerPoolDrawer
+        open={poolOpen}
+        peers={peers}
+        onClose={() => setPoolOpen(false)}
+        onAdd={onAddPeer}
+        onRemove={onRemovePeer}
+      />
     </main>
   );
 }

@@ -379,11 +379,21 @@ export async function casesAssignees(): Promise<{ ok: boolean; assignees: string
 
 export async function openCase(
   account_report: AccountReport,
-  opts: { opened_by?: string; note?: string } = {},
+  opts: {
+    opened_by?: string;
+    note?: string;
+    transactions?: Tx[];
+    weights?: WeightOverrides;
+    sanctions_threshold?: number;
+  } = {},
 ): Promise<{ ok: boolean; case: CaseSummary }> {
   const body: any = { account_report };
   if (opts.opened_by) body.opened_by = opts.opened_by;
   if (opts.note) body.note = opts.note;
+  if (opts.transactions && opts.transactions.length) body.transactions = opts.transactions;
+  if (opts.weights && Object.keys(opts.weights).length) body.weights = opts.weights;
+  if (typeof opts.sanctions_threshold === "number")
+    body.sanctions_threshold = opts.sanctions_threshold;
   const r = await fetch(`${API_BASE}/aml/cases/open`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -394,12 +404,31 @@ export async function openCase(
 
 export async function bulkOpenCases(
   score_response: ScoreResponse,
-  opts: { min_priority?: CasePriority; opened_by?: string } = {},
-): Promise<{ ok: boolean; opened: CaseSummary[]; skipped: any[]; total_accounts: number }> {
+  opts: {
+    min_priority?: CasePriority;
+    opened_by?: string;
+    transactions?: Tx[];
+    weights?: WeightOverrides;
+    sanctions_threshold?: number;
+  } = {},
+): Promise<{
+  ok: boolean;
+  opened: CaseSummary[];
+  skipped: any[];
+  total_accounts: number;
+  snapshotted?: number;
+}> {
+  const body: any = { score_response };
+  if (opts.min_priority) body.min_priority = opts.min_priority;
+  if (opts.opened_by) body.opened_by = opts.opened_by;
+  if (opts.transactions && opts.transactions.length) body.transactions = opts.transactions;
+  if (opts.weights && Object.keys(opts.weights).length) body.weights = opts.weights;
+  if (typeof opts.sanctions_threshold === "number")
+    body.sanctions_threshold = opts.sanctions_threshold;
   const r = await fetch(`${API_BASE}/aml/cases/bulk_open`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ score_response, ...opts }),
+    body: JSON.stringify(body),
   });
   return jsonOrThrow(r);
 }
@@ -601,6 +630,101 @@ export async function attributionNetwork(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transactions, account_id, ...opts }),
+  });
+  return jsonOrThrow(r);
+}
+
+// ---------------------------------------------------------------------------
+// Case-aware network panel (day-25)
+// ---------------------------------------------------------------------------
+
+export type EntityAttributionMember = {
+  member_id: string;
+  baseline_score: number;
+  band: "low" | "medium" | "high" | "critical";
+};
+
+export type EntityAttribution = {
+  account_id: string;
+  entity_id: string;
+  display_name: string;
+  members?: string[];
+  is_aggregate?: boolean;
+  per_member?: EntityAttributionMember[];
+  baseline_score: number;
+  baseline_band: "low" | "medium" | "high" | "critical";
+  counterparties: AttributionContribution[];
+};
+
+export type CaseClearingPanel = {
+  ablated_entity_id: string;
+  subject_self_delta: NetworkDelta | null;
+  peer_lifts: NetworkDelta[];
+  summary: NetworkCounterfactual["summary"];
+  txs_removed: number;
+};
+
+export type CaseNetworkPanel =
+  | {
+      ok: true;
+      available: false;
+      reason: string;
+      account_id: string;
+      case_id?: string;
+    }
+  | {
+      ok: true;
+      available: true;
+      account_id: string;
+      case_id?: string;
+      subject: NetEntity;
+      subgraph: {
+        entities: NetEntity[];
+        edges: NetEdge[];
+        node_count: number;
+        edge_count: number;
+        truncated_nodes: boolean;
+      };
+      attribution: EntityAttribution;
+      clearing: CaseClearingPanel;
+      full_summary: NetworkAnalyze["summary"];
+      params?: NetworkAnalyze["params"];
+      snapshot_meta?: {
+        tx_count: number;
+        counterparty_count: number;
+        created_at_iso: string;
+      };
+      source?: "client-supplied";
+      engine: string;
+    };
+
+export async function getCaseNetwork(
+  case_id: string,
+  opts: { hops?: number } = {},
+): Promise<CaseNetworkPanel> {
+  const qs = new URLSearchParams();
+  if (typeof opts.hops === "number") qs.set("hops", String(opts.hops));
+  const url = qs.toString()
+    ? `${API_BASE}/aml/cases/${case_id}/network?${qs.toString()}`
+    : `${API_BASE}/aml/cases/${case_id}/network`;
+  const r = await fetch(url, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function runCaseNetworkClearing(
+  case_id: string,
+  transactions: Tx[],
+  opts: { hops?: number; weights?: WeightOverrides; sanctions_threshold?: number } = {},
+): Promise<CaseNetworkPanel> {
+  const body: any = { transactions };
+  if (typeof opts.hops === "number") body.hops = opts.hops;
+  if (opts.weights && Object.keys(opts.weights).length) body.weights = opts.weights;
+  if (typeof opts.sanctions_threshold === "number")
+    body.sanctions_threshold = opts.sanctions_threshold;
+  const r = await fetch(`${API_BASE}/aml/cases/${case_id}/network/clearing`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
   return jsonOrThrow(r);
 }

@@ -5,9 +5,11 @@ list." It runs the **whole hiring loop**: parse a JD, get an explainable
 shortlist, track candidates through statuses, send a tailored outreach
 email, **run the interview** with a JD-tailored prep kit and a weighted
 scorecard, **decide** in a calibrated comparison studio that ranks the
-entire pool, then **close** in an Offer Studio that benchmarks comp
-against the market, simulates the candidate's accept-probability live,
-and ships a print-ready offer letter — all from a dark, fast,
+entire pool, **close** in an Offer Studio that benchmarks comp against
+the market, simulates the candidate's accept-probability live, and ships
+a print-ready offer letter — and now **audits the offer for fairness**
+against the team's accepted peer offers so a one-week sprint doesn't
+quietly torch six months of pay-band discipline. All from a dark, fast,
 single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
@@ -15,6 +17,77 @@ the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Peer Parity (Day 27)
+
+Decision Studio computes a calibrated interview composite. Offer Studio
+turns that composite into a comp package. Until Day 27 the gap between
+them was a blind spot: nothing checked whether the proposed offer was
+*consistent* with how the team had paid past hires at a similar bar.
+Day 27 closes that gap with **Peer Parity** — a fairness audit that sits
+under the Offer Studio dial and flags every dimension that drifts off
+the team's own band.
+
+- **Per-dimension regression** — fits `dim = a·composite + b` across the
+  team's peer offers for five dimensions (base · equity · sign-on ·
+  target-bonus · year-1 total cash), z-scores the proposed offer against
+  the residual stddev (with a `5%·mean` floor so a homogeneous team
+  isn't infinitely strict), and bands each dim `in_band` (|z|<1.5),
+  `stretch` (1.5–3.0), or `severe` (≥3.0).
+- **Rank-inversion check** — for any peer who scored higher on interview
+  composite yet is paid less than the proposal, the engine flags an
+  **inversion** with the composite gap and the total-cash gap %. Even
+  with all dims in-band, a single inversion bumps the verdict to
+  `inversion` — the worst classification — because that's the one that
+  blows up six months later when comp data leaks across the team.
+- **Verdict ladder** — `fair · within team band` → `stretch · drifts on
+  one dim` → `drift · multiple dims out-of-band or one severe` →
+  `inversion · leapfrogs higher-composite peer`. Hero pill is
+  band-coloured; drift score = max(|z|) is reported alongside.
+- **Composite vs base scatter** — SVG chart of every peer with the
+  dashed regression line, a translucent ±1σ band, and the proposed
+  offer as a glowing star at the proposed composite. Hover any dot for
+  the peer's composite + base + total. Pure inline SVG; zero new
+  chart deps.
+- **Per-dim parity bars** — 5 horizontal bars (one per dim) showing the
+  expected band `[expected−σ, expected+σ]` as a violet→sky gradient,
+  the expected center as a tick, and the proposed value as a pulsing
+  status-tinted dot. Reads "where am I relative to where I should
+  be" at a glance.
+- **One-click fix suggestions** — for the worst-drifting dim, the
+  engine computes the smallest single-axis move that brings |z| back
+  inside 1.5 and prints it ("Bring base salary down to ₹68 LPA
+  (Δ −₹12 LPA) to land inside the ±1.5σ band."). For each inversion,
+  it prints the total-cash cut needed to clear it. A **"Snap to peer
+  band"** button on the inversion alert applies the largest cut
+  directly to the base slider — the rest of the Offer Studio
+  (dial, factor bars, band ladder, letter) re-renders live off the
+  parity move.
+- **Per-role peer pool** — peers are scoped to the role's `id` in
+  localStorage (`credicrew:peers:v1`) so deletions in one role don't
+  leak across. First open auto-seeds the pool with 8 realistic
+  India-engineering offers (Bengaluru/Mumbai/Pune, junior → principal,
+  composite 65–89, base ₹28–₹138 LPA, R² ≈ 0.87) so the audit lights
+  up immediately on a fresh install. A **Publish to peer pool** button
+  snapshots the current proposal into the pool as a future peer.
+  A right-side **Manage peers** drawer lists / adds / removes peers
+  with a 10-field form (name · role · seniority · location ·
+  composite · base · equity · sign-on · bonus · accepted-on).
+- **Backend mirror** — `POST /peer-parity/check` (audit a proposal
+  with caller-supplied peers — both `camelCase` and `snake_case`
+  payloads accepted), `GET/POST/DELETE /peer-parity/peers?team=ID`
+  (in-memory team pool CRUD, thread-safe via `RLock`), and
+  `POST /peer-parity/check_team?team=ID` (audit using the pooled
+  peers). Math is byte-identical to the TS engine — same regression
+  closed form, same z thresholds, same suggestion strings.
+- **Theme polish** — `.cc-parity-*` family in `globals.css`: hue-driven
+  CSS custom property `--parity-hue` per verdict, a top accent rail
+  drawn via `linear-gradient` + `color-mix(in srgb, …)`, a pulsing
+  ring on the inversion-alert card, a drift-marker `cc-parity-pulse`
+  animation that breathes the proposed dot inside each dim bar, and a
+  drawer slide-in via `cc-parity-slide`.
 
 ---
 
@@ -384,24 +457,48 @@ Renders the Markdown offer letter. Returns `{ markdown, benchmark }`.
 Convenience bundle — runs `benchmark + simulate + compose` in one
 round-trip. Used by agentic clients that don't want three sequential calls.
 
+### `POST /peer-parity/check`
+Fairness audit. Accepts a proposed offer (composite + base + equity %
++ sign-on + target-bonus %) and a list of peer offers, returns the
+parity verdict, per-dim z-scores, the regression coefficients
+(`a · b · r² · σ · n`), the ranked inversion list, the 5 nearest peers
+by composite, the SVG-ready scatter array, and one-line suggestions.
+Both `camelCase` and `snake_case` payloads accepted via Pydantic
+aliases.
+
+### `POST /peer-parity/check_team?team=ID`
+Same response shape but pulls peers from the in-memory team pool
+keyed by `team` (defaults to `"default"`). Useful when an agentic
+client has already curated a team pool and just wants the audit.
+
+### `GET/POST/DELETE /peer-parity/peers?team=ID`
+Team pool CRUD. `GET` returns `{ team, peers, count }`. `POST` accepts
+a `PeerIn` body and upserts by `id`. `DELETE /peer-parity/peers/{id}`
+returns 404 if the id wasn't in the pool. Thread-safe via `RLock`.
+
 ### Endpoint map
 
-| Method | Path                  | Purpose                                                 |
-|-------:|-----------------------|---------------------------------------------------------|
-| GET    | `/health`             | liveness                                                |
-| GET    | `/candidates`         | demo candidate listing                                  |
-| GET    | `/roles`              | demo role listing                                       |
-| POST   | `/match`              | rank candidates against a query (explainable)           |
-| POST   | `/outreach`           | compose deterministic outreach email                    |
-| POST   | `/interview/plan`     | tailored rubric + question bank from JD / plan          |
-| POST   | `/interview/score`    | aggregate scorecard → composite + recommendation        |
-| POST   | `/interview/ics`      | RFC-5545 `.ics` for proposed interview slots            |
-| POST   | `/decision/summary`   | calibrated ranking + verdicts + per-dim stats           |
-| POST   | `/decision/debrief`   | Markdown committee debrief                              |
-| POST   | `/offer/benchmark`    | comp + equity + sign-on benchmark (P25/P50/P75/P90)     |
-| POST   | `/offer/simulate`     | win-probability + per-factor logit contributions        |
-| POST   | `/offer/compose`      | Markdown offer letter                                   |
-| POST   | `/offer/full`         | benchmark + simulate + compose bundle                   |
+| Method | Path                          | Purpose                                                 |
+|-------:|-------------------------------|---------------------------------------------------------|
+| GET    | `/health`                     | liveness                                                |
+| GET    | `/candidates`                 | demo candidate listing                                  |
+| GET    | `/roles`                      | demo role listing                                       |
+| POST   | `/match`                      | rank candidates against a query (explainable)           |
+| POST   | `/outreach`                   | compose deterministic outreach email                    |
+| POST   | `/interview/plan`             | tailored rubric + question bank from JD / plan          |
+| POST   | `/interview/score`            | aggregate scorecard → composite + recommendation        |
+| POST   | `/interview/ics`              | RFC-5545 `.ics` for proposed interview slots            |
+| POST   | `/decision/summary`           | calibrated ranking + verdicts + per-dim stats           |
+| POST   | `/decision/debrief`           | Markdown committee debrief                              |
+| POST   | `/offer/benchmark`            | comp + equity + sign-on benchmark (P25/P50/P75/P90)     |
+| POST   | `/offer/simulate`             | win-probability + per-factor logit contributions        |
+| POST   | `/offer/compose`              | Markdown offer letter                                   |
+| POST   | `/offer/full`                 | benchmark + simulate + compose bundle                   |
+| POST   | `/peer-parity/check`          | audit a proposal against caller-supplied peers          |
+| POST   | `/peer-parity/check_team`     | audit a proposal against the in-memory team pool        |
+| GET    | `/peer-parity/peers`          | list peers in the team pool                             |
+| POST   | `/peer-parity/peers`          | add / upsert a peer in the team pool                    |
+| DELETE | `/peer-parity/peers/{id}`     | remove a peer from the team pool                        |
 
 ---
 
@@ -415,11 +512,17 @@ Credicrew/
 │       ├── routers/
 │       │   ├── match.py            # POST /match
 │       │   ├── outreach.py         # POST /outreach
-│       │   └── interview.py        # POST /interview/{plan,score}
+│       │   ├── interview.py        # POST /interview/{plan,score}
+│       │   ├── decision.py         # POST /decision/{summary,debrief}
+│       │   ├── offer.py            # POST /offer/{benchmark,simulate,compose,full}
+│       │   └── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
-│           └── interview.py        # rubric · question bank · scorecard
+│           ├── interview.py        # rubric · question bank · scorecard
+│           ├── decision.py         # calibrated ranking + verdicts
+│           ├── offer.py            # comp band · win-prob · letter
+│           └── peer_parity.py      # regression · z-scores · inversions · suggestions
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -443,6 +546,8 @@ Credicrew/
 │       │   ├── MatchExplain.tsx
 │       │   ├── OfferLetterPreview.tsx   # print-ready offer letter renderer
 │       │   ├── OutreachModal.tsx
+│       │   ├── PeerParityPanel.tsx      # SVG scatter + per-dim bars + suggestions
+│       │   ├── PeerPoolDrawer.tsx       # right-side drawer for peer CRUD
 │       │   ├── PipelineAnalytics.tsx    # funnel + conversion rates
 │       │   ├── QuestionCard.tsx
 │       │   ├── RecommendationRing.tsx
@@ -459,6 +564,8 @@ Credicrew/
 │           ├── match.ts            # TS match engine (parity w/ backend)
 │           ├── offer.ts            # comp band · win-prob · letter (parity w/ backend)
 │           ├── outreach.ts         # TS email composer (parity w/ backend)
+│           ├── peer_parity.ts      # regression · z-scores · inversions (parity w/ backend)
+│           ├── peer_seed.ts        # 8-peer realistic seed for fresh roles
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
 └── docs/
@@ -470,8 +577,8 @@ Credicrew/
 - Server-persisted roles (Postgres) so they survive across browsers.
 - LLM-assisted JD parsing for messy real-world specs (still fall back to
   the deterministic path).
-- Per-role "team peer parity" check — flag offers that drift too far
-  from the team's existing accepted offers at similar interview composite.
+- ~~Per-role "team peer parity" check — flag offers that drift too far
+  from the team's existing accepted offers at similar interview composite.~~ ✅ Day 27.
 - ~~iCal export for an "Interview" status with proposed slots.~~ ✅ Day 17.
 - ~~CSV export of a shortlist for ATS handoff.~~ ✅ Day 12.
 - ~~Interview kit: tailored prompts, weighted rubric, scorecard, hire/no-hire signal.~~ ✅ Day 12.

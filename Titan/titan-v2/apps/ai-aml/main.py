@@ -33,13 +33,22 @@ GET    /aml/network/rules           thresholds + propagation params for auditors
 POST   /aml/network/analyze         entity resolution + risk propagation + layout
 POST   /aml/network/counterfactual  ablate entities, rescore, return deltas
 POST   /aml/network/attribution     leave-one-counterparty-out per account
+
+Case-aware network surface (round-5, day-25)
+--------------------------------------------
+GET    /aml/cases/{id}/network              auto-runs analysis from the case's
+                                            snapshotted neighbourhood (subgraph,
+                                            attribution, "if cleared" deltas)
+POST   /aml/cases/{id}/network/clearing     re-runs the clearing counterfactual
+                                            with caller-supplied transactions
+                                            (override path for the AML console)
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -49,7 +58,7 @@ import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 
-ENGINE_VERSION = "titan-aml/1.3.0"
+ENGINE_VERSION = "titan-aml/1.4.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -190,6 +199,17 @@ class OpenCaseReq(BaseModel):
     account_report: Dict[str, Any]
     opened_by: Optional[str] = "TITAN-AUTOMATED"
     note: Optional[str] = None
+    transactions: Optional[List[Tx]] = Field(
+        default=None,
+        description=(
+            "Optional source transactions used to compute the account report."
+            " When present, a 1-hop neighbourhood snapshot is persisted with"
+            " the case so the case-detail network panel can re-run analysis"
+            " without the caller having to re-supply the batch."
+        ),
+    )
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class BulkOpenReq(BaseModel):
@@ -199,6 +219,12 @@ class BulkOpenReq(BaseModel):
         description="Skip accounts whose derived priority is below this band.",
     )
     opened_by: Optional[str] = "TITAN-AUTOMATED"
+    transactions: Optional[List[Tx]] = Field(
+        default=None,
+        description="Same as OpenCaseReq.transactions, applied per-case.",
+    )
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class TransitionReq(BaseModel):
@@ -254,9 +280,14 @@ def cases_list(
 @app.post("/aml/cases/open")
 def cases_open(req: OpenCaseReq = Body(...)) -> Dict[str, Any]:
     try:
+        txs_rows = [t.model_dump() for t in req.transactions] if req.transactions else None
         case = case_store.open_case(
-            req.account_report, opened_by=req.opened_by or "TITAN-AUTOMATED",
+            req.account_report,
+            opened_by=req.opened_by or "TITAN-AUTOMATED",
             note=req.note,
+            transactions=txs_rows,
+            weights=req.weights,
+            sanctions_threshold=req.sanctions_threshold,
         )
         return {"ok": True, "case": case}
     except ValueError as e:
@@ -266,10 +297,14 @@ def cases_open(req: OpenCaseReq = Body(...)) -> Dict[str, Any]:
 @app.post("/aml/cases/bulk_open")
 def cases_bulk_open(req: BulkOpenReq = Body(...)) -> Dict[str, Any]:
     try:
+        txs_rows = [t.model_dump() for t in req.transactions] if req.transactions else None
         out = case_store.bulk_open_from_score(
             req.score_response,
             min_priority=req.min_priority or "medium",
             opened_by=req.opened_by or "TITAN-AUTOMATED",
+            transactions=txs_rows,
+            weights=req.weights,
+            sanctions_threshold=req.sanctions_threshold,
         )
         return {"ok": True, **out}
     except ValueError as e:
@@ -446,3 +481,88 @@ def network_attribution(req: NetAttributionReq = Body(...)) -> Dict[str, Any]:
             max_report=req.max_report,
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Case-aware network panel (round-5, day-25)
+# ---------------------------------------------------------------------------
+
+
+class CaseNetClearReq(BaseModel):
+    transactions: List[Tx]
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    hops: int = Field(default=1, ge=0, le=2)
+
+
+@app.get("/aml/cases/{case_id}/network")
+def cases_network(
+    case_id: str,
+    hops: int = Query(default=1, ge=0, le=2),
+) -> Dict[str, Any]:
+    """Auto-run network analysis from the case's persisted neighbourhood.
+
+    Returns ``available=false`` with a reason field when the case was
+    opened without a transactions snapshot (legacy cases or callers that
+    didn't pass them). The frontend renders an empty-state with a hint
+    in that scenario instead of a hard error.
+    """
+    case = case_store.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="case not found")
+    snap = case_store.get_case_transactions(case_id)
+    if not snap or not snap.get("transactions"):
+        return {
+            "ok": True,
+            "available": False,
+            "reason": (
+                "this case was opened without a transactions snapshot — "
+                "re-promote from the AML console with the source CSV "
+                "attached, or POST /aml/cases/{id}/network/clearing with "
+                "the batch in hand."
+            ),
+            "account_id": case["account_id"],
+            "case_id": case_id,
+        }
+    panel = network_engine.case_panel(
+        snap["transactions"],
+        account_id=case["account_id"],
+        weights=snap.get("weights"),
+        sanctions_threshold=snap.get("sanctions_threshold"),
+        hops=hops,
+    )
+    panel["case_id"] = case_id
+    panel["snapshot_meta"] = {
+        "tx_count": snap.get("tx_count", 0),
+        "counterparty_count": snap.get("counterparty_count", 0),
+        "created_at_iso": snap.get("created_at_iso"),
+    }
+    return panel
+
+
+@app.post("/aml/cases/{case_id}/network/clearing")
+def cases_network_clearing(
+    case_id: str, req: CaseNetClearReq = Body(...),
+) -> Dict[str, Any]:
+    """Run the case's network panel using caller-supplied transactions.
+
+    Use this from the AML console when the case has no persisted
+    snapshot and the analyst still has the input batch in memory. The
+    case_id is required for shape parity with the GET path.
+    """
+    case = case_store.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="case not found")
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    panel = network_engine.case_panel(
+        rows,
+        account_id=case["account_id"],
+        weights=req.weights,
+        sanctions_threshold=req.sanctions_threshold,
+        hops=req.hops,
+    )
+    panel["case_id"] = case_id
+    panel["source"] = "client-supplied"
+    return panel

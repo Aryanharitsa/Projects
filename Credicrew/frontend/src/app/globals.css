@@ -100,6 +100,64 @@ body::before {
 .cc-range:focus { outline: none; }
 .cc-range:focus::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(167,139,250,0.4); }
 
+/* Peer parity — fairness audit panel. */
+.cc-parity-shell {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    radial-gradient(520px 160px at 90% -20%, color-mix(in srgb, var(--parity-hue, #34d399) 14%, transparent) 0%, transparent 70%),
+    radial-gradient(420px 200px at -10% 120%, rgba(167,139,250,0.06), transparent 60%),
+    rgba(255,255,255,0.03);
+}
+.cc-parity-shell::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--parity-hue, #34d399) 70%, transparent) 25%,
+    color-mix(in srgb, var(--parity-hue, #34d399) 90%, transparent) 50%,
+    color-mix(in srgb, var(--parity-hue, #34d399) 70%, transparent) 75%,
+    transparent 100%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.cc-parity-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--parity-hue, #34d399);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--parity-hue, #34d399) 80%, transparent);
+  margin: 0 4px;
+  vertical-align: 1px;
+}
+.cc-parity-stat { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-parity-stat:hover { transform: translateY(-1px); }
+.cc-parity-scatter svg { filter: drop-shadow(0 6px 18px rgba(0,0,0,0.35)); }
+.cc-parity-dim { transition: transform 120ms ease, background 120ms ease; }
+.cc-parity-dim:hover { transform: translateX(1px); background: rgba(255,255,255,0.04); }
+.cc-parity-marker { animation: cc-parity-pulse 2.8s ease-in-out infinite; }
+@keyframes cc-parity-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50%      { transform: translate(-50%, -50%) scale(1.18); }
+}
+.cc-parity-inv {
+  box-shadow: inset 0 0 0 1px rgba(244,63,94,0.08);
+  animation: cc-parity-inv-glow 3.4s ease-in-out infinite;
+}
+@keyframes cc-parity-inv-glow {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(244,63,94,0.08), 0 0 0 rgba(244,63,94,0); }
+  50%      { box-shadow: inset 0 0 0 1px rgba(244,63,94,0.20), 0 0 12px rgba(244,63,94,0.25); }
+}
+.cc-parity-peer { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-parity-peer:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+.cc-parity-drawer aside { animation: cc-parity-slide 220ms ease-out; }
+@keyframes cc-parity-slide {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }
