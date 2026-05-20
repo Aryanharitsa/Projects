@@ -222,6 +222,63 @@ class ApiService {
     return this.request('/arena/stats');
   }
 
+  // ─── Prompt Library ──────────────────────────────────────────────────────
+  // Versioned prompts linked back to Arena runs. Each prompt has a chain of
+  // versions; running a version from Arena attaches the resulting run to it.
+
+  async listPrompts(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '' || v === false) return;
+      qs.set(k, v === true ? '1' : String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/prompts${suffix}`);
+  }
+
+  async createPrompt(payload) {
+    return this.request('/prompts', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async getPrompt(promptId) {
+    return this.request(`/prompts/${encodeURIComponent(promptId)}`);
+  }
+
+  async deletePrompt(promptId) {
+    return this.request(`/prompts/${encodeURIComponent(promptId)}`, { method: 'DELETE' });
+  }
+
+  async setPromptMeta(promptId, meta) {
+    return this.request(`/prompts/${encodeURIComponent(promptId)}/meta`, {
+      method: 'POST',
+      body: JSON.stringify(meta),
+    });
+  }
+
+  async addPromptVersion(promptId, payload) {
+    return this.request(`/prompts/${encodeURIComponent(promptId)}/versions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async diffPromptVersions(a, b) {
+    return this.request('/prompts/diff', {
+      method: 'POST',
+      body: JSON.stringify({ a, b }),
+    });
+  }
+
+  async promptStats() {
+    return this.request('/prompts/stats');
+  }
+
+  async runsForVersion(promptId, versionId, { limit = 50 } = {}) {
+    return this.request(
+      `/prompts/${encodeURIComponent(promptId)}/versions/${encodeURIComponent(versionId)}/runs?limit=${limit}`
+    );
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();
