@@ -3,13 +3,107 @@
 A side‑by‑side LLM evaluation studio. Run the **same prompt** against multiple
 frontier models in parallel, score them with an LLM‑as‑judge (or a **panel of
 judges**), **vote on them yourself**, and keep **every run** in a queryable,
-comparable history — all in one view.
+comparable history — all in one view. Now with a **Prompt Library** that
+versions your prompts and links every Arena run back to the revision that
+produced it, so you can see *which edit actually moved the score*.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Multi‑Judge Consensus (panel of K judges → agreement stats)
+## 🆕 What's new — Prompt Library (versioned prompts → score delta per revision)
+
+> Round‑6. Every prompt engineer's daily question is "did my edit help?"
+> The playground had every measurement (Arena, Judge, Vote, History) but
+> no way to tie a *prompt revision* to the runs it produced. The new
+> **Library** mode closes that loop.
+
+Hit **Library** in the sidebar and you'll find a versioned prompt store.
+Save the current Arena prompt as a new entry, iterate on the system prompt
+or user template, and every saved revision lives on the version timeline
+with its own per‑version run stats — `n_runs`, `avg_composite`,
+`best_model`, and a 🏆 winner. **Click any two versions** and the diff
+panel renders a unified diff (added lines green, removed red, hunk
+headers) alongside a **score delta** computed from each version's judged
+runs — so you can see whether tightening the system prompt actually moved
+the needle.
+
+The Library card surfaces:
+
+- **Stats banner** — 4 gradient tiles (prompts · versions · linked runs ·
+  avg composite across all judged) plus a "most iterated" pill row.
+- **Score‑progression sparkline** per prompt row — judge_top_score per
+  version v1 → vN as an SVG mini‑chart (gaps for un‑judged versions, no
+  linear interpolation across them — a missing v3 doesn't lie about a
+  trend).
+- **Version timeline** — each version with score ring, run/cost/best‑model
+  chips, change note, and Run / Diff buttons. HEAD is badged violet; the
+  A/B diff endpoints get indigo/fuchsia rings.
+- **Unified‑diff panel** — slate code surface with +/− line highlighting,
+  per‑field deltas (system: +X/−Y, template: +X/−Y), overall similarity %,
+  and a **Score Δ** chip computed from both versions' judged runs.
+- **Arena integration** — when a version is loaded into Arena, the header
+  shows a violet chip (`prompt · vN`) and any **Run Arena** auto‑attaches
+  the resulting run to that version. A **Save as new version** button
+  appears next to the chip, and a **Save to Library** button shows up for
+  any *unlinked* Arena prompt.
+
+### How the data loop works
+
+```
+1. Library → New prompt   → create_prompt() → v1 created
+2. v1 → Run in Arena      → /compare { prompt_version_id: v1 } → run linked to v1
+3. Run → Judge            → judge_top_score attaches → version_stats reflects it
+4. Library → New version  → add_version() → v2 created (idempotent if identical)
+5. v2 → Run in Arena      → run linked to v2 → judge → score
+6. Library → click v1+v2  → /prompts/diff → unified diff + score_delta = score(v2) − score(v1)
+```
+
+If `score_delta > 0`, your edit helped. If it's *very* negative, you
+regressed — the diff hunks tell you exactly which lines did it.
+
+### Schema (shares ``history.db``)
+
+```
+prompts          (id, name, created_at, updated_at, current_version_id,
+                  starred, tag, note)
+prompt_versions  (id, prompt_id, version_num, system_prompt, user_template,
+                  created_at, parent_version_id, note)
+runs.prompt_version_id   -- new nullable FK, added via idempotent ALTER on boot
+```
+
+`add_version()` is **idempotent on identical content** — clicking "Save
+new version" twice with no edit between doesn't create a sibling row.
+`delete_prompt()` cascades versions but **preserves runs** (their
+`prompt_version_id` becomes a dangling pointer — deliberate, so the audit
+trail of "which prompt produced this answer" survives prompt cleanup).
+
+### `POST /api/prompts/diff`
+
+```json
+{ "a": "<version_id_a>", "b": "<version_id_b>" }
+```
+
+Response (truncated):
+
+```json
+{
+  "success": true,
+  "diff": {
+    "a": { "version_num": 1, "system_prompt": "...", "user_template": "...", "stats": { "n_runs": 1, "avg_composite": 50.0, "best_model": "OpenAI:gpt-4o" } },
+    "b": { "version_num": 2, "system_prompt": "...", "user_template": "...", "stats": { "n_runs": 1, "avg_composite": 90.0, "best_model": "Anthropic:claude-3-5-sonnet-latest" } },
+    "hunks": [{ "header": "@@ -3,5 +3,6 @@", "lines": [{ "type": "ctx", "text": "..." }, { "type": "add", "text": "Keep to 1 line." }] }],
+    "stats": { "system":   { "added": 1, "removed": 1, "similarity": 0.66 },
+               "template": { "added": 1, "removed": 0, "similarity": 0.85 },
+               "overall":  { "added": 2, "removed": 1, "similarity": 0.71 } },
+    "score_delta": 40.0
+  }
+}
+```
+
+---
+
+## 🏛️ Multi‑Judge Consensus (still here · Round 5)
 
 > Round‑5. A single judge is biased — self‑preference, format prejudice,
 > "longer must be better." A panel isn't. Now you can run up to **6 judges**
@@ -107,6 +201,8 @@ Response (truncated):
                  "total_cost_usd": 0.018, "total_input_tokens": 3200, "total_output_tokens": 950}
 }
 ```
+
+---
 
 ---
 
@@ -286,6 +382,15 @@ to **Vote** and start judging blind. **History** persists everything.
 | GET    | `/api/arena/agreement`     | judge ↔ human agreement % + per‑model breakdown        |
 | GET    | `/api/arena/recent`        | recent votes feed                                      |
 | GET    | `/api/arena/stats`         | top‑of‑page voting stats                               |
+| GET    | `/api/prompts`             | **Library** — list versioned prompts + roll‑up stats   |
+| POST   | `/api/prompts`             | create a new prompt (auto‑creates v1)                  |
+| GET    | `/api/prompts/:id`         | full prompt with every version + per‑version stats     |
+| DELETE | `/api/prompts/:id`         | delete prompt + version chain (runs are preserved)     |
+| POST   | `/api/prompts/:id/meta`    | rename / star / tag / note                             |
+| POST   | `/api/prompts/:id/versions`| append a new version (idempotent on identical content) |
+| GET    | `/api/prompts/:id/versions/:vid/runs` | runs linked to a specific version          |
+| POST   | `/api/prompts/diff`        | **unified diff** of two versions + score Δ            |
+| GET    | `/api/prompts/stats`       | library‑level dashboard banner stats                   |
 | POST   | `/api/export`              | canonicalise a chat session as JSON                    |
 | GET    | `/api/key-status`          | masked key presence per provider                       |
 | POST   | `/api/save-keys`           | persist keys to `.env`                                 |
@@ -315,22 +420,24 @@ LLM_Playground/
 │   └── src/
 │       ├── main.py                  # Flask app + CORS + static host
 │       ├── pricing.py               # per-model $/1M token table
-│       ├── judge.py                 # rubric + single + ⬅ NEW consensus judge engine + Fleiss' κ
+│       ├── judge.py                 # rubric + single + consensus judge engine + Fleiss' κ
 │       ├── history.py               # SQLite-backed run store + diff/stats + consensus persistence
 │       ├── vote_arena.py            # ELO replay + pair sampler + agreement
+│       ├── prompts.py               # ⬅ NEW · versioned prompt library + unified diff + run links
 │       ├── routes/
-│       │   ├── llm.py               # /chat, /compare, /judge[/consensus], /history/*, /arena/*, …
+│       │   ├── llm.py               # /chat, /compare, /judge[/consensus], /history/*, /arena/*, /prompts/*, …
 │       │   ├── keys.py              # /key-status, /save-keys
 │       │   └── user.py
 │       ├── providers/               # OpenAI / Anthropic / Gemini / August
 │       └── models/
 └── llm_playground_frontend/
     ├── src/
-    │   ├── App.jsx                  # Universal + August + Arena + History + Vote modes
-    │   ├── services/api.js          # typed client (incl. arena*)
+    │   ├── App.jsx                  # Universal + August + Arena + History + Vote + Library modes
+    │   ├── services/api.js          # typed client (incl. arena* + prompt*)
     │   └── components/
     │       ├── HistoryPanel.jsx     # filters · run list · detail · compare-two-runs
-    │       ├── VotePanel.jsx        # ⬅ NEW · blind compare + leaderboard + matrix + agreement
+    │       ├── VotePanel.jsx        # blind compare + leaderboard + matrix + agreement
+    │       ├── PromptLibrary.jsx    # ⬅ NEW · versioned prompts · timeline · unified diff · score Δ
     │       └── ui/                  # shadcn primitives
     └── vite.config.js
 ```
@@ -339,7 +446,7 @@ LLM_Playground/
 
 - Response streaming (SSE) with live tokens/sec per card
 - ~~Blind A/B voting → ELO leaderboard across saved runs~~ ✅ shipped
-- Prompt library with diff'd versions
+- ~~Prompt library with diff'd versions~~ ✅ shipped
 - ~~Auto‑eval rubrics (LLM‑as‑judge) with exportable scoring sheets~~ ✅ shipped
 - ~~Persisted judged runs as a queryable history~~ ✅ shipped
 - ~~Multi‑judge consensus (run K judges, average scores, surface disagreement)~~ ✅ shipped

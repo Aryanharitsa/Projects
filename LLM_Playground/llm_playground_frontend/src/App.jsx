@@ -47,12 +47,16 @@ import {
   ChevronRight,
   Wand2,
   RotateCcw,
-  History as HistoryIcon
+  History as HistoryIcon,
+  BookOpenText,
+  GitBranch,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
 import HistoryPanel from './components/HistoryPanel';
 import VotePanel from './components/VotePanel';
+import PromptLibrary from './components/PromptLibrary';
 import './App.css';
 
 const App = () => {
@@ -87,6 +91,13 @@ const App = () => {
   // Deeplink target for the Arena vote panel — set when the user clicks
   // "Vote on this run" inside the History panel.
   const [voteRunId, setVoteRunId] = useState(null);
+  // Active Prompt Library link — when set, the next /compare call attaches
+  // its run to this version, and Arena shows a chip identifying the source.
+  const [activePromptLink, setActivePromptLink] = useState(null); // {prompt_id, prompt_name, version_id, version_num}
+  // Selected prompt id persists between Library visits.
+  const [libSelectedPromptId, setLibSelectedPromptId] = useState(null);
+  // Draft handed to Library when user clicks "Save as prompt" from Arena.
+  const [libPendingDraft, setLibPendingDraft] = useState(null);
   const [provider, setProvider] = useState('OpenAI');
   const [modelsList, setModelsList] = useState([]);
   const [modelSearch, setModelSearch] = useState('');
@@ -660,6 +671,9 @@ const App = () => {
         messages: [{ role: 'user', content: arenaPrompt, enabled: true }],
         params,
       };
+      if (activePromptLink?.version_id) {
+        payload.prompt_version_id = activePromptLink.version_id;
+      }
       const res = await ApiService.compare(payload);
       if (!res.success) throw new Error(res.error || 'Arena request failed');
       setArenaResults(res);
@@ -1021,7 +1035,14 @@ const App = () => {
                       <RadioGroupItem value="vote" id="vote" />
                       <Label htmlFor="vote" className="cursor-pointer flex items-center gap-1">
                         <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                        Vote <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-amber-500 to-rose-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Vote
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="library" id="library" />
+                      <Label htmlFor="library" className="cursor-pointer flex items-center gap-1">
+                        <BookOpenText className="w-3.5 h-3.5 text-violet-600" />
+                        Library <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1288,7 +1309,27 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'vote' ? (
+          {selectedMode === 'library' ? (
+            <div className="lg:col-span-3">
+              <PromptLibrary
+                selectedPromptId={libSelectedPromptId}
+                onSelectedPromptIdChange={setLibSelectedPromptId}
+                pendingDraft={libPendingDraft}
+                onConsumeDraft={() => setLibPendingDraft(null)}
+                onRunInArena={({ prompt_id, prompt_name, version_id, version_num,
+                                  system_prompt, user_template }) => {
+                  // Deeplink: pre-load Arena with this version, attach the run to it.
+                  setSelectedMode('arena');
+                  setArenaPrompt(user_template || '');
+                  setSystemPrompt(system_prompt || '');
+                  setArenaResults(null);
+                  setJudgeResults(null);
+                  setConsensusResults(null);
+                  setActivePromptLink({ prompt_id, prompt_name, version_id, version_num });
+                }}
+              />
+            </div>
+          ) : selectedMode === 'vote' ? (
             <div className="lg:col-span-3">
               <VotePanel
                 initialRunId={voteRunId}
@@ -1337,6 +1378,64 @@ const App = () => {
                       </span>
                     </CardTitle>
                     <div className="flex gap-2 flex-wrap">
+                      {activePromptLink && (
+                        <button
+                          onClick={() => { setSelectedMode('library'); setLibSelectedPromptId(activePromptLink.prompt_id); }}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gradient-to-r from-violet-100 to-fuchsia-100 border border-violet-300 text-violet-800 text-xs hover:from-violet-200 hover:to-fuchsia-200 transition-colors"
+                          title="This run will attach to this prompt version. Click to open in Library."
+                        >
+                          <BookOpenText className="w-3.5 h-3.5" />
+                          {activePromptLink.prompt_name} · v{activePromptLink.version_num}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setActivePromptLink(null); }}
+                            className="text-violet-500 hover:text-violet-800"
+                            title="Unlink"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+                        </button>
+                      )}
+                      {arenaPrompt && !activePromptLink && (
+                        <Button
+                          onClick={() => {
+                            setLibPendingDraft({
+                              name: arenaPrompt.slice(0, 60),
+                              system_prompt: systemPrompt,
+                              user_template: arenaPrompt,
+                            });
+                            setSelectedMode('library');
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 border-violet-300 text-violet-700 hover:bg-violet-50"
+                          title="Save current Arena prompt to the Library as a new entry"
+                        >
+                          <GitBranch className="w-4 h-4" /> Save to Library
+                        </Button>
+                      )}
+                      {activePromptLink && arenaPrompt && (
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const res = await ApiService.addPromptVersion(activePromptLink.prompt_id, {
+                                system_prompt: systemPrompt,
+                                user_template: arenaPrompt,
+                              });
+                              const v = res.version;
+                              setActivePromptLink((cur) => cur ? { ...cur, version_id: v.id, version_num: v.version_num } : cur);
+                              toast.success(`Saved as v${v.version_num} — next run attaches here`);
+                            } catch (e) {
+                              toast.error(`Save failed: ${e.message}`);
+                            }
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="gap-1 border-violet-300 text-violet-700 hover:bg-violet-50"
+                          title="Save current Arena prompt as a new version of the linked prompt"
+                        >
+                          <Save className="w-4 h-4" /> Save as new version
+                        </Button>
+                      )}
                       {arenaResults && (
                         <Button
                           onClick={() => setRubricEditorOpen(v => !v)}

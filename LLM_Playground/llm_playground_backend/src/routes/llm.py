@@ -14,6 +14,7 @@ from src.pricing import estimate_cost, get_pricing_table
 from src.judge import DEFAULT_RUBRIC, judge_compare, judge_consensus_compare
 from src import history
 from src import vote_arena
+from src import prompts as prompts_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -339,6 +340,15 @@ def compare():
         except Exception as save_err:  # noqa: BLE001
             # Persistence is best-effort — never let a logging issue 500 the run.
             current_app.logger.warning(f"history.save_run failed: {save_err}")
+
+        # If the request was launched from a Prompt Library version, link
+        # the run back so the library's per-version stats reflect it.
+        prompt_version_id = (data.get('prompt_version_id') or '').strip() or None
+        if prompt_version_id:
+            try:
+                prompts_lib.link_run(run_id, prompt_version_id)
+            except Exception as link_err:  # noqa: BLE001
+                current_app.logger.warning(f"prompts.link_run failed: {link_err}")
 
         return jsonify(arena_payload)
     except Exception as e:
@@ -762,6 +772,132 @@ def arena_recent():
 def arena_stats():
     """Top-of-page voting stats."""
     return jsonify({'success': True, 'stats': vote_arena.stats()})
+
+
+# ---------------------------------------------------------------------------
+# Prompt Library — versioned prompts linked back to Arena runs.
+# Round-6 move (Day 28). A prompt has many versions; every version's runs
+# accumulate in `runs.prompt_version_id`. Diff endpoint surfaces both text
+# and score deltas so users see whether the revision actually helped.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/prompts', methods=['GET'])
+def prompts_list():
+    """List prompts with version + run roll-ups (newest activity first)."""
+    args = request.args
+
+    def _bool(name: str) -> bool:
+        v = args.get(name, '').strip().lower()
+        return v in ('1', 'true', 'yes', 'on')
+
+    rows, total = prompts_lib.list_prompts(
+        q=(args.get('q') or '').strip() or None,
+        starred_only=_bool('starred'),
+        tag=(args.get('tag') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'prompts': rows, 'total': total})
+
+
+@llm_bp.route('/prompts', methods=['POST'])
+def prompts_create():
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'name is required'}), 400
+    prompt = prompts_lib.create_prompt(
+        name=name,
+        system_prompt=(data.get('system_prompt') or ''),
+        user_template=(data.get('user_template') or ''),
+        note=(data.get('note') or ''),
+        tag=(data.get('tag') or '').strip() or None,
+    )
+    return jsonify({'success': True, 'prompt': prompt}), 201
+
+
+@llm_bp.route('/prompts/stats', methods=['GET'])
+def prompts_stats():
+    return jsonify({'success': True, 'stats': prompts_lib.stats()})
+
+
+@llm_bp.route('/prompts/diff', methods=['POST'])
+def prompts_diff():
+    data = request.get_json() or {}
+    a = (data.get('a') or '').strip()
+    b = (data.get('b') or '').strip()
+    if not a or not b:
+        return jsonify({'success': False, 'error': 'a and b are required'}), 400
+    if a == b:
+        return jsonify({'success': False, 'error': 'a and b must be different versions'}), 400
+    result = prompts_lib.diff_versions(a, b)
+    if result is None:
+        return jsonify({'success': False, 'error': 'one or both versions not found'}), 404
+    return jsonify({'success': True, 'diff': result})
+
+
+@llm_bp.route('/prompts/<prompt_id>', methods=['GET'])
+def prompts_get(prompt_id):
+    p = prompts_lib.get_prompt(prompt_id)
+    if not p:
+        return jsonify({'success': False, 'error': 'prompt not found'}), 404
+    return jsonify({'success': True, 'prompt': p})
+
+
+@llm_bp.route('/prompts/<prompt_id>', methods=['DELETE'])
+def prompts_delete(prompt_id):
+    if not prompts_lib.delete_prompt(prompt_id):
+        return jsonify({'success': False, 'error': 'prompt not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/prompts/<prompt_id>/meta', methods=['POST'])
+def prompts_set_meta(prompt_id):
+    data = request.get_json() or {}
+    name = data.get('name')
+    starred = data.get('starred')
+    tag = data.get('tag')
+    note = data.get('note')
+    if name is None and starred is None and tag is None and note is None:
+        return jsonify({'success': False, 'error': 'no updatable field'}), 400
+    ok = prompts_lib.set_prompt_meta(
+        prompt_id,
+        name=name if isinstance(name, str) else None,
+        starred=bool(starred) if starred is not None else None,
+        tag=tag if isinstance(tag, str) else None,
+        note=note if isinstance(note, str) else None,
+    )
+    if not ok:
+        return jsonify({'success': False, 'error': 'prompt not found'}), 404
+    return jsonify({'success': True, 'prompt': prompts_lib.get_prompt(prompt_id)})
+
+
+@llm_bp.route('/prompts/<prompt_id>/versions', methods=['POST'])
+def prompts_add_version(prompt_id):
+    data = request.get_json() or {}
+    v = prompts_lib.add_version(
+        prompt_id,
+        system_prompt=(data.get('system_prompt') or ''),
+        user_template=(data.get('user_template') or ''),
+        note=(data.get('note') or ''),
+        parent_version_id=(data.get('parent_version_id') or '').strip() or None,
+    )
+    if v is None:
+        return jsonify({'success': False, 'error': 'prompt not found'}), 404
+    return jsonify({'success': True, 'version': v,
+                    'prompt': prompts_lib.get_prompt(prompt_id)}), 201
+
+
+@llm_bp.route('/prompts/<prompt_id>/versions/<version_id>/runs', methods=['GET'])
+def prompts_version_runs(prompt_id, version_id):
+    """Runs attached to a specific version. The ``prompt_id`` path slot is for
+    URL hygiene only; the FK lives on the version row."""
+    try:
+        limit = int(request.args.get('limit', 50))
+    except ValueError:
+        limit = 50
+    rows = prompts_lib.runs_for_version(version_id, limit=limit)
+    return jsonify({'success': True, 'runs': rows, 'total': len(rows)})
 
 
 @llm_bp.route('/august/upload', methods=['POST'])
