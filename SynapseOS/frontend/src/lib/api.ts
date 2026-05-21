@@ -1,4 +1,8 @@
 import type {
+  AtomCommit,
+  AtomizeCommitResponse,
+  AtomizeMode,
+  AtomizeResponse,
   Brief,
   ChatMode,
   ChatResponse,
@@ -152,4 +156,19 @@ export const api = {
     j<TrailSuggestions>(`/trails/${id}/suggest_next?k=${k}`),
 
   trailExportUrl: (id: number) => `${BASE}/trails/${id}/export.md`,
+
+  atomize: (payload: { text: string; mode?: AtomizeMode }) =>
+    j<AtomizeResponse>(`/atomize`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: payload.text,
+        mode: payload.mode ?? "auto",
+      }),
+    }),
+
+  atomizeCommit: (atoms: AtomCommit[]) =>
+    j<AtomizeCommitResponse>(`/atomize/commit`, {
+      method: "POST",
+      body: JSON.stringify({ atoms }),
+    }),
 };

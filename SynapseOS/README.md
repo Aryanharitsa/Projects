@@ -50,6 +50,18 @@ threshold live, and watch your topical clusters discover themselves.
   exact synapses that contributed light up cyan on the canvas.
   **Default mode is extractive (zero-dep). Optional LLM mode** when
   `SYNAPSE_LLM_KEY` is set — same citation contract.
+- **Distill — paste anything, ship atoms.** PKM has one cold-start
+  problem: an empty graph. Distill kills it. Paste an article, a meeting
+  transcript, a Slack thread, or your own braindump — the segmenter
+  splits it on headings, blank lines, and sentence boundaries, then
+  proposes one *atomic note* per fragment with a tight title, distinctive
+  tags, the **cluster it would join**, and the **3 strongest synapses it
+  would form** against your existing graph. **You see all of this before
+  any save.** Edit titles inline, prune tags, drop atoms you don't want,
+  then commit in one click. The page flashes
+  `N atoms added · M synapses formed` and the graph refreshes. Optional
+  LLM mode (`SYNAPSE_LLM_KEY`) polishes titles and tags; falls back
+  silently to the heuristic on any error.
 - **Trails — show your thinking, replayable.** Save an investigation as
   an ordered walk through your notes ("here's how I got from
   *embeddings as memory* to *vector DBs are just indexes*"), with an
@@ -100,7 +112,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief modal — score ring · reason chips · prompt · bridges       │
+│  · DailyBrief modal · Distill modal · TrailPlayer modal                  │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -112,14 +124,16 @@ threshold live, and watch your topical clusters discover themselves.
 │  │          │  search,    │ + names +   │  RAG +       │   packed     │  │
 │  │          │  path)      │  orphans)   │  extractive) │   vectors)   │  │
 │  └──────────┴─────────────┴─────────────┴──────────────┴──────────────┘  │
-│                   │              │              │                        │
-│                   ▼              ▼              ▼                        │
-│         embed.py — 512-d   revisit.py —   llm.py — stdlib HTTP           │
-│         hashing-trick      daily brief    to Anthropic / OpenAI          │
-│         embedder           (staleness ·                                  │
-│         (L2-normalized)     centrality ·                                 │
-│                             orphan ·                                     │
-│                             diversity)                                   │
+│       │           │              │              │            │           │
+│       ▼           ▼              ▼              ▼            ▼           │
+│  atomize.py    embed.py — 512-d   revisit.py — trails.py    llm.py       │
+│  (distill:     hashing-trick      daily brief  (resolve +   stdlib HTTP  │
+│   segment +    embedder           (staleness · suggest_next· to provider │
+│   title +      (L2-normalized)     centrality·  markdown   APIs)         │
+│   tags +                           orphan ·     export)                  │
+│   cluster +                        diversity)                            │
+│   neighbor                                                               │
+│   preview)                                                               │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -226,6 +240,54 @@ floor.
 to a small LLM under a strict citation contract ("answer ONLY from
 these notes, cite inline as `[#N]`, say so plainly if missing"). On
 network/LLM failure we silently fall back to extractive with a notice.
+
+### Distill
+
+The atomic-notes problem: people *know* their PKM should be a swarm of
+small, citable claims, but writing them by hand is friction-heavy, so the
+graph stays empty and gets abandoned. Distill closes the gap.
+
+**Pipeline (all pure, zero-deps, deterministic):**
+
+```
+1. SEGMENT   blank lines + markdown headings + bullet runs split first;
+             oversized paragraphs sentence-split on `[.!?]` followed
+             by capital / quote / paren; tiny final fragments fold
+             backward unless they're heading-led.
+2. TITLE     heading-lift > first-sentence > word-bounded trim @ 80
+             chars, with clause-boundary preference at `: ` / ` — ` /
+             `; ` / `, ` for long openers.
+3. TAGS      TF-IDF-flavored distinctiveness: tf · log(1 + n_atoms/df)
+             across 1- and 2-grams of the input. Top bigram + top-2
+             unigrams, slugified, deduped, stopworded, max 3.
+4. CLUSTER   embed atom · cosine against each community's centroid ·
+             best match ≥ 0.18 wins. Reported as `cluster_id + name +
+             color + % match` so the card pre-shows the landing.
+5. NEIGHBORS embed atom · cosine against every existing note · top 3
+             at ≥ τ become the predicted incoming synapses; total
+             count above τ becomes the "expected_synapses" badge.
+6. (OPT) LLM heuristic title/tags get a JSON-output refine pass to
+             tighter copy. Any error → fallback to heuristic, silently.
+```
+
+**Per atom, the preview card shows:**
+
+- Editable title (heading-lifted or sentence-derived)
+- Editable body (paragraph or sentence-packed)
+- Editable tag chips (click to remove, type to add, cap 5)
+- Cluster pill — color + name + cosine % match, or "no cluster yet"
+- Up to 3 **predicted synapse chips** — click to peek at the existing
+  note in the inspector (so you can decide *before* committing whether
+  to split / merge / drop)
+- A red **"will be an orphan"** warning when no neighbors ≥ τ
+- **`✨ llm-refined`** badge when an atom's title/tags went through the
+  LLM (the rest of the metadata is always heuristic)
+- Drop / restore — toggleable so you can prune without retyping
+
+**Commit** persists the surviving atoms in order, recomputes the graph
+once, and reports per-atom plus aggregate `synapses_formed` so the page
+flash is honest. Atoms that landed orphaned are immediately picked up by
+the Orphan Rescue panel.
 
 ### Trails
 
@@ -347,6 +409,8 @@ Zero new Python deps — `urllib.request` does the HTTP.
 | `DEL`  | `/trails/{id}`               | Delete the trail. Notes are untouched.                                            |
 | `GET`  | `/trails/{id}/suggest_next?k=`| Top synapse neighbors of the tail that aren't already on the trail              |
 | `GET`  | `/trails/{id}/export.md`     | Self-contained Markdown export with cosine-annotated transitions                  |
+| `POST` | `/atomize?threshold&top_k`   | Distill long-form text into atomic-note previews (no save). Body: `{ text, mode? }`. Returns `{ atoms: [{ temp_id, title, body, tags, char_count, cluster_id/name/color, cluster_strength, neighbors[], expected_synapses, llm_refined }], total_chars, mode_used, llm_available, llm_provider, notice? }` |
+| `POST` | `/atomize/commit?threshold&top_k` | Bulk insert edited atoms. Body: `{ atoms: [{ title, body, tags[] }] }` (1–64). Returns `{ created: [{ note_id, title, synapses }], synapses_formed }` |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -411,6 +475,9 @@ Incremental moves for future rotation days:
 - [x] **Trails** — curated, replayable walks through the graph with
       auto-suggested next steps, dashed-leap overlay, and portable
       Markdown export *(shipped)*
+- [x] **Distill** — atomize pasted long-form text into preview cards
+      with title/tag/cluster/neighbor predictions and bulk commit
+      *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 
