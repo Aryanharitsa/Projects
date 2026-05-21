@@ -9,6 +9,7 @@ type Props = {
   trailActive?: boolean;
   onOpenBrief?: () => void;
   briefBadge?: boolean;
+  onOpenDistill?: () => void;
 };
 
 export function Header({
@@ -18,6 +19,7 @@ export function Header({
   trailActive,
   onOpenBrief,
   briefBadge,
+  onOpenDistill,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -66,6 +68,16 @@ export function Header({
               <span className="w-1.5 h-1.5 rounded-full bg-synapse-amber animate-pulse-slow" />
               trail open
             </span>
+          )}
+          {onOpenDistill && (
+            <button
+              onClick={onOpenDistill}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-violet/20 to-synapse-cyan/20 ring-1 ring-synapse-violet/40 hover:ring-synapse-violet/70 px-3 py-1 font-mono text-[11px] text-synapse-violet hover:text-ink-100 transition"
+              aria-label="open distill"
+            >
+              <span aria-hidden>✨</span>
+              distill
+            </button>
           )}
           {onOpenBrief && (
             <button

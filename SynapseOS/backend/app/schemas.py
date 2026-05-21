@@ -264,3 +264,64 @@ class TrailSuggestionsOut(BaseModel):
     trail_id: int
     threshold: float
     suggestions: list[TrailSuggestionOut]
+
+
+# --------------------------------------------------------------- distill
+
+
+class AtomizeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=120_000)
+    mode: Literal["auto", "heuristic", "llm"] = "auto"
+
+
+class AtomNeighborOut(BaseModel):
+    note_id: int
+    title: str
+    strength: float
+    cluster_id: int | None = None
+    cluster_color: str | None = None
+
+
+class AtomPreviewOut(BaseModel):
+    temp_id: str
+    title: str
+    body: str
+    tags: list[str]
+    char_count: int
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    cluster_strength: float
+    neighbors: list[AtomNeighborOut]
+    expected_synapses: int
+    llm_refined: bool = False
+
+
+class AtomizeOut(BaseModel):
+    atoms: list[AtomPreviewOut]
+    total_chars: int
+    mode_used: Literal["heuristic", "llm"]
+    llm_available: bool
+    llm_provider: str | None = None
+    notice: str | None = None
+
+
+class AtomCommitIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=140)
+    body: str = Field(..., min_length=1, max_length=8000)
+    tags: list[str] = Field(default_factory=list)
+
+
+class AtomizeCommitRequest(BaseModel):
+    atoms: list[AtomCommitIn] = Field(..., min_length=1, max_length=64)
+
+
+class AtomCommitResult(BaseModel):
+    note_id: int
+    title: str
+    synapses: int
+
+
+class AtomizeCommitOut(BaseModel):
+    created: list[AtomCommitResult]
+    synapses_formed: int  # total new edges introduced by the bulk insert

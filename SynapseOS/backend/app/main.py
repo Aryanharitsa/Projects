@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import community, revisit, schemas, store, synapse, trails
 from .embed import cosine
@@ -500,6 +501,161 @@ def trails_export(
             "Content-Disposition": f'attachment; filename="{safe_title}.md"'
         },
     )
+
+
+# ----------------------------------------------------------------- distill
+
+
+@app.post("/atomize", response_model=schemas.AtomizeOut)
+def atomize(
+    req: schemas.AtomizeRequest,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Preview-only: split text into atoms with predicted metadata.
+
+    No DB writes happen here. The frontend renders the previews, lets
+    the user edit titles / tags / drop atoms, then POSTs the survivors
+    back via ``/atomize/commit``. Threshold + top_k tune the predicted
+    cluster and neighbor preview to match the current canvas settings.
+    """
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(422, "empty text")
+
+    g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+    notes_by_id = {n["id"]: n for n in g.nodes}
+    cmap = {n["id"]: n.get("community", 0) for n in g.nodes}
+    built_communities = community.build_communities(cmap, notes_by_id)
+    embeddings = dict(store.all_embeddings())
+
+    previews = atomize_engine.distill(
+        text=text,
+        threshold=threshold,
+        notes_by_id=notes_by_id,
+        embeddings=embeddings,
+        communities=built_communities,
+    )
+
+    # LLM-refine pass. We do this serially per atom; 1-2 atoms is the
+    # common case for a typical paste, and serial keeps the surface area
+    # small (no thread pool, no asyncio shenanigans). Any error silently
+    # falls back to heuristic output for that atom.
+    mode_used: str = "heuristic"
+    notice: str | None = None
+    want_llm = req.mode == "llm" or (req.mode == "auto" and llm_available())
+    if want_llm and not llm_available():
+        notice = "LLM mode requested but no SYNAPSE_LLM_KEY configured — used heuristic instead"
+    if want_llm and llm_available():
+        import os as _os
+
+        provider = _os.getenv("SYNAPSE_LLM_PROVIDER", "anthropic").lower()
+        key = _os.getenv("SYNAPSE_LLM_KEY", "")
+        model = _os.getenv(
+            "SYNAPSE_LLM_MODEL",
+            "claude-haiku-4-5-20251001" if provider == "anthropic" else "gpt-4o-mini",
+        )
+        refined_count = 0
+        for p in previews:
+            refined = atomize_engine.llm_refine_title(
+                p.body, provider=provider, key=key, model=model
+            )
+            if refined is None:
+                continue
+            new_title, new_tags = refined
+            p.title = new_title
+            if new_tags:
+                # Union the LLM tags with the heuristic ones, dedup, cap 4.
+                merged: list[str] = []
+                for t in new_tags + p.tags:
+                    if t and t not in merged:
+                        merged.append(t)
+                p.tags = merged[:4]
+            refined_count += 1
+            # cheap sentinel for the FE
+            setattr(p, "_llm_refined", True)
+        mode_used = "llm" if refined_count > 0 else "heuristic"
+        if refined_count == 0 and req.mode == "llm":
+            notice = "LLM call failed — used heuristic instead"
+
+    return {
+        "atoms": [
+            {
+                "temp_id": p.temp_id,
+                "title": p.title,
+                "body": p.body,
+                "tags": p.tags,
+                "char_count": p.char_count,
+                "cluster_id": p.cluster_id,
+                "cluster_name": p.cluster_name,
+                "cluster_color": p.cluster_color,
+                "cluster_strength": p.cluster_strength,
+                "neighbors": p.neighbors,
+                "expected_synapses": p.expected_synapses,
+                "llm_refined": bool(getattr(p, "_llm_refined", False)),
+            }
+            for p in previews
+        ],
+        "total_chars": sum(p.char_count for p in previews),
+        "mode_used": mode_used,
+        "llm_available": llm_available(),
+        "llm_provider": llm_provider_label() if llm_available() else None,
+        "notice": notice,
+    }
+
+
+@app.post("/atomize/commit", response_model=schemas.AtomizeCommitOut, status_code=201)
+def atomize_commit(
+    req: schemas.AtomizeCommitRequest,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Bulk insert the user-edited atoms; report per-atom synapse counts.
+
+    We commit each atom through ``store.add_note`` so embeddings cache
+    and last_seen_at handling stay identical to single-note creation.
+    After all atoms are persisted, we recompute the graph once and
+    report which new notes formed synapses — the UI uses this number as
+    the post-commit "N synapses formed" flash.
+    """
+    created_ids: list[int] = []
+    titles: dict[int, str] = {}
+    for atom in req.atoms:
+        nid = store.add_note(
+            atom.title.strip(),
+            atom.body.strip(),
+            # de-dup + slug tags defensively
+            [t for t in dict.fromkeys(tag.strip().lower() for tag in atom.tags) if t],
+        )
+        created_ids.append(nid)
+        titles[nid] = atom.title.strip()
+
+    # Single graph recompute to attribute new synapses back to each atom.
+    g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+    new_ids = set(created_ids)
+    per_note_synapses: dict[int, int] = {nid: 0 for nid in created_ids}
+    total_new_synapses = 0
+    for e in g.edges:
+        in_src = e["source"] in new_ids
+        in_dst = e["target"] in new_ids
+        if not (in_src or in_dst):
+            continue
+        # Count edges where at least one endpoint is new. An edge
+        # between two newly-committed atoms still counts once toward the
+        # global total but increments both atoms' personal counters.
+        total_new_synapses += 1
+        if in_src:
+            per_note_synapses[e["source"]] += 1
+        if in_dst:
+            per_note_synapses[e["target"]] += 1
+
+    return {
+        "created": [
+            {"note_id": nid, "title": titles[nid], "synapses": per_note_synapses[nid]}
+            for nid in created_ids
+        ],
+        "synapses_formed": total_new_synapses,
+    }
 
 
 @app.post("/chat", response_model=schemas.ChatOut)

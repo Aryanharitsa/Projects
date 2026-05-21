@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { DailyBrief } from "@/components/DailyBrief";
+import { Distill } from "@/components/Distill";
 import { Graph } from "@/components/Graph";
 import { Header } from "@/components/Header";
 import { Inspector } from "@/components/Inspector";
@@ -38,6 +39,8 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
   const [briefBadge, setBriefBadge] = useState(false);
+  const [distillOpen, setDistillOpen] = useState(false);
+  const [distillFlash, setDistillFlash] = useState<string | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
   // so the canvas can paint trail mode (dim + overlay polyline) and so
@@ -209,6 +212,7 @@ export default function Page() {
         trailActive={trailPlayerOpen}
         onOpenBrief={() => setBriefOpen(true)}
         briefBadge={briefBadge}
+        onOpenDistill={() => setDistillOpen(true)}
       />
 
       <DailyBrief
@@ -234,6 +238,20 @@ export default function Page() {
         onTrailChange={setActiveTrail}
         onMutated={() => setTrailsListVersion((v) => v + 1)}
         onClose={handleTrailClose}
+      />
+
+      <Distill
+        open={distillOpen}
+        nodes={nodes}
+        onPreviewNeighbor={setSelected}
+        onCommitted={(createdIds, synapsesFormed) => {
+          setDistillFlash(
+            `${createdIds.length} atom${createdIds.length === 1 ? "" : "s"} added · ${synapsesFormed} synapse${synapsesFormed === 1 ? "" : "s"} formed`,
+          );
+          refreshGraph();
+          window.setTimeout(() => setDistillFlash(null), 5500);
+        }}
+        onClose={() => setDistillOpen(false)}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
@@ -321,6 +339,13 @@ export default function Page() {
           />
         </aside>
       </div>
+
+      {distillFlash && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-gradient-to-r from-synapse-lime/20 to-synapse-cyan/20 ring-1 ring-synapse-lime/50 backdrop-blur text-xs font-mono text-synapse-lime shadow-glow flex items-center gap-2">
+          <span>✓</span>
+          {distillFlash}
+        </div>
+      )}
 
       <footer className="mx-auto w-full max-w-[1600px] px-6 pb-6 text-[11px] font-mono text-ink-400 flex items-center justify-between">
         <span>

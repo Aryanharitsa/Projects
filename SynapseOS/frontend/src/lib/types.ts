@@ -234,3 +234,48 @@ export type TrailSuggestions = {
 };
 
 export type TrailDraftStep = { note_id: number; caption: string };
+
+// --------------------------------------------------------------- distill
+
+export type AtomNeighbor = {
+  note_id: number;
+  title: string;
+  strength: number;
+  cluster_id?: number | null;
+  cluster_color?: string | null;
+};
+
+export type AtomPreview = {
+  temp_id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  char_count: number;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  cluster_strength: number;
+  neighbors: AtomNeighbor[];
+  expected_synapses: number;
+  llm_refined: boolean;
+};
+
+export type AtomizeMode = "auto" | "heuristic" | "llm";
+
+export type AtomizeResponse = {
+  atoms: AtomPreview[];
+  total_chars: number;
+  mode_used: "heuristic" | "llm";
+  llm_available: boolean;
+  llm_provider: string | null;
+  notice: string | null;
+};
+
+export type AtomCommit = { title: string; body: string; tags: string[] };
+
+export type AtomCommitResult = { note_id: number; title: string; synapses: number };
+
+export type AtomizeCommitResponse = {
+  created: AtomCommitResult[];
+  synapses_formed: number;
+};
