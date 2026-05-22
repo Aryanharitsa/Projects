@@ -12,6 +12,8 @@ import ScoreRing from "../../../components/ScoreRing";
 import SimilarityRing, { GRADE_TINT } from "../../../components/SimilarityRing";
 import Timeline from "../../../components/Timeline";
 import TxGraph from "../../../components/TxGraph";
+import TypologyPanel from "../../../components/TypologyPanel";
+import TypologyBadge from "../../../components/TypologyBadge";
 import {
   CaseDetail,
   CaseStatus,
@@ -219,13 +221,26 @@ export default function CaseDetailPage() {
           <div className="flex flex-wrap items-center gap-4">
             <ScoreRing score={c.alert_score} band={c.band} size={92} />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <PriorityDot priority={c.priority} />
                 <span className="text-[11.5px] font-semibold uppercase tracking-wider text-white/85">
                   {PRIORITY_LABEL[c.priority]} priority
                 </span>
                 <span className="font-mono text-[10.5px] text-white/45">·</span>
                 <AgePill hours={c.age_hours} sla={c.sla} />
+                {c.typology_code && (
+                  <>
+                    <span className="font-mono text-[10.5px] text-white/45">·</span>
+                    <TypologyBadge
+                      match={{
+                        code: c.typology_code,
+                        confidence: c.typology_confidence ?? 0,
+                      }}
+                      size="sm"
+                      showName
+                    />
+                  </>
+                )}
               </div>
               <h1 className="mt-1.5 font-mono text-xl text-white/90 md:text-2xl">
                 {c.account_id}
@@ -395,6 +410,17 @@ export default function CaseDetailPage() {
               </div>
             </div>
           </div>
+
+          {c.snapshot.typologies && c.snapshot.typologies.length > 0 && (
+            <TypologyPanel
+              matches={c.snapshot.typologies}
+              caption={
+                c.typology_code
+                  ? `Primary playbook locked at open · ${c.typology_code}`
+                  : undefined
+              }
+            />
+          )}
 
           <CaseNetworkPanel
             caseId={c.id}

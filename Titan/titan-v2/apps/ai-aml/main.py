@@ -57,8 +57,9 @@ import network as network_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
+import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.4.0"
+ENGINE_VERSION = "titan-aml/1.5.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -187,6 +188,45 @@ def sanctions_list(limit: int = 50) -> Dict[str, Any]:
         "ok": True,
         "watchlist": sanctions_engine.get_metadata(),
         "entries": sanctions_engine.list_entries(limit=limit),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Typology library (round-6, day-30)
+# ---------------------------------------------------------------------------
+
+
+class TypologyClassifyReq(BaseModel):
+    account_report: Dict[str, Any]
+
+
+@app.get("/aml/typologies")
+def typology_library() -> Dict[str, Any]:
+    """Auditor-facing dump of the typology library.
+
+    Frontend reads this to render the rules page and to verify both
+    sides are on the same engine version before showing the badge.
+    """
+
+    return {"ok": True, "engine": ENGINE_VERSION, **typology_engine.get_library()}
+
+
+@app.post("/aml/typologies/classify")
+def typology_classify(req: TypologyClassifyReq = Body(...)) -> Dict[str, Any]:
+    """Classify one account report on its own — useful when re-running the
+    classifier after a what-if weights override has reshuffled the
+    factors. The shape mirrors ``account_report.typologies`` so callers
+    can drop the result straight back into a report dict."""
+
+    if not isinstance(req.account_report, dict) or "account_id" not in req.account_report:
+        raise HTTPException(status_code=400, detail="account_report.account_id required")
+    matches = typology_engine.classify(req.account_report)
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "typology_engine": typology_engine.ENGINE_VERSION,
+        "account_id": req.account_report.get("account_id"),
+        "typologies": matches,
     }
 
 

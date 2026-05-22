@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CaseSummary, CaseStatus } from "../lib/api";
 import PriorityDot from "./PriorityDot";
 import AgePill from "./AgePill";
+import TypologyBadge from "./TypologyBadge";
 
 const STATUS_TONE: Record<CaseStatus, string> = {
   open: "border-violet-400/30 bg-violet-500/10 text-violet-300",
@@ -87,6 +88,15 @@ export default function CaseCard({ c }: { c: CaseSummary }) {
         >
           {STATUS_LABEL[c.status]}
         </span>
+        {c.typology_code && (
+          <TypologyBadge
+            match={{
+              code: c.typology_code,
+              confidence: c.typology_confidence ?? 0,
+            }}
+            size="xs"
+          />
+        )}
         {c.sanctions_count > 0 && (
           <span className="inline-flex rounded-md border border-rose-400/35 bg-rose-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-rose-300">
             {c.sanctions_count} sanctions

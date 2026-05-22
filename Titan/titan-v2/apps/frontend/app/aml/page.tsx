@@ -5,6 +5,8 @@ import FactorBars from "../../components/FactorBars";
 import ScoreRing from "../../components/ScoreRing";
 import SimilarityRing, { GRADE_TINT } from "../../components/SimilarityRing";
 import TxGraph from "../../components/TxGraph";
+import TypologyBadge from "../../components/TypologyBadge";
+import TypologyPanel from "../../components/TypologyPanel";
 import {
   AccountReport,
   CaseSummary,
@@ -450,6 +452,12 @@ export default function AMLPage() {
                             )}
                           </span>
                           <span className="ml-auto flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/55">
+                            {a.typologies && a.typologies[0] && (
+                              <TypologyBadge
+                                match={a.typologies[0]}
+                                size="xs"
+                              />
+                            )}
                             {a.sanctions_hits.length > 0 && (
                               <span className="rounded-md border border-rose-400/40 bg-rose-500/10 px-1.5 py-0.5 text-[9.5px] text-rose-300">
                                 sanctions
@@ -555,6 +563,12 @@ export default function AMLPage() {
               </button>
             </div>
           </div>
+
+          {selectedReport.typologies && selectedReport.typologies.length > 0 && (
+            <div className="mt-5">
+              <TypologyPanel matches={selectedReport.typologies} />
+            </div>
+          )}
 
           <div className="mt-5 grid gap-5 md:grid-cols-[1.1fr_1fr]">
             <div className="rounded-xl border border-white/10 bg-black/20 p-4">

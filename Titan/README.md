@@ -25,10 +25,11 @@ PDF ──► sha256 ──► IPFS pin ──► AttestationRegistry.attest()
 
 ```
 transactions.csv ─► 8 detectors ─► weighted score ─► band ─► alert ─► case ─► SAR
-                                                                        │
-                                                                        ▼
-                                                                 Analyst workflow
-                                                          (priority · SLA · timeline)
+                                       │                              │
+                                       ▼                              ▼
+                            6 typology classifier              Analyst workflow
+                       (SMURF · LAYER · TBML · MULE        (priority · SLA · timeline)
+                        SANCEV · INTEG  + confidence)
         │
         ▼
    Entity resolution ─► biased PageRank ─► network_risk per cluster

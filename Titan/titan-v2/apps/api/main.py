@@ -263,6 +263,26 @@ async def aml_sanctions_list(limit: int = 50) -> Dict[str, Any]:
         return r.json()
 
 
+# ----- Typology library pass-through (round-6, day-30)
+
+
+@app.get("/aml/typologies")
+async def aml_typologies() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/typologies")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/typologies/classify")
+async def aml_typologies_classify(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.post(f"{AML_SVC}/aml/typologies/classify", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
 # ----- AML case management pass-through (round-3, day-15)
 
 
