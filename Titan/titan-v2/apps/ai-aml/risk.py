@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import sanctions as sanctions_engine
+import typology as typology_engine
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +142,7 @@ class AccountReport:
     outbound_total: float
     sanctions_hits: List[Dict[str, Any]] = field(default_factory=list)
     display_name: str = ""
+    typologies: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -154,6 +156,7 @@ class AccountReport:
             "inbound_total": round(self.inbound_total, 2),
             "outbound_total": round(self.outbound_total, 2),
             "sanctions_hits": self.sanctions_hits,
+            "typologies": self.typologies,
         }
 
 
@@ -603,7 +606,7 @@ def score_accounts(
             "accounts": [],
             "summary": {"total_transactions": 0, "alerted": 0},
             "effective_weights": _resolve_weights(weights_override),
-            "rules_version": "1.1.0",
+            "rules_version": "1.2.0",
         }
 
     weights = _resolve_weights(weights_override)
@@ -660,23 +663,26 @@ def score_accounts(
             }
             for t in related
         ]
-        reports.append(
-            AccountReport(
-                account_id=acct,
-                display_name=_name_for_party(acct, related),
-                risk_score=score,
-                band=_band(score),
-                factors=factors,
-                edges=edges_for_acct,
-                counterparty_count=len(
-                    {t.counterparty for t in related if t.account_id == acct}
-                    | {t.account_id for t in related if t.counterparty == acct}
-                ),
-                inbound_total=sum(t.amount for t in related if t.counterparty == acct),
-                outbound_total=sum(t.amount for t in related if t.account_id == acct),
-                sanctions_hits=sanction_hits,
-            )
+        ar = AccountReport(
+            account_id=acct,
+            display_name=_name_for_party(acct, related),
+            risk_score=score,
+            band=_band(score),
+            factors=factors,
+            edges=edges_for_acct,
+            counterparty_count=len(
+                {t.counterparty for t in related if t.account_id == acct}
+                | {t.account_id for t in related if t.counterparty == acct}
+            ),
+            inbound_total=sum(t.amount for t in related if t.counterparty == acct),
+            outbound_total=sum(t.amount for t in related if t.account_id == acct),
+            sanctions_hits=sanction_hits,
         )
+        # Typology classification runs against the freshly assembled report
+        # — it consumes factor intensities + structural stats only, so the
+        # call is deterministic and pure (no I/O, no randomness).
+        ar.typologies = typology_engine.classify(ar.to_dict())
+        reports.append(ar)
 
     reports.sort(key=lambda r: r.risk_score, reverse=True)
     alerted = [r for r in reports if r.risk_score >= 60]
@@ -694,7 +700,7 @@ def score_accounts(
         },
         "effective_weights": weights,
         "sanctions_threshold": sanctions_threshold,
-        "rules_version": "1.1.0",
+        "rules_version": "1.2.0",
     }
 
 
@@ -703,7 +709,7 @@ def get_rules() -> Dict[str, Any]:
     auditors can verify what the engine is actually doing.
     """
     return {
-        "version": "1.1.0",
+        "version": "1.2.0",
         "weights": WEIGHTS,
         "max_weight": MAX_WEIGHT,
         "detectors": list(DETECTOR_ORDER),
@@ -740,4 +746,5 @@ def get_rules() -> Dict[str, Any]:
             {"label": "high", "min": 60, "max": 79},
             {"label": "critical", "min": 80, "max": 100},
         ],
+        "typologies": typology_engine.get_library(),
     }

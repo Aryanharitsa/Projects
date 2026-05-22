@@ -1,5 +1,6 @@
 import type { CaseEvent, CaseEventType } from "../lib/api";
 import { Avatar } from "./CaseCard";
+import TypologyBadge from "./TypologyBadge";
 
 const TONE: Record<CaseEventType, { dot: string; pill: string; label: string }> = {
   opened: {
@@ -31,6 +32,11 @@ const TONE: Record<CaseEventType, { dot: string; pill: string; label: string }> 
     dot: "#fb923c",
     pill: "border-orange-400/35 bg-orange-500/10 text-orange-300",
     label: "Reopened",
+  },
+  typology_assigned: {
+    dot: "#a855f7",
+    pill: "border-violet-400/35 bg-violet-500/10 text-violet-300",
+    label: "Typology",
   },
 };
 
@@ -96,6 +102,25 @@ export default function Timeline({ events }: { events: CaseEvent[] }) {
               {e.type === "sar" && e.payload?.sar_id && (
                 <div className="mt-1.5 inline-flex items-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10.5px] text-emerald-300">
                   📄 {e.payload.sar_id}
+                </div>
+              )}
+              {e.type === "typology_assigned" && e.payload?.code && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <TypologyBadge
+                    match={{
+                      code: e.payload.code,
+                      confidence: e.payload.confidence ?? 0,
+                    }}
+                    size="xs"
+                    showName
+                  />
+                  {Array.isArray(e.payload.runners_up) &&
+                    e.payload.runners_up.length > 0 && (
+                      <span className="text-[10px] text-white/40">
+                        +{e.payload.runners_up.length} runner
+                        {e.payload.runners_up.length === 1 ? "" : "s"}-up
+                      </span>
+                    )}
                 </div>
               )}
               {e.type === "assigned" && e.payload && (

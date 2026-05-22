@@ -4,41 +4,53 @@
 Document-grade KYC + on-chain attestation + a deterministic, explainable AML
 risk engine **with built-in sanctions screening**, a real **case management
 workflow**, a **network-intelligence layer** that catches money-laundering
-patterns single-account scoring misses, **and** — as of day-25 — a
-**network panel that lives inside the case detail itself**, so an analyst
-opening any case sees the resolved-entity subgraph, the counterparties
-driving the score, and a "what if we clear this?" simulation without ever
-leaving the workflow.
+patterns single-account scoring misses, a **case-detail network panel** that
+collapses both into one analyst surface, **and** — as of day-30 — an
+**auto-classified laundering typology** on every alert. The pipeline now
+names the playbook (`SMURF`, `LAYER`, `TBML`, `MULE`, `SANCEV`, `INTEG`),
+quantifies how well the evidence fits, and pre-writes the SAR §3
+narrative — turning a wall of factor bars into "this looks like
+smurfing — here's the 86% confidence, here's the contributing evidence,
+here's the freeze-and-investigate paragraph".
 
-> **Day-25 — Network-aware Case Detail.** Day-20 shipped network
-> intelligence as a standalone `/network` route, but the case workflow
-> (day-15) and the network engine were still two doors away. They are
-> now one door. When a case is opened the AML console snapshots the
-> 1-hop neighbourhood around the subject account, and the case detail
-> auto-runs entity resolution + biased PageRank + leave-one-counterparty
-> out against that snapshot the moment the page mounts. The new
-> `CaseNetworkPanel` shows:
+> **Day-30 — Typology Classifier.** Eight detectors answer
+> *"what suspicious patterns are present?"*. Compliance officers always
+> ask the next question: *"…and which playbook does that add up to?"*.
+> The new `apps/ai-aml/typology.py` engine layers six FATF /
+> Wolfsberg-style laundering typologies on top of the existing detector
+> intensities + structural signals, returns a confidence per match,
+> ranked evidence chips, an auto-generated narrative ready for the SAR,
+> and a `severity_floor` that promotes the case priority when the
+> playbook demands it (a `SANCEV` match forces critical even on
+> otherwise-quiet accounts).
 >
-> - **solo vs network risk** — and the lift from peer effects so an
->   account looking *clean by itself* but tainted by neighbours surfaces
->   as visibly suspicious
-> - the **1-hop entity subgraph** (deterministic FR layout) centred on
->   the case's resolved entity, with the existing `RiskGraph` visuals
-> - **per-counterparty attribution bars** — member-aware: when the
->   subject is an aggregate cluster like `M1+M2 → Trident Exports`,
->   leave-one-out runs across all members at once with per-member
->   baseline scores listed
-> - **"if cleared" deltas** — ablate this case's entity, rerun the
->   whole pipeline, report the network-avg change, alerted-count flip,
->   and the **peers that depend most** on the subject (sorted by
->   biggest network drop)
+> | Code | Playbook | Drives priority to ≥ |
+> |---|---|---|
+> | `SMURF`  | Smurfing / structuring (sub-threshold deposit clusters → funnel) | high |
+> | `LAYER`  | Layering through closed flow cycles | high |
+> | `TBML`   | Trade-based ML (cross-border + diversity + round figures) | high |
+> | `MULE`   | Mule-network pass-through (high fan-in + fan-out + low retention) | medium |
+> | `SANCEV` | Sanctions evasion (watchlist alias + structural cover) | critical |
+> | `INTEG`  | Integration (round-figure flows from a small set of sources) | medium |
 >
-> Two endpoints make it work — `GET /aml/cases/{id}/network` runs against
-> the persisted snapshot, `POST /aml/cases/{id}/network/clearing`
-> accepts caller-supplied transactions for the override path.
+> Every typology publishes a stable `code`, an accent colour, a 0..1
+> `confidence` (sum of contributor weights × normalised signals ÷ max
+> possible), ranked `evidence` chips with their per-contributor share,
+> and a recommended action. The full library is dumped at
+> `GET /aml/typologies` so auditors can verify the formula matches the
+> definitions before the engine ships.
 >
-> All deterministic — same input → same clusters, same propagated scores,
-> same layout coordinates. No ML, no embeddings, no animation jitter.
+> **Surfaces.** When a case is opened the top typology is mirrored onto
+> the case row (`typology_code`, `typology_confidence`), a
+> `typology_assigned` event lands in the timeline, the snapshot grows
+> a ranked list for the case-detail `TypologyPanel`, and the SAR
+> generator leads the narrative with the playbook's auto-generated
+> paragraph + the recommended action. The AML console renders a
+> `TypologyBadge` chip on every alerted row and a full `TypologyPanel`
+> in the detail drawer. Case queue cards show a typology chip next to
+> the priority dot so the analyst sees the playbook at the swim-lane
+> level. All deterministic — same factor intensities → same typology
+> ranking, every time.
 
 ---
 
@@ -71,6 +83,8 @@ leaving the workflow.
 | **Network attribution** | `POST /aml/network/attribution` | Leave-one-counterparty-out lift per account |
 | **Case network panel** | `GET  /aml/cases/{id}/network` | Auto-runs entity resolution + propagation + member-aware attribution + "if cleared" deltas against the case's snapshotted neighbourhood |
 | **Case network clearing** | `POST /aml/cases/{id}/network/clearing` | Override path — runs the case panel against caller-supplied transactions (for the AML console when no snapshot exists) |
+| **Typology library** | `GET  /aml/typologies` | Auditor-facing dump of the six laundering typologies + per-contributor weights + confidence formula |
+| **Typology classify** | `POST /aml/typologies/classify` | Re-classify one account report on demand — used by the what-if simulator after a weights override has reshuffled the factors |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -346,15 +360,129 @@ sanctions hits panel on every case detail page. It renders:
 
 ---
 
+## Typology classifier, in detail
+
+The classifier is a deterministic, declarative library. Each typology is
+a `TypologyDef` with a tuple of `_Contributor` rows; each contributor is
+either a detector key (e.g. `structuring`) or a derived structural
+signal (e.g. `__retention__`). At classify time the engine walks the
+account report's factor map, recovers each detector's `intensity =
+points / weight ∈ [0, 1]`, computes derived signals from the structural
+fields, multiplies through the per-contributor weights, sums, and
+divides by the maximum attainable for that typology:
+
+```
+confidence(typology) = Σ ( signal_i × weight_i )  /  Σ weight_i
+```
+
+A perfect match scores `1.00`. Matches below `CONFIDENCE_FLOOR = 0.35`
+are dropped so the SAR narrative never carries weak playbooks. The top
+`MAX_REPORTED = 3` are returned.
+
+### Contributor rows (the formula, made explicit)
+
+| Typology | Contributors (weight) |
+|---|---|
+| `SMURF` | `structuring` 1.00 · `fan_in` 0.55 · `round_amount` 0.35 · `velocity_spike` 0.25 |
+| `LAYER` | `round_trip` 1.00 · `velocity_spike` 0.40 · `round_amount` 0.30 · `high_risk_geo` 0.25 |
+| `TBML`  | `high_risk_geo` 1.00 · `fan_out` 0.55 · `round_amount` 0.40 · `sanctions_hit` 0.35 |
+| `MULE`  | `fan_in` 0.55 · `fan_out` 0.55 · `velocity_spike` 0.50 · `__retention__` 0.50 · `structuring` 0.20 |
+| `SANCEV` | `sanctions_hit` 1.00 · `__sanctions_strength__` 0.55 · `high_risk_geo` 0.30 · `round_trip` 0.25 |
+| `INTEG` | `round_amount` 1.00 · `__low_counterparty_density__` 0.55 · `velocity_spike` 0.30 · `high_risk_geo` 0.25 |
+
+The three derived signals are:
+
+- **`__retention__`** — `(1 − |in − out| / max(in, out))²`. Squared so
+  near-symmetric flows score 1.0 (pass-through node, mule signature),
+  and asymmetric ones (pure inbound aggregator) score 0.
+- **`__sanctions_strength__`** — `(best_similarity − 0.65) / 0.35`,
+  clipped to `[0, 1]`. A 0.65 (entry-threshold) match contributes 0;
+  a 1.0 exact match contributes 1.0. Additive on top of the base
+  `sanctions_hit` detector so we never double-count low matches.
+- **`__low_counterparty_density__`** — `max(0, 1 − cp_count / 6)`.
+  Three counterparties → 0.5; six → 0. Captures the
+  "value concentrated in a handful of sources" signature of the
+  integration stage.
+
+### Priority promotion via `severity_floor`
+
+Cases default to a priority derived from
+`max(risk_score, sanctions_pct)`. When a critical-floor typology like
+`SANCEV` fires, the case rides at critical even when the per-account
+score sits in the 60s — this is the inversion compliance teams expect.
+The promotion is logged in the `opened` event payload's
+`promoted_by_typology: true` flag so the audit trail captures both the
+base reasoning and the override.
+
+### Storage
+
+Two idempotent SQLite migrations land on first boot:
+
+- `ALTER TABLE cases ADD COLUMN typology_code TEXT`
+- `ALTER TABLE cases ADD COLUMN typology_confidence REAL`
+
+Both are introspected via `PRAGMA table_info(cases)` so the migration
+re-runs cleanly against any version of the schema. The ranked list of
+runners-up rides on the existing snapshot JSON (no separate table) —
+the snapshot is already the system-of-record for the account-report
+shape, so we don't fragment storage. A new `typology_assigned`
+case-event type carries `{code, name, confidence, severity_floor,
+evidence, runners_up}` for the timeline.
+
+### SAR narrative
+
+`render_sar()` reads `account_report.typologies` and adds a new §3
+"Laundering typology" block above the per-detector bullets. The block
+contains: the primary typology + code + confidence + severity floor,
+the auto-generated narrative paragraph (interpolated from the live
+account stats — totals, counterparty count, the structuring/cycle/geo
+detail strings lifted off the firing detector), ranked contributing
+evidence with signal percentages, and the per-typology `recommended_action`
+that pre-fills §5. Runners-up are listed as chips at the bottom of the
+block so the analyst can switch playbooks before finalising.
+
+### Example: SMURF case in flight
+
+```bash
+curl -s :8000/aml/typologies | jq '.typologies | map(.code)'
+# ["SMURF","LAYER","TBML","MULE","SANCEV","INTEG"]
+
+# Score 12 sub-threshold transfers from A1 across 9 recipients
+curl -s :8000/aml/score -H 'Content-Type: application/json' \
+     -d @demo_smurf.json | jq '.accounts[] | select(.account_id=="A1")
+                               | {risk_score, typology: .typologies[0]}'
+# {
+#   "risk_score": 47,
+#   "typology": {
+#     "code": "SMURF",
+#     "name": "Smurfing / Structuring",
+#     "confidence": 0.581,
+#     "severity_floor": "high",
+#     "evidence": [
+#       { "label": "Sub-threshold deposit clusters", "signal": 1.000, ... },
+#       { "label": "Burst in inbound velocity",      "signal": 1.000, ... }
+#     ]
+#   }
+# }
+
+# Open the case — top typology mirrored onto the row, event in timeline
+curl -s -X POST :8000/aml/cases/open \
+     -H 'Content-Type: application/json' \
+     -d '{"account_report": <a1_above>}' | jq '.case | {id, priority, typology_code, typology_confidence}'
+# {"id":"CASE-...","priority":"high","typology_code":"SMURF","typology_confidence":0.581}
+```
+
+---
+
 ## Frontend
 
 | Route | Purpose |
 |---|---|
 | `/` | Hero + 4-step pipeline + six feature cards + flow diagram |
-| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, **+ case promotion (per-row chip and bulk header button)**, + `Network →` deep-link |
+| `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
 | `/network` | **(new)** Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
-| `/cases/{id}` | Big alert ring, priority/SLA pills, frozen evidence snapshot (factor bars + tx graph), **network panel** auto-running entity resolution + propagation + member-aware attribution + "if cleared" deltas on the case's snapshot, sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail, attached SAR with collapsible markdown view |
+| `/cases/{id}` | Big alert ring, priority/SLA pills, **typology badge in the header**, frozen evidence snapshot (factor bars + tx graph), **`TypologyPanel`** with full breakdown (confidence ring, ranked evidence bars, auto-narrative, recommended action), **network panel** auto-running entity resolution + propagation + member-aware attribution + "if cleared" deltas on the case's snapshot, sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail (now renders `typology_assigned` events with the badge), attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
 | `/kyc` | PDF dropzone, animated 3-stage pipeline, on-chain receipt with deep-link to explorer |
 | `/attestations` | Search by `docHash`, live `Attested` event feed, click-through to detail |
@@ -362,7 +490,8 @@ sanctions hits panel on every case detail page. It renders:
 Built with Next.js 14 + Tailwind + a small set of inline SVG components
 (`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`, `PriorityDot`,
 `AgePill`, `Timeline`, `CasesNavPill`, `RiskGraph`, `EntityCard`,
-`DeltaBar`, `CaseNetworkPanel`). No charting libs.
+`DeltaBar`, `CaseNetworkPanel`, `TypologyBadge`, `TypologyPanel`).
+No charting libs.
 
 ---
 
@@ -449,10 +578,15 @@ apps/
   api/              FastAPI gateway — KYC ingest, attestation lookup, AML pass-through
   ai-ocr/           PAN PDF stub — sha256 + IPFS pin
   ai-aml/           Risk engine + sanctions matcher + SAR generator (no ML deps)
-    risk.py             8 detectors + weight-override support
+    risk.py             8 detectors + weight-override support + per-account typology classify
     sanctions.py        token-set + n-gram + containment matcher
-    sar.py              markdown narrative + structured payload
+    sar.py              markdown narrative + structured payload + auto-led typology §3
+    typology.py         6 laundering typologies (SMURF · LAYER · TBML · MULE · SANCEV · INTEG)
+                         · deterministic confidence scorer · severity-floor priority promotion
+                         · auto-generated narrative + recommended action per match
     cases.py            SQLite-backed case store + workflow engine + SLA
+                         + typology_code/typology_confidence mirror columns
+                         + typology_assigned timeline events
     network.py          entity resolution + biased PageRank + counterfactual + attribution
                          + case_panel(): one-shot per-case surface
                          + attribution_for_entity(): member-aware leave-one-out
@@ -471,6 +605,8 @@ apps/
     components/EntityCard.tsx       sidebar row with conic-gradient ring + ablate toggle
     components/DeltaBar.tsx         diverging-bar visualisation for signed deltas
     components/CaseNetworkPanel.tsx in-case network surface: subgraph + attribution + "if cleared" tiles
+    components/TypologyBadge.tsx    icon + code + confidence ring chip (xs/sm/md)
+    components/TypologyPanel.tsx    full breakdown: ring + ranked evidence + narrative + recommended action
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -493,4 +629,9 @@ datasets/           sample inputs
   ~~expose network intelligence as a case-detail panel (auto-run when a
   case is opened)~~ (✅ shipped, day-25 — `CaseNetworkPanel` mounts on
   every case detail and runs against a persisted neighbourhood
-  snapshot).
+  snapshot); ~~auto-classify each alert into a named laundering
+  typology (FATF / Wolfsberg playbooks) with confidence, evidence
+  chips, and an auto-generated SAR narrative~~ (✅ shipped, day-30 —
+  6-typology classifier with severity-floor priority promotion, mirrored
+  onto every case row, surfaced as a `TypologyBadge` in the queue and a
+  full `TypologyPanel` in the case detail + AML console).

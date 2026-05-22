@@ -50,6 +50,38 @@ export type SanctionsHit = {
   queried_role?: "subject" | "counterparty";
 };
 
+export type TypologyCode =
+  | "SMURF"
+  | "LAYER"
+  | "TBML"
+  | "MULE"
+  | "SANCEV"
+  | "INTEG";
+
+export type TypologyEvidence = {
+  key: string;
+  label: string;
+  kind: "detector" | "structure" | "sanctions";
+  signal: number;
+  contribution: number;
+  weight: number;
+  detail: string;
+};
+
+export type TypologyMatch = {
+  code: TypologyCode;
+  name: string;
+  summary: string;
+  icon: string;
+  accent: string; // hex
+  confidence: number; // 0..1
+  severity_floor: "low" | "medium" | "high" | "critical";
+  evidence: TypologyEvidence[];
+  narrative: string;
+  recommended_action: string;
+  contributing_factors: string[];
+};
+
 export type AccountReport = {
   account_id: string;
   display_name?: string;
@@ -61,6 +93,7 @@ export type AccountReport = {
   inbound_total: number;
   outbound_total: number;
   sanctions_hits: SanctionsHit[];
+  typologies?: TypologyMatch[];
 };
 
 export type WeightOverrides = Partial<Record<
@@ -224,6 +257,58 @@ export async function getRules() {
   return jsonOrThrow(r);
 }
 
+// ---------------------------------------------------------------------------
+// Typology library (round-6, day-30)
+// ---------------------------------------------------------------------------
+
+export type TypologyContributorMeta = {
+  key: string;
+  label: string;
+  kind: "detector" | "structure" | "sanctions";
+  weight: number;
+};
+
+export type TypologyLibraryEntry = {
+  code: TypologyCode;
+  name: string;
+  summary: string;
+  icon: string;
+  accent: string;
+  severity_floor: "low" | "medium" | "high" | "critical";
+  recommended_action: string;
+  contributors: TypologyContributorMeta[];
+  max_score: number;
+};
+
+export type TypologyLibrary = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  confidence_floor: number;
+  max_reported: number;
+  typologies: TypologyLibraryEntry[];
+};
+
+export async function getTypologyLibrary(): Promise<TypologyLibrary> {
+  const r = await fetch(`${API_BASE}/aml/typologies`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function classifyTypologies(account_report: AccountReport): Promise<{
+  ok: boolean;
+  engine: string;
+  typology_engine: string;
+  account_id: string;
+  typologies: TypologyMatch[];
+}> {
+  const r = await fetch(`${API_BASE}/aml/typologies/classify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_report }),
+  });
+  return jsonOrThrow(r);
+}
+
 export async function uploadKyc(file: File, subject: string, verifier = "VERIFIER-1") {
   const fd = new FormData();
   fd.append("file", file);
@@ -264,7 +349,8 @@ export type CaseEventType =
   | "note"
   | "status"
   | "sar"
-  | "reopened";
+  | "reopened"
+  | "typology_assigned";
 
 export type CaseEvent = {
   id: number;
@@ -304,6 +390,8 @@ export type CaseSummary = {
   summary: string;
   age_hours: number;
   sla: CaseSla;
+  typology_code: TypologyCode | null;
+  typology_confidence: number | null;
 };
 
 export type CaseSnapshot = {
@@ -317,6 +405,7 @@ export type CaseSnapshot = {
   counterparty_count: number;
   inbound_total: number;
   outbound_total: number;
+  typologies?: TypologyMatch[];
 };
 
 export type CaseDetail = CaseSummary & {

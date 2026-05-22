@@ -21,7 +21,7 @@ const FEATURES = [
     href: "/cases",
     title: "Case Workflow",
     eyebrow: "Triage",
-    body: "Promote any alert to a case with one click. Priority-sorted swim lanes, SLA pills, an append-only audit trail of every transition, and a one-click Generate-and-file SAR action that closes the loop.",
+    body: "Promote any alert to a case with one click. Priority-sorted swim lanes, SLA pills, an append-only audit trail of every transition, an auto-classified laundering typology, and a one-click Generate-and-file SAR action that closes the loop.",
     accent: "from-emerald-400/30 via-teal-400/15 to-transparent",
     cta: "Open queue",
   },
@@ -53,6 +53,7 @@ const FEATURES = [
 
 const STATS = [
   { label: "Pattern detectors", value: "8" },
+  { label: "Laundering typologies", value: "6" },
   { label: "Watchlist entries", value: "30" },
   { label: "Workflow states", value: "5" },
   { label: "Graph propagation", value: "α 0.7" },

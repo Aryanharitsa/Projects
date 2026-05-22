@@ -25,10 +25,50 @@ def _draft_id(account_id: str, ts: str) -> str:
     return "SAR-" + h[:10].upper()
 
 
+def _typology_block(typologies: List[Dict[str, Any]]) -> str:
+    if not typologies:
+        return (
+            "_(no laundering typology fit above the 35% confidence floor — "
+            "review per-factor evidence in §4.)_"
+        )
+    top = typologies[0]
+    parts: List[str] = []
+    conf_pct = f"{float(top.get('confidence') or 0.0) * 100:.0f}%"
+    parts.append(
+        f"**Primary typology: {top.get('name')}** "
+        f"(`{top.get('code')}`, confidence **{conf_pct}**, "
+        f"severity floor `{top.get('severity_floor')}`)."
+    )
+    narrative = (top.get("narrative") or "").strip()
+    if narrative:
+        parts.append("")
+        parts.append(narrative)
+    evidence = top.get("evidence") or []
+    if evidence:
+        parts.append("")
+        parts.append("**Contributing evidence (ranked):**")
+        for ev in evidence[:5]:
+            label = ev.get("label") or ev.get("key")
+            signal_pct = f"{float(ev.get('signal') or 0.0) * 100:.0f}%"
+            detail = (ev.get("detail") or "").strip()
+            extra = f" — {detail}" if detail else ""
+            parts.append(f"- {label} · signal {signal_pct}{extra}")
+    runners = typologies[1:]
+    if runners:
+        parts.append("")
+        runner_chips = ", ".join(
+            f"{t.get('name')} ({float(t.get('confidence') or 0.0) * 100:.0f}%)"
+            for t in runners
+        )
+        parts.append(f"**Runners-up:** {runner_chips}")
+    return "\n".join(parts)
+
+
 def render_sar(account_report: Dict[str, Any], analyst: str = "TITAN-AUTOMATED") -> Dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat()
     sar_id = _draft_id(account_report["account_id"], now)
     triggered = [f for f in account_report.get("factors", []) if f.get("points", 0) > 0]
+    typologies: List[Dict[str, Any]] = list(account_report.get("typologies") or [])
 
     inbound = account_report.get("inbound_total", 0)
     outbound = account_report.get("outbound_total", 0)
@@ -37,6 +77,13 @@ def render_sar(account_report: Dict[str, Any], analyst: str = "TITAN-AUTOMATED")
     period_end = max((e["timestamp"] for e in edges), default=now)
 
     bullets = "\n".join(b for b in (_bullet(f) for f in triggered) if b)
+    typology_block = _typology_block(typologies)
+    top = typologies[0] if typologies else None
+    recommended = (top.get("recommended_action") if top else None) or (
+        "Escalate to compliance review; freeze outbound transfers above ₹10,00,000 "
+        "pending KYC re-verification of subject and counterparties listed in §6."
+    )
+
     narrative = f"""# Suspicious Activity Report — Draft
 
 **Reference**: `{sar_id}`
@@ -54,14 +101,16 @@ def render_sar(account_report: Dict[str, Any], analyst: str = "TITAN-AUTOMATED")
 - Distinct counterparties: {account_report.get('counterparty_count', 0)}
 - Transactions in scope: {len(edges)}
 
-## 3. Triggered patterns
+## 3. Laundering typology
+{typology_block}
+
+## 4. Triggered patterns (per detector)
 {bullets if bullets else '_(no individual patterns triggered above their thresholds)_'}
 
-## 4. Recommended action
-Escalate to compliance review; freeze outbound transfers above ₹10,00,000
-pending KYC re-verification of subject and counterparties listed in §5.
+## 5. Recommended action
+{recommended}
 
-## 5. Counterparty summary (top by value)
+## 6. Counterparty summary (top by value)
 """ + _counterparty_table(edges, account_report["account_id"])
 
     return {
@@ -71,12 +120,14 @@ pending KYC re-verification of subject and counterparties listed in §5.
         "account_id": account_report["account_id"],
         "risk_score": account_report["risk_score"],
         "band": account_report["band"],
+        "typologies": typologies,
         "narrative_md": narrative,
         "structured": {
             "subject_account": account_report["account_id"],
             "period": {"start": period_start, "end": period_end},
             "totals": {"inbound": inbound, "outbound": outbound},
             "triggered_factors": triggered,
+            "typologies": typologies,
             "evidence": list(_collect_evidence(triggered)),
         },
     }

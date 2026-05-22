@@ -46,6 +46,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import typology as typology_engine
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -181,6 +183,22 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _migrate_typology_columns(conn: sqlite3.Connection) -> None:
+    """Day-30 — idempotently add ``typology_code`` / ``typology_confidence``
+    so older databases pick up the new columns at first boot.
+
+    SQLite has no ``ADD COLUMN IF NOT EXISTS``, so we introspect
+    ``PRAGMA table_info`` first. Adding columns this way is cheap (no
+    table rewrite) and keeps the migration trivially reversible.
+    """
+
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(cases)")}
+    if "typology_code" not in existing:
+        conn.execute("ALTER TABLE cases ADD COLUMN typology_code TEXT")
+    if "typology_confidence" not in existing:
+        conn.execute("ALTER TABLE cases ADD COLUMN typology_confidence REAL")
+
+
 def _init_db() -> None:
     global _initialized
     if _initialized:
@@ -191,6 +209,7 @@ def _init_db() -> None:
         conn = _connect()
         try:
             conn.executescript(_SCHEMA)
+            _migrate_typology_columns(conn)
             conn.commit()
         finally:
             conn.close()
@@ -251,6 +270,10 @@ def _summarise(account_report: Dict[str, Any]) -> str:
 
 
 def _row_to_case(row: sqlite3.Row, *, with_snapshot: bool = False) -> Dict[str, Any]:
+    # PRAGMA-introspected columns may not exist on a brand-new DB until
+    # after _migrate_typology_columns has run. Pull defensively via ``row.keys()``
+    # so the helper stays callable in both states.
+    keys = set(row.keys())
     out: Dict[str, Any] = {
         "id": row["id"],
         "account_id": row["account_id"],
@@ -276,6 +299,10 @@ def _row_to_case(row: sqlite3.Row, *, with_snapshot: bool = False) -> Dict[str, 
         "summary": row["summary"] or "",
         "age_hours": _age_hours(row["opened_at"], row["closed_at"]),
         "sla": _sla_state(row["opened_at"], row["closed_at"]),
+        "typology_code": row["typology_code"] if "typology_code" in keys else None,
+        "typology_confidence": (
+            row["typology_confidence"] if "typology_confidence" in keys else None
+        ),
     }
     if with_snapshot:
         try:
@@ -349,14 +376,45 @@ def open_case(
         return existing
 
     alert = _alert_score(account_report)
-    priority = _priority_for(alert)
+    base_priority = _priority_for(alert)
     summary = _summarise(account_report)
     factors = account_report.get("factors") or []
     fired = sum(1 for f in factors if (f.get("points") or 0) > 0)
     hits = account_report.get("sanctions_hits") or []
 
+    # Day-30 — classify typologies at triage time. The top match is
+    # mirrored onto the case row so the queue can render the playbook
+    # chip without re-classifying on every poll. The full ranked list
+    # rides on the snapshot so the case detail can show the runners-up.
+    typologies = account_report.get("typologies")
+    if not typologies:
+        try:
+            typologies = typology_engine.classify(account_report)
+        except Exception:
+            typologies = []
+    top = typologies[0] if typologies else None
+    top_code = top.get("code") if top else None
+    top_conf = float(top.get("confidence") or 0.0) if top else None
+    # Severity-floor promotion: if SANCEV fires we lift the case to critical
+    # even when the per-account score sits in the 60s. The default priority
+    # stays available on the event payload so the audit trail captures the
+    # base reasoning.
+    priority = base_priority
+    if top:
+        priority = typology_engine.severity_for_priority(
+            top.get("severity_floor") or "low", base_priority
+        )
+
+    # Persist the ranked list inside the snapshot so case detail can read it
+    # without re-classifying; we *don't* duplicate it onto a separate JSON
+    # column because the snapshot is already the system-of-record for the
+    # account-report shape.
+    full_snapshot = _minimal_snapshot(account_report)
+    if typologies and "typologies" not in full_snapshot:
+        full_snapshot["typologies"] = typologies
+    snapshot_json = json.dumps(full_snapshot, separators=(",", ":"))
+
     cid = _new_id(aid, now)
-    snapshot_json = json.dumps(_minimal_snapshot(account_report), separators=(",", ":"))
 
     with _lock:
         conn = _connect()
@@ -367,11 +425,13 @@ def open_case(
                     id, account_id, display_name, status, priority,
                     risk_score, band, alert_score, sanctions_count, fired_count,
                     assignee, opened_by, opened_at, last_event_at,
-                    snapshot_json, summary
+                    snapshot_json, summary,
+                    typology_code, typology_confidence
                 )
                 VALUES (?, ?, ?, 'open', ?,
                         ?, ?, ?, ?, ?,
                         NULL, ?, ?, ?,
+                        ?, ?,
                         ?, ?)
                 """,
                 (
@@ -381,15 +441,40 @@ def open_case(
                     alert, len(hits), fired,
                     opened_by, now, now,
                     snapshot_json, summary,
+                    top_code, top_conf,
                 ),
             )
             _emit_event(
                 conn, cid, "opened", opened_by,
                 body=note or f"Auto-opened from snapshot at {priority} priority.",
                 payload={"alert_score": alert, "priority": priority, "fired": fired,
-                         "sanctions_count": len(hits)},
+                         "sanctions_count": len(hits),
+                         "base_priority": base_priority,
+                         "promoted_by_typology": priority != base_priority},
                 ts=now,
             )
+            if top_code:
+                _emit_event(
+                    conn, cid, "typology_assigned", "TITAN-AUTOMATED",
+                    body=(
+                        f"Top typology: {top.get('name')} "
+                        f"({top_conf:.0%} confidence)."
+                    ),
+                    payload={
+                        "code": top_code,
+                        "name": top.get("name"),
+                        "confidence": top_conf,
+                        "severity_floor": top.get("severity_floor"),
+                        "evidence": top.get("evidence", []),
+                        "runners_up": [
+                            {"code": t.get("code"),
+                             "name": t.get("name"),
+                             "confidence": t.get("confidence")}
+                            for t in (typologies or [])[1:]
+                        ],
+                    },
+                    ts=now,
+                )
             conn.commit()
             case = _row_to_case(conn.execute("SELECT * FROM cases WHERE id=?", (cid,)).fetchone())
         finally:

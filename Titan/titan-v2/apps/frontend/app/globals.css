@@ -630,3 +630,37 @@ body::before {
 .ws-cnp-chip-amber   { background: rgba(251, 191, 36, 0.14); color: #fcd34d; border-color: rgba(251, 191, 36, 0.35); }
 .ws-cnp-chip-rose    { background: rgba(239, 68, 68, 0.14); color: #fda4af; border-color: rgba(239, 68, 68, 0.35); }
 .ws-cnp-chip-neutral { background: rgba(255, 255, 255, 0.06); color: rgba(255, 255, 255, 0.65); border-color: rgba(255, 255, 255, 0.10); }
+
+/* Day-30 — Typology Classifier surface. The TypologyBadge + TypologyPanel
+   components mostly live on inline-styled accents (one per typology code)
+   so we can swap the library without touching CSS. These selectors are
+   only for hover polish + the evidence-row grid behaviour at narrow widths. */
+
+.ws-typology-badge {
+  transition: filter 160ms ease, transform 160ms ease;
+}
+.ws-typology-badge:hover {
+  filter: brightness(1.12);
+  transform: translateY(-0.5px);
+}
+
+.ws-typology-panel {
+  transition: background 240ms ease;
+}
+.ws-typology-panel-empty {
+  background: radial-gradient(circle at top left, rgba(148, 163, 184, 0.04), transparent 60%),
+    rgba(15, 23, 42, 0.35);
+}
+
+.ws-typology-ring {
+  transition: box-shadow 220ms ease;
+}
+
+.ws-typology-evidence-row {
+  align-items: center;
+}
+@media (max-width: 540px) {
+  .ws-typology-evidence-row {
+    grid-template-columns: 1fr 60px 40px !important;
+  }
+}
