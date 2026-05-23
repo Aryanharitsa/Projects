@@ -708,6 +708,171 @@ def inject_theme() -> None:
         .ws-sent-banner-text {{ font-weight: 700; color: #E6E9F2; flex: 1; }}
         .ws-sent-banner-text small {{ font-weight: 500; color: {MUTED}; margin-left: 8px; }}
         .ws-sent-banner-meta {{ color: {MUTED}; font-size: .78rem; }}
+
+        /* ----------------------------- Travel Advisory ----------------------------- */
+        .ws-adv-hero {{
+            position: relative; overflow: hidden;
+            border-radius: 18px; padding: 22px 24px;
+            background:
+                radial-gradient(900px 280px at -10% -40%, var(--adv-glow, rgba(255,127,80,0.22)) 0%, transparent 60%),
+                linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 100%),
+                #161A23;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-left: 6px solid var(--adv-hue, #FF7F50);
+            box-shadow: 0 14px 38px rgba(0,0,0,0.35);
+            margin-bottom: 16px;
+        }}
+        .ws-adv-hero::before {{
+            content: ""; position: absolute; right: -120px; top: -90px;
+            width: 380px; height: 380px; border-radius: 50%;
+            background: radial-gradient(closest-side, var(--adv-glow, rgba(255,127,80,0.22)), transparent 70%);
+            pointer-events: none;
+        }}
+        .ws-adv-hero-inner {{ position: relative; display: flex; gap: 26px; align-items: center; }}
+        .ws-adv-stripe {{
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 5px 12px; border-radius: 999px;
+            background: var(--adv-stripe-bg, rgba(255,127,80,0.16));
+            border: 1px solid var(--adv-stripe-bd, rgba(255,127,80,0.32));
+            color: var(--adv-hue, #FF7F50); font-weight: 800;
+            font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+        }}
+        .ws-adv-stripe-dot {{
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--adv-hue, #FF7F50);
+            box-shadow: 0 0 0 4px var(--adv-stripe-bd, rgba(255,127,80,0.32));
+        }}
+        .ws-adv-title {{
+            font-size: 1.55rem; font-weight: 800; letter-spacing: -0.02em;
+            color: #F2F4FA; margin: 10px 0 4px;
+        }}
+        .ws-adv-coords {{ color: {MUTED}; font-size: .82rem; }}
+        .ws-adv-headline {{
+            color: #D4DAEA; font-size: .95rem; line-height: 1.5;
+            margin-top: 12px; max-width: 56ch;
+        }}
+        .ws-adv-tiles {{
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 10px; margin: 14px 0 16px;
+        }}
+        .ws-adv-tile {{
+            background: #1B1F2B; border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px; padding: 12px 14px;
+        }}
+        .ws-adv-tile-kicker {{
+            color: {MUTED}; font-size: .68rem; letter-spacing: .12em;
+            text-transform: uppercase; margin-bottom: 6px;
+        }}
+        .ws-adv-tile-val {{
+            font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em;
+            color: #F2F4FA; font-variant-numeric: tabular-nums;
+        }}
+        .ws-adv-tile-sub {{ color: {MUTED}; font-size: .78rem; margin-top: 2px; }}
+        .ws-adv-section {{ margin: 18px 0 10px; }}
+        .ws-adv-section-title {{
+            display: flex; align-items: center; gap: 8px;
+            color: #B8C0D2; font-size: .72rem; letter-spacing: .14em;
+            text-transform: uppercase; font-weight: 700; margin-bottom: 8px;
+        }}
+        .ws-adv-inc-row {{
+            display: flex; align-items: center; gap: 12px;
+            background: #1B1F2B; border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 11px; padding: 10px 14px; margin-bottom: 6px;
+        }}
+        .ws-adv-inc-dot {{
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+            background: var(--inc-hue, #F9C440);
+            box-shadow: 0 0 0 3px var(--inc-shadow, rgba(249,196,64,0.20));
+        }}
+        .ws-adv-inc-cat {{ font-weight: 700; color: #E6E9F2; min-width: 90px; }}
+        .ws-adv-inc-dist {{ color: {MUTED}; font-variant-numeric: tabular-nums; min-width: 60px; }}
+        .ws-adv-inc-when {{ color: {MUTED}; font-variant-numeric: tabular-nums; min-width: 70px; }}
+        .ws-adv-inc-status {{
+            font-size: .68rem; letter-spacing: .10em; text-transform: uppercase;
+            padding: 3px 8px; border-radius: 999px; font-weight: 700;
+        }}
+        .ws-adv-inc-status.verified {{
+            background: rgba(83,227,166,0.14); color: #5EEAD4;
+            border: 1px solid rgba(83,227,166,0.30);
+        }}
+        .ws-adv-inc-status.pending {{
+            background: rgba(249,196,64,0.14); color: #F9C440;
+            border: 1px solid rgba(249,196,64,0.30);
+        }}
+        .ws-adv-inc-note {{ flex: 1; color: #B8C0D2; font-size: .85rem; font-style: italic; }}
+        .ws-adv-spark {{ display: flex; align-items: flex-end; gap: 4px; height: 56px; padding-top: 4px; }}
+        .ws-adv-spark-bar {{
+            flex: 1; min-width: 6px; border-radius: 3px 3px 0 0;
+            background: linear-gradient(180deg, var(--adv-hue, #FF7F50), rgba(255,255,255,0.05));
+            transition: height .25s ease;
+        }}
+        .ws-adv-spark-empty {{ background: rgba(255,255,255,0.05); height: 4px; align-self: flex-end; }}
+        .ws-adv-spark-labels {{
+            display: flex; justify-content: space-between;
+            color: {MUTED}; font-size: .72rem; margin-top: 4px;
+        }}
+        .ws-adv-cluster {{
+            display: flex; align-items: center; gap: 10px;
+            background: #1B1F2B; border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 11px; padding: 10px 14px; margin-bottom: 6px;
+        }}
+        .ws-adv-cluster-pill {{
+            font-size: .68rem; letter-spacing: .10em; text-transform: uppercase;
+            padding: 3px 9px; border-radius: 999px; font-weight: 800;
+            background: var(--cluster-bg, rgba(249,196,64,0.14));
+            color: var(--cluster-hue, #F9C440);
+            border: 1px solid var(--cluster-bd, rgba(249,196,64,0.30));
+        }}
+        .ws-adv-window {{
+            display: flex; align-items: center; gap: 10px;
+            background: #1B1F2B; border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 11px; padding: 10px 14px; margin-bottom: 6px;
+        }}
+        .ws-adv-window-label {{ font-weight: 700; color: #E6E9F2; min-width: 100px; }}
+        .ws-adv-window-bar {{
+            flex: 1; height: 6px; border-radius: 3px;
+            background: rgba(255,255,255,0.06); overflow: hidden;
+        }}
+        .ws-adv-window-bar-fill {{
+            height: 100%; border-radius: 3px;
+            background: linear-gradient(90deg, #53E3A6 0%, #F9C440 50%, #FF3D60 100%);
+        }}
+        .ws-adv-window-pct {{
+            color: #B8C0D2; font-weight: 700; font-variant-numeric: tabular-nums;
+            min-width: 50px; text-align: right;
+        }}
+        .ws-adv-poi {{
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.04);
+        }}
+        .ws-adv-poi:last-child {{ border-bottom: none; }}
+        .ws-adv-poi-icon {{
+            width: 30px; height: 30px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(61,169,252,0.14); color: #5EEAD4; font-size: 1rem;
+        }}
+        .ws-adv-poi-name {{ flex: 1; color: #E6E9F2; font-weight: 600; }}
+        .ws-adv-poi-type {{ color: {MUTED}; font-size: .76rem; text-transform: uppercase; letter-spacing: .08em; }}
+        .ws-adv-poi-dist {{ color: #5EEAD4; font-variant-numeric: tabular-nums; font-weight: 700; }}
+        .ws-adv-rec {{
+            display: flex; gap: 12px; align-items: flex-start;
+            background: linear-gradient(90deg, rgba(255,127,80,0.06), rgba(255,127,80,0.01));
+            border-left: 3px solid var(--adv-hue, #FF7F50);
+            border-radius: 10px; padding: 10px 14px; margin-bottom: 6px;
+        }}
+        .ws-adv-rec-num {{
+            width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--adv-hue, #FF7F50); color: #0E1117;
+            font-weight: 800; font-size: .78rem;
+        }}
+        .ws-adv-rec-text {{ color: #D4DAEA; line-height: 1.45; flex: 1; }}
+        .ws-adv-rec-text strong {{ color: #F2F4FA; }}
+        .ws-adv-empty {{
+            background: rgba(83,227,166,0.05); border: 1px dashed rgba(83,227,166,0.22);
+            border-radius: 12px; padding: 18px 16px; text-align: center;
+            color: #B8C0D2; font-size: .88rem; margin: 6px 0 10px;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1804,3 +1969,358 @@ def render_sentinel_clusters(clusters, user_loc, *, recommended_action_fn=None) 
             """,
             unsafe_allow_html=True,
         )
+
+
+# ----------------------------- Travel Advisory -----------------------------
+
+from datetime import timedelta as _adv_timedelta  # noqa: E402
+
+_ADV_LEVEL_HUE = {
+    "Critical":  "#EF4444",
+    "Elevated":  "#F59E0B",
+    "Caution":   "#FBBF24",
+    "All clear": "#10B981",
+}
+
+_ADV_LEVEL_ICON = {
+    "Critical":  "🛑",
+    "Elevated":  "⚠️",
+    "Caution":   "⚠️",
+    "All clear": "✅",
+}
+
+_SEVERITY_HUE = {5: "#FF3D60", 4: "#FF7F50", 3: "#F9C440", 2: "#3DA9FC"}
+
+_CATEGORY_ICON = {
+    "accident":  "🚗",
+    "flooding":  "🌊",
+    "landslide": "⛰️",
+    "roadblock": "🚧",
+    "other":     "⚠️",
+}
+
+
+def _esc(s) -> str:
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _rec_to_html(text: str) -> str:
+    """Lightweight markdown: bold (`**x**`) only. Everything else escaped."""
+    out: list[str] = []
+    parts = _esc(text).split("**")
+    for i, chunk in enumerate(parts):
+        if i % 2 == 1:
+            out.append(f"<strong>{chunk}</strong>")
+        else:
+            out.append(chunk)
+    return "".join(out)
+
+
+def render_advisory_brief(brief, *, scan_caption: bool = True) -> None:
+    """Render the full travel-advisory card stack for one `AdvisoryBrief`."""
+    hue = _ADV_LEVEL_HUE.get(brief.advisory_level, brief.level_color)
+    icon = _ADV_LEVEL_ICON.get(brief.advisory_level, "")
+    glow = _hex_to_rgba(hue, 0.22)
+    stripe_bg = _hex_to_rgba(hue, 0.16)
+    stripe_bd = _hex_to_rgba(hue, 0.32)
+
+    pulse_caption = ""
+    if brief.risk_pulse_status and brief.risk_pulse_status != "Unknown":
+        pulse_caption = (
+            f" · area pulse <strong style='color:#E6E9F2;'>{_esc(brief.risk_pulse_status)}</strong>"
+        )
+
+    # Hero card
+    st.markdown(
+        f"""
+        <div class="ws-adv-hero" style="--adv-hue:{hue}; --adv-glow:{glow};
+                                        --adv-stripe-bg:{stripe_bg}; --adv-stripe-bd:{stripe_bd};">
+          <div class="ws-adv-hero-inner">
+            <div class="ws-ring" style="--pct:{brief.safety.score}; --ring:{hue};">
+              <div class="ws-ring-inner">
+                <div class="ws-ring-val" style="color:{hue}">{brief.safety.score}</div>
+                <div class="ws-ring-band" style="color:{hue}">{_esc(brief.safety.band)}</div>
+              </div>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <span class="ws-adv-stripe">
+                <span class="ws-adv-stripe-dot"></span>
+                {icon} {_esc(brief.advisory_level)}
+              </span>
+              <div class="ws-adv-title">{_esc(brief.target_label)}</div>
+              <div class="ws-adv-coords">
+                ({brief.target_lat:.4f}, {brief.target_lon:.4f})
+                · scan {brief.radius_km:g} km · lookback {brief.lookback_days}d
+                {pulse_caption}
+              </div>
+              <div class="ws-adv-headline">{_esc(brief.level_headline)}</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # KPI tiles
+    nearest_help_str = (
+        f"{brief.help_pois[0].distance_km:.1f} km"
+        if brief.help_pois else "—"
+    )
+    nearest_help_sub = (
+        _esc(brief.help_pois[0].name) if brief.help_pois else "no help POIs"
+    )
+    best_window = brief.best_windows[0] if brief.best_windows else None
+    window_val = best_window.label if best_window else "—"
+    window_sub = (
+        f"top-cell risk {int(best_window.risk * 100)}%"
+        if best_window else "no forecast available"
+    )
+    cluster_val = str(len(brief.nearby_clusters))
+    cluster_sub = (
+        f"{brief.severe_cluster_count} escalating"
+        if brief.severe_cluster_count else "none escalating"
+    )
+    st.markdown(
+        f"""
+        <div class="ws-adv-tiles">
+          <div class="ws-adv-tile">
+            <div class="ws-adv-tile-kicker">Incidents nearby</div>
+            <div class="ws-adv-tile-val">{brief.safety.incidents_nearby}</div>
+            <div class="ws-adv-tile-sub">last {brief.lookback_days}d · within {brief.radius_km:g} km</div>
+          </div>
+          <div class="ws-adv-tile">
+            <div class="ws-adv-tile-kicker">Live clusters</div>
+            <div class="ws-adv-tile-val">{cluster_val}</div>
+            <div class="ws-adv-tile-sub">{cluster_sub}</div>
+          </div>
+          <div class="ws-adv-tile">
+            <div class="ws-adv-tile-kicker">Safer depart window</div>
+            <div class="ws-adv-tile-val">{_esc(window_val)}</div>
+            <div class="ws-adv-tile-sub">{_esc(window_sub)}</div>
+          </div>
+          <div class="ws-adv-tile">
+            <div class="ws-adv-tile-kicker">Nearest help</div>
+            <div class="ws-adv-tile-val">{_esc(nearest_help_str)}</div>
+            <div class="ws-adv-tile-sub">{nearest_help_sub}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Two-column section: recent incidents + 7d sparkline | clusters + windows
+    left, right = st.columns([3, 2])
+
+    with left:
+        st.markdown(
+            f"""
+            <div class="ws-adv-section">
+              <div class="ws-adv-section-title">
+                <span>📌 Recent incidents</span>
+                <span style="margin-left:auto; color:{MUTED}; text-transform:none; letter-spacing:0; font-weight:500;">
+                  {brief.safety.incidents_nearby} in the last {brief.lookback_days} days
+                </span>
+              </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if brief.recent_incidents:
+            for s in brief.recent_incidents[:6]:
+                inc_hue = _SEVERITY_HUE.get(s.severity, "#F9C440")
+                inc_shadow = _hex_to_rgba(inc_hue, 0.22)
+                cat_icon = _CATEGORY_ICON.get(s.category, "⚠️")
+                status_cls = "verified" if s.status == "verified" else "pending"
+                note_html = (
+                    f'<div class="ws-adv-inc-note">"{_esc(s.note)}"</div>'
+                    if s.note else '<div class="ws-adv-inc-note"></div>'
+                )
+                st.markdown(
+                    f"""
+                    <div class="ws-adv-inc-row" style="--inc-hue:{inc_hue}; --inc-shadow:{inc_shadow};">
+                      <div class="ws-adv-inc-dot"></div>
+                      <div class="ws-adv-inc-cat">{cat_icon} {_esc(s.category)}</div>
+                      <div class="ws-adv-inc-dist">{s.distance_km:.1f} km</div>
+                      <div class="ws-adv-inc-when">{_esc(s.when)}</div>
+                      {note_html}
+                      <div class="ws-adv-inc-status {status_cls}">{_esc(s.status)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            if len(brief.recent_incidents) > 6:
+                st.caption(f"+ {len(brief.recent_incidents) - 6} more not shown")
+        else:
+            st.markdown(
+                f"<div class='ws-adv-empty'>No incidents within {brief.radius_km:g} km in the "
+                f"last {brief.lookback_days} days.</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 7-day sparkline
+        trend = brief.incident_trend or []
+        if trend:
+            mx = max(trend) or 1
+            bars = "".join(
+                (
+                    f'<div class="ws-adv-spark-bar" style="height:{max(6, int(v / mx * 100))}%;"></div>'
+                    if v > 0
+                    else '<div class="ws-adv-spark-bar ws-adv-spark-empty"></div>'
+                )
+                for v in trend
+            )
+            labels = "".join(
+                f"<span>{(brief.generated_at - _adv_timedelta(days=brief.lookback_days - 1 - i)).strftime('%a')}</span>"
+                for i in range(brief.lookback_days)
+            )
+            st.markdown(
+                f"""
+                <div class="ws-adv-section">
+                  <div class="ws-adv-section-title">
+                    <span>📈 Incident trend · last {brief.lookback_days} days</span>
+                    <span style="margin-left:auto; color:{MUTED}; text-transform:none; letter-spacing:0; font-weight:500;">
+                      max {max(trend)}/day · total {sum(trend)}
+                    </span>
+                  </div>
+                  <div class="ws-adv-spark" style="--adv-hue:{hue};">{bars}</div>
+                  <div class="ws-adv-spark-labels">{labels}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with right:
+        # Nearby clusters
+        st.markdown(
+            '<div class="ws-adv-section">'
+            '<div class="ws-adv-section-title"><span>🛰️ Live clusters near here</span></div>',
+            unsafe_allow_html=True,
+        )
+        if brief.nearby_clusters:
+            for cl in brief.nearby_clusters[:5]:
+                c_hue = _cluster_status_hue(cl.velocity_status)
+                c_bg = _hex_to_rgba(c_hue, 0.14)
+                c_bd = _hex_to_rgba(c_hue, 0.30)
+                cat_icon = _CATEGORY_ICON.get(cl.dominant_category, "⚠️")
+                dist_txt = "overlapping" if cl.distance_km <= 0.05 else f"{cl.distance_km:.1f} km away"
+                st.markdown(
+                    f"""
+                    <div class="ws-adv-cluster">
+                      <span class="ws-adv-cluster-pill"
+                            style="--cluster-hue:{c_hue}; --cluster-bg:{c_bg}; --cluster-bd:{c_bd};">
+                        {_esc(cl.velocity_status)}
+                      </span>
+                      <div style="flex:1; min-width:0;">
+                        <div style="color:#E6E9F2; font-weight:700;">
+                          {cat_icon} {_esc(cl.dominant_category)} · {cl.members} reports
+                        </div>
+                        <div style="color:{MUTED}; font-size:.78rem;">
+                          {dist_txt} · r={cl.radius_km:.1f} km · last {cl.days_since_last:g}d ago
+                        </div>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.markdown(
+                "<div class='ws-adv-empty'>No active clusters overlap this scan radius.</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Best windows
+        st.markdown(
+            '<div class="ws-adv-section">'
+            '<div class="ws-adv-section-title"><span>🕒 Safer depart windows · next 12h</span></div>',
+            unsafe_allow_html=True,
+        )
+        if brief.best_windows:
+            for w in brief.best_windows:
+                pct = max(2, int(w.risk * 100))
+                st.markdown(
+                    f"""
+                    <div class="ws-adv-window">
+                      <div class="ws-adv-window-label">{_esc(w.label)}</div>
+                      <div class="ws-adv-window-bar">
+                        <div class="ws-adv-window-bar-fill" style="width:{pct}%;"></div>
+                      </div>
+                      <div class="ws-adv-window-pct">{int(w.risk * 100)}%</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.markdown(
+                "<div class='ws-adv-empty'>No forecast samples available.</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Help POIs
+    if brief.help_pois:
+        st.markdown(
+            '<div class="ws-adv-section">'
+            '<div class="ws-adv-section-title"><span>🏥 Nearest help</span></div>'
+            '<div class="ws-card" style="padding:8px 0;">',
+            unsafe_allow_html=True,
+        )
+        ptype_icon = {
+            "hospital": "🏥", "police": "🚓", "clinic": "➕",
+            "fire": "🚒", "tourist_help_desk": "ℹ️",
+        }
+        for p in brief.help_pois:
+            icon = ptype_icon.get(p.ptype.lower(), "📍")
+            st.markdown(
+                f"""
+                <div class="ws-adv-poi">
+                  <div class="ws-adv-poi-icon">{icon}</div>
+                  <div class="ws-adv-poi-name">{_esc(p.name)}</div>
+                  <div class="ws-adv-poi-type">{_esc(p.ptype)}</div>
+                  <div class="ws-adv-poi-dist">{p.distance_km:.1f} km</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # Recommendations
+    st.markdown(
+        '<div class="ws-adv-section">'
+        '<div class="ws-adv-section-title"><span>🧭 What to do next</span></div>',
+        unsafe_allow_html=True,
+    )
+    for i, rec in enumerate(brief.recommendations, 1):
+        st.markdown(
+            f"""
+            <div class="ws-adv-rec" style="--adv-hue:{hue};">
+              <div class="ws-adv-rec-num">{i}</div>
+              <div class="ws-adv-rec-text">{_rec_to_html(rec)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if scan_caption:
+        st.caption(
+            f"Brief generated at {brief.generated_at:%Y-%m-%d %H:%M} UTC · "
+            f"schema waysafe.advisory.v1"
+        )
+
+
+def render_advisory_empty(hint: str = "Pick a destination above to generate a safety brief.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-sent-empty">
+          <div class="ws-sent-empty-title">No brief yet</div>
+          <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
