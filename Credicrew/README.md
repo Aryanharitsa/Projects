@@ -7,16 +7,63 @@ email, **run the interview** with a JD-tailored prep kit and a weighted
 scorecard, **decide** in a calibrated comparison studio that ranks the
 entire pool, **close** in an Offer Studio that benchmarks comp against
 the market, simulates the candidate's accept-probability live, and ships
-a print-ready offer letter — and now **audits the offer for fairness**
-against the team's accepted peer offers so a one-week sprint doesn't
-quietly torch six months of pay-band discipline. All from a dark, fast,
-single-page workspace.
+a print-ready offer letter, **audits the offer for fairness** against the
+team's accepted peer offers so a one-week sprint doesn't quietly torch six
+months of pay-band discipline — and now rolls every role up into a
+**Command Center** so a recruiter running ten reqs sees the whole portfolio
+on one screen. All from a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Command Center (Day 32)
+
+Every other surface in Credicrew is single-role / single-candidate: open a
+role, work one shortlist, score one interview, draft one offer. A recruiter
+running ten reqs at once had no bird's-eye view. **Command Center** (`/hq`)
+is the missing portfolio layer — every role, one screen.
+
+- **Portfolio health score** — a single 0–100 number per role and across
+  the book. It's a renormalised weighted blend of *momentum* (fresh vs
+  stale candidates, 0.30), *interview coverage* (interviewed / reached
+  interview, 0.25), *decision quality* (mean hire-signal, 0.25), and
+  *offer confidence* (mean accept-probability, 0.20). Absent signals drop
+  out and the remaining weights renormalise — same philosophy as the
+  interview rubric — so a role with no offers yet isn't unfairly punished.
+  The portfolio number weights each role by its active-candidate count.
+- **Aggregate funnel** — `new → outreach → screening → interview → offer`
+  rolled across all roles, with reached-at-least bars and adjacent-stage
+  conversion rates colour-graded ≥50% emerald / 25–50% amber / <25% rose.
+- **Comp-spend forecast** — sums year-1 total cash (`base + sign-on +
+  base·bonus%`, mirroring the peer-parity definition) across every drafted
+  offer. Shows **committed** (if every offer signs) vs **expected**
+  (risk-weighted by each offer's live accept-probability from the Offer
+  Studio logistic), plus average base and average accept odds.
+- **Role leaderboard** — every role as a row with its health ring, a
+  proportional stage bar, top candidate by hire signal, days open, a
+  *stale* badge, and a *stuck · <stage>* bottleneck chip. Sort by health,
+  in-flight count, or days open. Each row deep-links to the role.
+- **Cross-role talent leaderboard** — your eight strongest people across
+  *all* roles, ranked by hire signal, each deep-linking straight to their
+  scorecard. The "who should I be fighting hardest to close" view.
+- **Attention feed** — a prioritised, deep-linked action list: stale
+  candidates (≥14 days, high at ≥21), offers tracking <45% to accept,
+  signal-≥75 candidates still parked in *new/outreach* (fast-track), roles
+  with a shortlist but no interviews, and empty roles. Sorted high → low.
+- **One-click brief** — Copy or download a Markdown portfolio brief
+  (health, comp forecast, funnel, top talent, attention) for a standup or
+  a weekly hiring review.
+- **Backend mirror** — `POST /portfolio/summary` takes a flattened
+  snapshot of every role + shortlist (each candidate carrying match score,
+  interview composite, offer draft, accept-probability) and returns the
+  identical rollup. Math is byte-for-byte parity with the TS engine —
+  confirmed by running the same fixed input through both. Accepts
+  `camelCase` and `snake_case` payloads.
 
 ---
 
@@ -466,6 +513,31 @@ by composite, the SVG-ready scatter array, and one-line suggestions.
 Both `camelCase` and `snake_case` payloads accepted via Pydantic
 aliases.
 
+### `POST /portfolio/summary`
+Portfolio rollup across every role. Accepts `{ roles: [...], now? }` where
+each role carries its shortlist and each candidate carries `matchScore`,
+`composite`, `confidence`, `recommendation`, an optional `offer` draft, and
+an optional `winProbability`. Returns `{ totals, funnel, compForecast,
+roleHealth, talent, attention, recommendationMix, portfolioHealth,
+bottleneck }`. Both `camelCase` and `snake_case` payloads accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8000/portfolio/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "roles": [{
+      "id": "r1", "name": "Senior Backend", "seniority": "senior",
+      "candidates": [
+        {"candidateId": 1, "name": "Asha", "status": "offer",
+         "matchScore": 88, "composite": 82, "confidence": 1.0,
+         "recommendation": "strong_hire",
+         "offer": {"base": 52, "equityPct": 0.18, "targetBonusPct": 12, "signOn": 6},
+         "winProbability": 0.7}
+      ]
+    }]
+  }'
+```
+
 ### `POST /peer-parity/check_team?team=ID`
 Same response shape but pulls peers from the in-memory team pool
 keyed by `team` (defaults to `"default"`). Useful when an agentic
@@ -499,6 +571,7 @@ returns 404 if the id wasn't in the pool. Thread-safe via `RLock`.
 | GET    | `/peer-parity/peers`          | list peers in the team pool                             |
 | POST   | `/peer-parity/peers`          | add / upsert a peer in the team pool                    |
 | DELETE | `/peer-parity/peers/{id}`     | remove a peer from the team pool                        |
+| POST   | `/portfolio/summary`          | portfolio rollup across every role (Command Center)     |
 
 ---
 
@@ -515,18 +588,21 @@ Credicrew/
 │       │   ├── interview.py        # POST /interview/{plan,score}
 │       │   ├── decision.py         # POST /decision/{summary,debrief}
 │       │   ├── offer.py            # POST /offer/{benchmark,simulate,compose,full}
-│       │   └── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
+│       │   ├── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
+│       │   └── portfolio.py        # POST /portfolio/summary
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
 │           ├── interview.py        # rubric · question bank · scorecard
 │           ├── decision.py         # calibrated ranking + verdicts
 │           ├── offer.py            # comp band · win-prob · letter
-│           └── peer_parity.py      # regression · z-scores · inversions · suggestions
+│           ├── peer_parity.py      # regression · z-scores · inversions · suggestions
+│           └── portfolio.py        # portfolio rollup · funnel · comp forecast · health
 ├── frontend/
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx            # Discover (search + composition + roles)
+│       │   ├── hq/page.tsx         # Command Center (portfolio rollup)
 │       │   ├── pipeline/page.tsx   # Quick-saves
 │       │   └── roles/
 │       │       ├── page.tsx        # Roles list
@@ -566,6 +642,7 @@ Credicrew/
 │           ├── outreach.ts         # TS email composer (parity w/ backend)
 │           ├── peer_parity.ts      # regression · z-scores · inversions (parity w/ backend)
 │           ├── peer_seed.ts        # 8-peer realistic seed for fresh roles
+│           ├── portfolio.ts        # portfolio rollup · funnel · comp forecast · health
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
 └── docs/
