@@ -27,10 +27,12 @@ from theme import (
     render_itinerary_windows,
     render_sentinel_pulse, render_sentinel_clusters, render_sentinel_empty,
     render_sentinel_watch_banner,
+    render_advisory_brief, render_advisory_empty,
 )
 import companion as cp
 import itinerary as itn
 import sentinel as sn
+import advisory as adv
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -322,7 +324,7 @@ if role == "Tourist App":
 
     tab_labels = [
         "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
-        "Sentinel", "Report Hazard", "Alerts", "SOS", "Trip Log",
+        "Advisory", "Sentinel", "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -1096,8 +1098,133 @@ if role == "Tourist App":
                 f"**{top['top_category']}**."
             )
 
-    # ---------------- Sentinel (Day 26)
+    # ---------------- Advisory (Day 31) — pre-trip safety brief
     with tabs[5]:
+        st.subheader("🧭 Travel Advisory")
+        st.caption(
+            "A single-page safety brief that fuses **Safety Intelligence**, "
+            "**Sentinel** cluster activity, **Forecast** depart windows, geofences, "
+            "and nearest help — for any destination. Export it as JSON, copy as "
+            "markdown, or print the polished **PDF brief** to carry offline."
+        )
+
+        target_modes = ["Your current location", "Pick a POI", "Custom lat/lon"]
+        adv_mode = st.radio(
+            "Target",
+            target_modes,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="advisory_target_mode",
+        )
+
+        adv_label_default = "Your location"
+        my2 = st.session_state.current_loc
+        a_lat, a_lon = float(my2["lat"]), float(my2["lon"])
+        adv_label = adv_label_default
+
+        if adv_mode == "Pick a POI":
+            poi_options = [f"{r['name']} · {r['ptype']}" for _, r in poi_df.iterrows()] if not poi_df.empty else []
+            if poi_options:
+                chosen = st.selectbox(
+                    "Destination", poi_options, key="advisory_poi_select",
+                )
+                idx = poi_options.index(chosen)
+                row = poi_df.iloc[idx]
+                a_lat, a_lon = float(row["lat"]), float(row["lon"])
+                adv_label = str(row["name"])
+            else:
+                st.info("No POIs in the dataset yet — switch to Custom lat/lon.")
+        elif adv_mode == "Custom lat/lon":
+            colL, colC, colR = st.columns([3, 2, 2])
+            with colL:
+                custom_name = st.text_input(
+                    "Place name", value="Custom destination", key="advisory_custom_name",
+                )
+            with colC:
+                a_lat = st.number_input(
+                    "Lat", value=float(my2["lat"]), format="%.6f", key="advisory_custom_lat",
+                )
+            with colR:
+                a_lon = st.number_input(
+                    "Lon", value=float(my2["lon"]), format="%.6f", key="advisory_custom_lon",
+                )
+            adv_label = custom_name or f"({a_lat:.4f},{a_lon:.4f})"
+
+        with st.expander("Brief settings", expanded=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                adv_radius = st.slider(
+                    "Scan radius (km)", min_value=0.5, max_value=5.0, value=2.0, step=0.5,
+                    key="advisory_radius",
+                )
+            with c2:
+                adv_lookback = st.slider(
+                    "Incident lookback (days)", min_value=3, max_value=30, value=7, step=1,
+                    key="advisory_lookback",
+                )
+
+        brief = adv.build_brief(
+            a_lat, a_lon, adv_label,
+            inc_df=inc_df, poi_df=poi_df, geofences=GEOFENCES,
+            forecaster=get_forecaster(),
+            sentinel_clusters=sent_clusters,
+            risk_pulse=sent_pulse,
+            radius_km=float(adv_radius),
+            lookback_days=int(adv_lookback),
+        )
+
+        render_advisory_brief(brief)
+
+        st.markdown("---")
+        cdl1, cdl2, cdl3 = st.columns(3)
+        with cdl1:
+            try:
+                pdf_bytes = adv.brief_to_pdf(brief)
+                st.download_button(
+                    "⬇️ Download PDF brief",
+                    data=pdf_bytes,
+                    file_name=(
+                        f"waysafe_advisory_{adv_label.replace(' ', '_').lower()}_"
+                        f"{brief.generated_at:%Y%m%d_%H%M}.pdf"
+                    ),
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            except Exception as _e:
+                st.error(f"PDF export failed: {_e}")
+        with cdl2:
+            st.download_button(
+                "⬇️ Download JSON",
+                data=json.dumps(adv.brief_to_json(brief), indent=2),
+                file_name=(
+                    f"waysafe_advisory_{adv_label.replace(' ', '_').lower()}_"
+                    f"{brief.generated_at:%Y%m%d_%H%M}.json"
+                ),
+                mime="application/json",
+                use_container_width=True,
+            )
+        with cdl3:
+            md_text = adv.brief_to_markdown(brief)
+            st.download_button(
+                "⬇️ Download Markdown",
+                data=md_text,
+                file_name=(
+                    f"waysafe_advisory_{adv_label.replace(' ', '_').lower()}_"
+                    f"{brief.generated_at:%Y%m%d_%H%M}.md"
+                ),
+                mime="text/markdown",
+                use_container_width=True,
+            )
+
+        with st.expander("View raw markdown / JSON"):
+            t1, t2 = st.tabs(["Markdown", "JSON"])
+            with t1:
+                st.code(md_text, language="markdown")
+            with t2:
+                st.code(json.dumps(adv.brief_to_json(brief), indent=2), language="json")
+
+    # ---------------- Sentinel (Day 26)
+    with tabs[6]:
         st.subheader("🛰️ Sentinel — Live Cluster Intel")
         st.caption(
             "DBSCAN over haversine groups raw incidents into discrete hotspots; each "
@@ -1227,7 +1354,7 @@ if role == "Tourist App":
                     )
 
     # ---------------- Report Hazard
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -1260,7 +1387,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -1279,7 +1406,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -1306,7 +1433,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[9]:
+    with tabs[10]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip

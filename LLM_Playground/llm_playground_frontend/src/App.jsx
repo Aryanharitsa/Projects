@@ -51,12 +51,14 @@ import {
   BookOpenText,
   GitBranch,
   Save,
+  Gauge,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
 import HistoryPanel from './components/HistoryPanel';
 import VotePanel from './components/VotePanel';
 import PromptLibrary from './components/PromptLibrary';
+import InsightsPanel from './components/InsightsPanel';
 import './App.css';
 
 const App = () => {
@@ -1042,7 +1044,14 @@ const App = () => {
                       <RadioGroupItem value="library" id="library" />
                       <Label htmlFor="library" className="cursor-pointer flex items-center gap-1">
                         <BookOpenText className="w-3.5 h-3.5 text-violet-600" />
-                        Library <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Library
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="insights" id="insights" />
+                      <Label htmlFor="insights" className="cursor-pointer flex items-center gap-1">
+                        <Gauge className="w-3.5 h-3.5 text-indigo-600" />
+                        Insights <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500 to-emerald-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1309,7 +1318,11 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'library' ? (
+          {selectedMode === 'insights' ? (
+            <div className="lg:col-span-3">
+              <InsightsPanel />
+            </div>
+          ) : selectedMode === 'library' ? (
             <div className="lg:col-span-3">
               <PromptLibrary
                 selectedPromptId={libSelectedPromptId}
