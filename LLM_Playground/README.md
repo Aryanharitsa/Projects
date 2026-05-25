@@ -2,16 +2,97 @@
 
 A side‑by‑side LLM evaluation studio. Run the **same prompt** against multiple
 frontier models in parallel, score them with an LLM‑as‑judge (or a **panel of
-judges**), **vote on them yourself**, and keep **every run** in a queryable,
-comparable history — all in one view. Now with a **Prompt Library** that
-versions your prompts and links every Arena run back to the revision that
-produced it, so you can see *which edit actually moved the score*.
+judges**), **vote on them yourself**, version your prompts, and keep **every
+run** in a queryable, comparable history — all in one view. Then open
+**Insights** and the whole history rolls up into model scorecards and a
+**quality/cost efficiency frontier** that answers the one question this tool
+exists for: *which model is actually worth your money?*
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Prompt Library (versioned prompts → score delta per revision)
+## 🆕 What's new — Studio Insights (model scorecards + the quality/cost frontier)
+
+> Round‑7. The playground could *measure* everything — Arena latency & cost,
+> judge composites, multi‑judge consensus, blind‑vote ELO — and *persist* it
+> all. What it never did was step back and answer the question every LLM
+> evaluation exists to answer: **which model gives me the best quality per
+> dollar?** The new **Insights** mode does exactly that, and it invents no new
+> data — it's the *same numbers* the rest of the app already produced, just
+> aggregated, so it can never disagree with History, Judge, or Vote.
+
+Hit **Insights** in the sidebar. Every Arena run on file is mined into:
+
+- **The efficiency frontier** — a scatter of *quality (judge composite, 0‑100)
+  vs cost ($/response, log scale)*. A model is **dominated** when another model
+  is at least as good on quality **and** at least as cheap — you'd never
+  rationally pick it. The non‑dominated set is the **frontier**: the only
+  models worth choosing from. Frontier models are joined by a line and ringed;
+  dominated ones fade. Bubble size = how many runs the model has been in,
+  colour = provider. This is the chart you screenshot.
+- **Model scorecards** — a sortable table: quality, cost/response,
+  **quality‑per‑dollar** (with a comparison bar), latency, ELO + games, run
+  count, and judge wins. Click any header to re‑sort (cost/latency sort
+  cheapest/fastest‑first; everything else best‑first).
+- **Headline KPIs** — total spend, **best value** (top quality‑per‑dollar on
+  the frontier), top quality, cheapest, fastest, and a 7‑day spend trend
+  (anchored on your latest run so it's deterministic).
+- **Spend & quality over time** — daily spend bars with an avg‑top‑score line
+  overlaid, so you can see cost creep against quality.
+- **Spend by provider** — share‑of‑spend bars with mean quality per provider.
+- **Copy brief** — a one‑click Markdown digest of the whole dashboard for a
+  standup or a README.
+
+### How the math works
+
+```
+avg_cost_m       = mean( cost_usd over every response from model m )
+quality_m        = mean( judge composite over every judged response from m )   # 0–100
+quality_per_$_m  = quality_m / avg_cost_m
+
+m is on the frontier  ⇔  no other eligible model m' satisfies
+                          quality_m' ≥ quality_m  AND  avg_cost_m' ≤ avg_cost_m
+                          with at least one inequality strict
+```
+
+Only models with a judge composite **and** a positive cost are placed on the
+frontier (those are the two axes); everything else is reported under
+`unplaced` with a reason (`no_judge_score` / `no_cost`) so the UI can nudge you
+to judge them. ELO is joined in from the blind‑vote replay so a model's
+human‑preference rating sits right next to its quality and price.
+
+### `GET /api/insights`
+
+Optional `?min_appearances=N` drops models seen in fewer than N runs. Response
+(truncated):
+
+```json
+{
+  "success": true,
+  "summary": {
+    "total_spend": 0.182, "n_runs": 12, "n_judged_runs": 9, "n_models": 5,
+    "spend_last_7d": 0.07, "spend_trend_pct": -18.4,
+    "best_value":  { "key": "Google:gemini-flash", "quality_per_dollar": 71000.0, "avg_cost": 0.001 },
+    "top_quality": { "key": "OpenAI:gpt-4o", "avg_composite": 89.0 },
+    "cheapest":    { "key": "Google:gemini-flash", "avg_cost": 0.001 }
+  },
+  "scorecards": [{ "key": "Google:gemini-flash", "provider": "Google", "model": "gemini-flash",
+                   "appearances": 4, "success_rate": 100.0, "avg_cost": 0.001,
+                   "avg_composite": 71.0, "quality_per_dollar": 71000.0,
+                   "efficiency_index": 100.0, "elo": 1503.1, "judge_wins": 1 }, ...],
+  "frontier": { "points": [{ "key": "...", "quality": 89.0, "cost": 0.01,
+                             "on_frontier": true, "dominated_by": [] }, ...],
+                "frontier": ["Google:gemini-flash", "Anthropic:claude-haiku", "OpenAI:gpt-4o"],
+                "n_eligible": 4, "n_on_frontier": 3, "unplaced": [] },
+  "timeline":  [{ "day": 1700000000.0, "spend": 0.03, "runs": 1, "judged": 1, "avg_top_score": 90.0 }, ...],
+  "providers": [{ "provider": "OpenAI", "spend": 0.14, "spend_share": 80.0, "avg_quality": 89.0 }, ...]
+}
+```
+
+---
+
+## 🏛️ Prompt Library (still here · Round 6)
 
 > Round‑6. Every prompt engineer's daily question is "did my edit help?"
 > The playground had every measurement (Arena, Judge, Vote, History) but
@@ -391,6 +472,7 @@ to **Vote** and start judging blind. **History** persists everything.
 | GET    | `/api/prompts/:id/versions/:vid/runs` | runs linked to a specific version          |
 | POST   | `/api/prompts/diff`        | **unified diff** of two versions + score Δ            |
 | GET    | `/api/prompts/stats`       | library‑level dashboard banner stats                   |
+| GET    | `/api/insights`            | **Insights** — scorecards + efficiency frontier + spend |
 | POST   | `/api/export`              | canonicalise a chat session as JSON                    |
 | GET    | `/api/key-status`          | masked key presence per provider                       |
 | POST   | `/api/save-keys`           | persist keys to `.env`                                 |
@@ -423,21 +505,23 @@ LLM_Playground/
 │       ├── judge.py                 # rubric + single + consensus judge engine + Fleiss' κ
 │       ├── history.py               # SQLite-backed run store + diff/stats + consensus persistence
 │       ├── vote_arena.py            # ELO replay + pair sampler + agreement
-│       ├── prompts.py               # ⬅ NEW · versioned prompt library + unified diff + run links
+│       ├── prompts.py               # versioned prompt library + unified diff + run links
+│       ├── insights.py              # ⬅ NEW · scorecards + Pareto efficiency frontier + spend roll-up
 │       ├── routes/
-│       │   ├── llm.py               # /chat, /compare, /judge[/consensus], /history/*, /arena/*, /prompts/*, …
+│       │   ├── llm.py               # /chat, /compare, /judge[/consensus], /history/*, /arena/*, /prompts/*, /insights, …
 │       │   ├── keys.py              # /key-status, /save-keys
 │       │   └── user.py
 │       ├── providers/               # OpenAI / Anthropic / Gemini / August
 │       └── models/
 └── llm_playground_frontend/
     ├── src/
-    │   ├── App.jsx                  # Universal + August + Arena + History + Vote + Library modes
+    │   ├── App.jsx                  # Universal + August + Arena + History + Vote + Library + Insights modes
     │   ├── services/api.js          # typed client (incl. arena* + prompt*)
     │   └── components/
     │       ├── HistoryPanel.jsx     # filters · run list · detail · compare-two-runs
     │       ├── VotePanel.jsx        # blind compare + leaderboard + matrix + agreement
-    │       ├── PromptLibrary.jsx    # ⬅ NEW · versioned prompts · timeline · unified diff · score Δ
+    │       ├── PromptLibrary.jsx    # versioned prompts · timeline · unified diff · score Δ
+    │       ├── InsightsPanel.jsx    # ⬅ NEW · efficiency frontier · scorecards · spend timeline
     │       └── ui/                  # shadcn primitives
     └── vite.config.js
 ```
@@ -450,6 +534,7 @@ LLM_Playground/
 - ~~Auto‑eval rubrics (LLM‑as‑judge) with exportable scoring sheets~~ ✅ shipped
 - ~~Persisted judged runs as a queryable history~~ ✅ shipped
 - ~~Multi‑judge consensus (run K judges, average scores, surface disagreement)~~ ✅ shipped
+- ~~Cost/quality efficiency frontier across all evaluated models~~ ✅ shipped
 - Saved comparisons → permalinks
 - Vote-driven prompt regeneration ("which prompts move ELO most?")
 

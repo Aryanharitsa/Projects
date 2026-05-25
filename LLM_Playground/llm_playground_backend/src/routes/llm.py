@@ -15,6 +15,7 @@ from src.judge import DEFAULT_RUBRIC, judge_compare, judge_consensus_compare
 from src import history
 from src import vote_arena
 from src import prompts as prompts_lib
+from src import insights as insights_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -898,6 +899,19 @@ def prompts_version_runs(prompt_id, version_id):
         limit = 50
     rows = prompts_lib.runs_for_version(version_id, limit=limit)
     return jsonify({'success': True, 'runs': rows, 'total': len(rows)})
+
+
+@llm_bp.route('/insights', methods=['GET'])
+def studio_insights():
+    """Cross-cutting analytics over the whole run history: model scorecards,
+    the quality/cost efficiency frontier, spend timeline, provider roll-up, and
+    a headline summary — all derived from the persisted runs + ELO votes."""
+    try:
+        min_appearances = int(request.args.get('min_appearances', 1) or 1)
+    except (TypeError, ValueError):
+        min_appearances = 1
+    data = insights_lib.build_insights(min_appearances=max(1, min_appearances))
+    return jsonify({'success': True, **data})
 
 
 @llm_bp.route('/august/upload', methods=['POST'])
