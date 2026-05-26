@@ -11,6 +11,7 @@ import { NoteComposer } from "@/components/NoteComposer";
 import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { SearchBar } from "@/components/SearchBar";
+import { Synthesis } from "@/components/Synthesis";
 import { TopicPalette } from "@/components/TopicPalette";
 import { TrailPlayer } from "@/components/TrailPlayer";
 import { TrailsPanel } from "@/components/TrailsPanel";
@@ -41,6 +42,7 @@ export default function Page() {
   const [briefBadge, setBriefBadge] = useState(false);
   const [distillOpen, setDistillOpen] = useState(false);
   const [distillFlash, setDistillFlash] = useState<string | null>(null);
+  const [synthClusterId, setSynthClusterId] = useState<number | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
   // so the canvas can paint trail mode (dim + overlay polyline) and so
@@ -254,6 +256,23 @@ export default function Page() {
         onClose={() => setDistillOpen(false)}
       />
 
+      <Synthesis
+        open={synthClusterId !== null}
+        clusterId={synthClusterId}
+        fallbackName={
+          communities.find((c) => c.id === synthClusterId)?.name ?? null
+        }
+        fallbackColor={
+          communities.find((c) => c.id === synthClusterId)?.color ?? null
+        }
+        onClose={() => setSynthClusterId(null)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+      />
+
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
         <aside className="col-span-12 lg:col-span-3 space-y-5">
           <NoteComposer onCreate={handleCreate} />
@@ -262,6 +281,7 @@ export default function Page() {
             communities={communities}
             isolated={isolated}
             onIsolate={setIsolated}
+            onSynthesize={setSynthClusterId}
           />
           <OrphanRescue orphans={orphans} nodes={nodes} onSelect={setSelected} />
           <PathFinder

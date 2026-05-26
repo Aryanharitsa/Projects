@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import atomize as atomize_engine
 from . import chat as chat_engine
-from . import community, revisit, schemas, store, synapse, trails
+from . import community, revisit, schemas, store, synapse, synthesis, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
@@ -679,3 +679,45 @@ def chat(req: schemas.ChatRequest) -> dict:
         include_community_anchors=req.include_community_anchors,
     )
     return chat_engine.serialize(result)
+
+
+# --------------------------------------------------------------- synthesis
+
+
+@app.get("/digest", response_model=schemas.ClusterDigestOut)
+def digest(
+    cluster_id: int = Query(..., ge=0),
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    mode: str = Query("auto", pattern="^(auto|extractive|llm)$"),
+) -> dict:
+    """Auto-written briefing for one cluster: synthesis prose, key claims,
+    open threads, and cross-cluster bridges.
+
+    The cluster ids match whatever ``/communities`` (and therefore the
+    topic palette) computed at the same ``(threshold, top_k)``, so a click
+    in the palette maps directly to a digest.
+    """
+    d = synthesis.cluster_digest(cluster_id, threshold=threshold, top_k=top_k, mode=mode)
+    if d is None:
+        raise HTTPException(404, f"no cluster {cluster_id} at threshold={threshold}, top_k={top_k}")
+    return synthesis.serialize(d)
+
+
+@app.get("/digest/export.md")
+def digest_export(
+    cluster_id: int = Query(..., ge=0),
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    mode: str = Query("auto", pattern="^(auto|extractive|llm)$"),
+) -> Response:
+    d = synthesis.cluster_digest(cluster_id, threshold=threshold, top_k=top_k, mode=mode)
+    if d is None:
+        raise HTTPException(404, f"no cluster {cluster_id} at threshold={threshold}, top_k={top_k}")
+    md = synthesis.to_markdown(d)
+    safe = "".join(c if c.isalnum() else "-" for c in d.name).strip("-").lower() or "topic"
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe}-synthesis.md"'},
+    )
