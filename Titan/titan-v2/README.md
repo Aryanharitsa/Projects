@@ -52,6 +52,28 @@ here's the freeze-and-investigate paragraph".
 > level. All deterministic — same factor intensities → same typology
 > ranking, every time.
 
+> **Day-35 — Model Validation.** Every other surface *measures* one
+> batch. None answered the question a model-risk reviewer (SR 11-7 /
+> FFIEC) asks first: *is the detection model any good?* A rule set that
+> flags everyone has perfect recall and is useless; one that flags
+> no-one is "accurate" on a low base-rate book and equally useless. The
+> new `apps/ai-aml/backtest.py` engine replays the scorer against a
+> **labelled** set of confirmed outcomes and reads the trade-off:
+> the full confusion matrix at every threshold 0–100, precision /
+> recall / Fβ / alert-rate curves, rank-based **ROC AUC** and average
+> precision, an **Fβ-optimal recommended cut** (β=2 by default — a
+> missed launderer costs far more than an extra review), and a
+> **per-detector discrimination** table (each rule's own AUC over the
+> positive vs negative population — which rules carry the signal, which
+> are noise). It honours a candidate `weights` override, so a tuning
+> hypothesis from the what-if simulator can be *validated*, not just
+> admired. New `/validation` console: verdict banner, six headline
+> tiles (with Δ-vs-canonical when you tune), an interactive
+> confusion-matrix + ROC + metric-sweep you can scrub, ranked detector
+> bars, and the scored-account ledger with per-row outcome chips. Pure
+> function of `(transactions, labels, weights)` — admissible as model
+> evidence.
+
 ---
 
 ## What it does
@@ -85,6 +107,8 @@ here's the freeze-and-investigate paragraph".
 | **Case network clearing** | `POST /aml/cases/{id}/network/clearing` | Override path — runs the case panel against caller-supplied transactions (for the AML console when no snapshot exists) |
 | **Typology library** | `GET  /aml/typologies` | Auditor-facing dump of the six laundering typologies + per-contributor weights + confidence formula |
 | **Typology classify** | `POST /aml/typologies/classify` | Re-classify one account report on demand — used by the what-if simulator after a weights override has reshuffled the factors |
+| **Backtest sample** | `GET  /aml/backtest/sample` | Bundled labelled validation set (43 txs, 8 confirmed-bad across 5 typologies + 2 hard cases) for the one-click demo |
+| **Backtest** | `POST /aml/backtest` | Replay the engine against labelled outcomes → confusion matrix · threshold sweep · ROC AUC · average precision · Fβ-recommended cut · per-detector discrimination · tuning verdict; honours a candidate `weights` override |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -474,13 +498,79 @@ curl -s -X POST :8000/aml/cases/open \
 
 ---
 
+## Model validation / backtest, in detail
+
+A scorer is only as good as its measured separation between
+confirmed-bad and benign. `backtest.py` makes that measurable.
+
+### Inputs
+
+```
+POST /aml/backtest
+{ "transactions": [...],          // same shape as /aml/score
+  "labels": ["A1","A2","MULE"],   // confirmed-suspicious ids, OR
+                                  // {"A1":1,"N1":0,...} to restrict the
+                                  // population to adjudicated accounts only
+  "weights": { "fan_in": 30 },    // optional candidate tuning to validate
+  "beta": 2.0,                    // Fβ recall-weighting (compliance default)
+  "operating_threshold": 30 }     // the current case-open cut to benchmark
+```
+
+A plain id-list means *"these are known-bad; treat every other scored
+party as good"* — the realistic confirmed-SAR setup. A dict labels both
+classes and drops everything unlabelled, so you can validate against a
+hand-adjudicated sample.
+
+### What it computes
+
+1. **Confusion matrix at every cut 0–100.** Predicted-positive when
+   `risk_score ≥ τ`. From `(TP, FP, FN, TN)` it derives precision,
+   recall, specificity, F1, Fβ, balanced accuracy, alert-rate and
+   Youden's J at each τ.
+2. **ROC AUC** — rank-based (Mann-Whitney U, ties at 0.5), computed
+   exactly over all positive×negative pairs. `AUC = P(score(rand bad) >
+   score(rand good))`. No sampling, no seed.
+3. **Average precision** — step-wise area under the PR curve over the
+   sweep, robust to a non-monotone curve.
+4. **Recommended operating point** — the τ that maximises Fβ (ties broken
+   toward higher recall, then lower alert burden). `β = 2` weights recall
+   2× precision because the cost of a missed launderer dominates.
+5. **Per-detector discrimination** — for each of the eight detectors, its
+   *own* single-feature AUC over the positive vs negative intensity
+   distributions. This is the part that pays for itself: it tells you
+   which rules separate good from bad and which are near-random noise you
+   can down-weight — closing the loop with the what-if simulator.
+6. **Verdict** — a grade (`strong / fair / marginal / poor`) off the ROC
+   AUC plus plain-English notes ("lowering the cut to 7 lifts recall from
+   75% to 100%"; "low-signal detectors on this set: …"; "N known-bad
+   accounts slip under the current cut").
+
+### The loop it closes
+
+The what-if simulator (day-1) lets you *re-weight* detectors and watch
+the leaderboard move. Validation tells you whether that move was *good*.
+On the bundled set the canonical rules score AUC 0.96 but the mule
+pattern (fan-in + fan-out, weighted 8+8) scores under the case-open cut —
+a recall miss. Boosting the fan weights recovers the mule at higher
+precision than blindly lowering the threshold, and the headline tiles
+show the Δ-vs-canonical to prove it. That is model tuning with evidence.
+
+### Determinism
+
+`backtest(transactions, labels, weights)` is a pure function — same
+inputs → identical report, every time. No persisted state, no I/O, no
+randomness. That is what makes a backtest admissible as model evidence.
+
+---
+
 ## Frontend
 
 | Route | Purpose |
 |---|---|
 | `/` | Hero + 4-step pipeline + six feature cards + flow diagram |
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
-| `/network` | **(new)** Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
+| `/network` | Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
+| `/validation` | **(new)** Model-validation console: verdict banner, six headline tiles (ROC AUC · avg precision · recommended cut · recall/alert-rate @ rec · base rate, each with Δ-vs-canonical when you tune), an interactive confusion matrix + ROC curve + scrubable metric-sweep (precision/recall/Fβ/alert-rate vs threshold), ranked per-detector discrimination bars, the scored-account ledger with per-row outcome chips, and a live weight-tuning panel that re-validates a hypothesis |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
 | `/cases/{id}` | Big alert ring, priority/SLA pills, **typology badge in the header**, frozen evidence snapshot (factor bars + tx graph), **`TypologyPanel`** with full breakdown (confidence ring, ranked evidence bars, auto-narrative, recommended action), **network panel** auto-running entity resolution + propagation + member-aware attribution + "if cleared" deltas on the case's snapshot, sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail (now renders `typology_assigned` events with the badge), attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
@@ -490,8 +580,8 @@ curl -s -X POST :8000/aml/cases/open \
 Built with Next.js 14 + Tailwind + a small set of inline SVG components
 (`ScoreRing`, `SimilarityRing`, `FactorBars`, `TxGraph`, `PriorityDot`,
 `AgePill`, `Timeline`, `CasesNavPill`, `RiskGraph`, `EntityCard`,
-`DeltaBar`, `CaseNetworkPanel`, `TypologyBadge`, `TypologyPanel`).
-No charting libs.
+`DeltaBar`, `CaseNetworkPanel`, `TypologyBadge`, `TypologyPanel`,
+`ConfusionMatrix`, `MetricSweep`, `RocCurve`). No charting libs.
 
 ---
 
@@ -584,6 +674,9 @@ apps/
     typology.py         6 laundering typologies (SMURF · LAYER · TBML · MULE · SANCEV · INTEG)
                          · deterministic confidence scorer · severity-floor priority promotion
                          · auto-generated narrative + recommended action per match
+    backtest.py         model validation — confusion sweep + ROC AUC + average precision
+                         · Fβ-optimal recommended cut · per-detector discrimination (single-
+                         feature AUC) · tuning verdict · bundled labelled validation set
     cases.py            SQLite-backed case store + workflow engine + SLA
                          + typology_code/typology_confidence mirror columns
                          + typology_assigned timeline events
@@ -607,6 +700,10 @@ apps/
     components/CaseNetworkPanel.tsx in-case network surface: subgraph + attribution + "if cleared" tiles
     components/TypologyBadge.tsx    icon + code + confidence ring chip (xs/sm/md)
     components/TypologyPanel.tsx    full breakdown: ring + ranked evidence + narrative + recommended action
+    app/validation/page.tsx        model-validation console: verdict + tiles + sweep + ROC + detectors
+    components/ConfusionMatrix.tsx  2×2 TP/FP/FN/TN grid, tone-coded by cost
+    components/MetricSweep.tsx      P/R/Fβ/alert-rate vs threshold, scrubable cursor + guides
+    components/RocCurve.tsx         ROC curve with shaded AUC + operating-point markers
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -634,4 +731,11 @@ datasets/           sample inputs
   chips, and an auto-generated SAR narrative~~ (✅ shipped, day-30 —
   6-typology classifier with severity-floor priority promotion, mirrored
   onto every case row, surfaced as a `TypologyBadge` in the queue and a
-  full `TypologyPanel` in the case detail + AML console).
+  full `TypologyPanel` in the case detail + AML console);
+  ~~model validation / backtest harness — replay the engine against
+  labelled outcomes, report the precision/recall trade-off + ROC AUC +
+  per-detector discrimination so rule tuning is evidence-driven~~
+  (✅ shipped, day-35 — `backtest.py` + `/validation` console: confusion
+  sweep, ROC/PR, Fβ-recommended cut, per-detector single-feature AUC,
+  and a what-if loop that validates a weights override against the
+  canonical rule set).
