@@ -873,6 +873,90 @@ def inject_theme() -> None:
             border-radius: 12px; padding: 18px 16px; text-align: center;
             color: #B8C0D2; font-size: .88rem; margin: 6px 0 10px;
         }}
+
+        /* ---------- Compass — destination showdown ---------- */
+        .ws-cmp-hero {{
+            position: relative; overflow: hidden;
+            display: flex; gap: 24px; align-items: center;
+            background: {CARD}; border: 1px solid rgba(255,255,255,0.06);
+            border-left: 6px solid var(--hue, {PRIMARY});
+            border-radius: 16px; padding: 20px 24px; margin-bottom: 14px;
+        }}
+        .ws-cmp-hero::before {{
+            content:""; position:absolute; inset:0;
+            background: radial-gradient(120% 160% at 0% 0%, var(--glow, transparent) 0%, transparent 55%);
+            pointer-events:none;
+        }}
+        .ws-cmp-hero-body {{ position: relative; flex: 1; min-width: 0; }}
+        .ws-cmp-crown {{
+            display:inline-flex; align-items:center; gap:6px;
+            font-size:.72rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+            color: var(--hue, {PRIMARY});
+            background: rgba(255,255,255,0.04); border:1px solid var(--hue, {PRIMARY});
+            border-radius:999px; padding:4px 12px; margin-bottom:8px;
+        }}
+        .ws-cmp-hero-title {{ font-size:1.5rem; font-weight:800; line-height:1.2; color:#F2F4FA; }}
+        .ws-cmp-hero-detail {{ font-size:.95rem; color:#C7CEDE; margin-top:6px; }}
+        .ws-cmp-hero-detail strong {{ color: var(--hue, {PRIMARY}); }}
+        .ws-cmp-hero-meta {{ font-size:.78rem; color:{MUTED}; margin-top:10px; }}
+        .ws-cmp-margin {{
+            position:relative; text-align:center; flex-shrink:0;
+            background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:14px; padding:12px 18px; min-width:96px;
+        }}
+        .ws-cmp-margin-val {{ font-size:2rem; font-weight:800; color: var(--hue, {PRIMARY}); line-height:1; }}
+        .ws-cmp-margin-lbl {{ font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; color:{MUTED}; margin-top:4px; font-weight:700; }}
+
+        .ws-cmp-podium {{ display:grid; gap:12px; margin-bottom:14px;
+            grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }}
+        .ws-cmp-card {{
+            background: {CARD}; border:1px solid rgba(255,255,255,0.06);
+            border-radius:14px; padding:14px 16px; position:relative; overflow:hidden;
+        }}
+        .ws-cmp-card.is-winner {{
+            border-color: var(--hue, {PRIMARY});
+            box-shadow: 0 0 0 1px var(--hue, {PRIMARY}), 0 10px 30px -12px var(--hue, {PRIMARY});
+        }}
+        .ws-cmp-card-top {{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }}
+        .ws-cmp-rank {{
+            width:26px; height:26px; border-radius:8px; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:800; font-size:.82rem; color:#0E1117;
+            background: rgba(255,255,255,0.16);
+        }}
+        .ws-cmp-rank.r1 {{ background: linear-gradient(135deg,#FFD66B,#F9A825); }}
+        .ws-cmp-rank.r2 {{ background: linear-gradient(135deg,#D7DCE6,#9AA3B5); }}
+        .ws-cmp-rank.r3 {{ background: linear-gradient(135deg,#E2A772,#B97A45); }}
+        .ws-cmp-level {{
+            font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+            padding:3px 9px; border-radius:999px;
+            background: rgba(255,255,255,0.05);
+        }}
+        .ws-cmp-card-name {{ font-size:1.02rem; font-weight:800; color:#F2F4FA; line-height:1.2;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ws-cmp-card-score {{ display:flex; align-items:baseline; gap:6px; margin:8px 0 2px; }}
+        .ws-cmp-card-score b {{ font-size:2rem; font-weight:800; line-height:1; }}
+        .ws-cmp-card-score span {{ font-size:.72rem; color:{MUTED}; }}
+        .ws-cmp-bar-track {{ background: rgba(255,255,255,0.06); height:6px; border-radius:999px; overflow:hidden; margin:6px 0 10px; }}
+        .ws-cmp-bar-fill {{ height:100%; border-radius:999px; transition: width .8s ease; }}
+        .ws-cmp-mini {{ display:flex; gap:6px; }}
+        .ws-cmp-mini-cell {{ flex:1; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+            border-radius:9px; padding:6px 4px; text-align:center; }}
+        .ws-cmp-mini-val {{ font-size:.92rem; font-weight:800; color:#E6E9F2; font-variant-numeric:tabular-nums; }}
+        .ws-cmp-mini-lbl {{ font-size:.58rem; letter-spacing:.06em; text-transform:uppercase; color:{MUTED}; margin-top:2px; }}
+        .ws-cmp-card-head {{ font-size:.74rem; color:#AAB2C5; margin-top:8px; line-height:1.35; }}
+
+        .ws-cmp-matrix {{ display:grid; gap:5px; margin-top:4px; }}
+        .ws-cmp-mcorner {{ font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:{MUTED};
+            font-weight:700; display:flex; align-items:flex-end; padding:0 4px 6px; }}
+        .ws-cmp-mhead {{ text-align:center; font-size:.78rem; font-weight:800; color:#E6E9F2;
+            padding:6px 4px; border-bottom:2px solid rgba(255,255,255,0.08);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ws-cmp-mhead.is-winner {{ color: var(--hue, {PRIMARY}); border-bottom-color: var(--hue, {PRIMARY}); }}
+        .ws-cmp-mlabel {{ font-size:.78rem; color:#AAB2C5; font-weight:600; display:flex; align-items:center; padding:0 4px; }}
+        .ws-cmp-cell {{ text-align:center; border-radius:8px; padding:8px 4px;
+            font-weight:800; font-size:.9rem; font-variant-numeric:tabular-nums; }}
+        .ws-cmp-cell.head-row {{ font-size:1.05rem; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2319,6 +2403,162 @@ def render_advisory_empty(hint: str = "Pick a destination above to generate a sa
         f"""
         <div class="ws-sent-empty">
           <div class="ws-sent-empty-title">No brief yet</div>
+          <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------- Compass
+
+
+_CMP_LEVEL_HUE = {
+    "Critical":  "#EF4444",
+    "Elevated":  "#F59E0B",
+    "Caution":   "#FBBF24",
+    "All clear": "#10B981",
+}
+
+
+def _goodness_hue(g: float) -> str:
+    """0..1 → red→amber→green hue for heat-mapped matrix cells (1 = safest)."""
+    g = max(0.0, min(1.0, g))
+    red, amber, green = (239, 68, 68), (251, 191, 36), (16, 185, 129)
+    if g <= 0.5:
+        t = g / 0.5
+        a, b = red, amber
+    else:
+        t = (g - 0.5) / 0.5
+        a, b = amber, green
+    rgb = tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    return "#%02X%02X%02X" % rgb
+
+
+def render_compass(result) -> None:
+    """Render the full Compass showdown: verdict hero, podium, factor matrix."""
+    dests = result.destinations
+    if not dests:
+        render_compass_empty()
+        return
+
+    win = result.winner
+    hue = _CMP_LEVEL_HUE.get(win.advisory_level, win.level_color)
+    glow = _hex_to_rgba(hue, 0.20)
+
+    margin_html = ""
+    if result.runner_up is not None:
+        margin_html = (
+            f'<div class="ws-cmp-margin" style="--hue:{hue};">'
+            f'<div class="ws-cmp-margin-val">+{result.margin}</div>'
+            f'<div class="ws-cmp-margin-lbl">pts ahead</div></div>'
+        )
+
+    st.markdown(
+        f"""
+        <div class="ws-cmp-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-ring" style="--pct:{win.compass_score}; --ring:{hue};">
+            <div class="ws-ring-inner">
+              <div class="ws-ring-val" style="color:{hue}">{win.compass_score}</div>
+              <div class="ws-ring-band" style="color:{hue}">COMPASS</div>
+            </div>
+          </div>
+          <div class="ws-cmp-hero-body">
+            <span class="ws-cmp-crown">🏆 Safest pick · {_esc(win.advisory_level)}</span>
+            <div class="ws-cmp-hero-title">{_esc(result.verdict_headline)}</div>
+            <div class="ws-cmp-hero-detail">{_rec_to_html(result.verdict_detail)}</div>
+            <div class="ws-cmp-hero-meta">
+              Depart {result.depart:%a %d %b · %H:%M} · scan {result.radius_km:g} km ·
+              {len(dests)} destinations compared
+            </div>
+          </div>
+          {margin_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Podium cards
+    cards = []
+    for v in dests:
+        lvl_hue = _CMP_LEVEL_HUE.get(v.advisory_level, v.level_color)
+        bar_hue = _goodness_hue(v.compass_score / 100.0)
+        help_s = f"{v.nearest_help_km:.1f}" if v.nearest_help_km is not None else "—"
+        winner_cls = " is-winner" if v.is_winner else ""
+        rank_cls = f"r{v.rank}" if v.rank <= 3 else ""
+        cards.append(
+            f"""
+            <div class="ws-cmp-card{winner_cls}" style="--hue:{lvl_hue};">
+              <div class="ws-cmp-card-top">
+                <span class="ws-cmp-rank {rank_cls}">{v.rank}</span>
+                <span class="ws-cmp-level" style="color:{lvl_hue}; border:1px solid {_hex_to_rgba(lvl_hue, 0.45)};">
+                  {_esc(v.advisory_level)}
+                </span>
+              </div>
+              <div class="ws-cmp-card-name">{_esc(v.label)}</div>
+              <div class="ws-cmp-card-score">
+                <b style="color:{bar_hue}">{v.compass_score}</b><span>/ 100 compass</span>
+              </div>
+              <div class="ws-cmp-bar-track">
+                <div class="ws-cmp-bar-fill" style="width:{v.compass_score}%; background:{bar_hue};"></div>
+              </div>
+              <div class="ws-cmp-mini">
+                <div class="ws-cmp-mini-cell"><div class="ws-cmp-mini-val">{v.incidents_nearby}</div>
+                  <div class="ws-cmp-mini-lbl">incidents</div></div>
+                <div class="ws-cmp-mini-cell"><div class="ws-cmp-mini-val">{help_s}</div>
+                  <div class="ws-cmp-mini-lbl">help km</div></div>
+                <div class="ws-cmp-mini-cell"><div class="ws-cmp-mini-val">{int(round(v.forecast_risk * 100))}%</div>
+                  <div class="ws-cmp-mini-lbl">forecast</div></div>
+              </div>
+              <div class="ws-cmp-card-head">{_esc(v.headline)}</div>
+            </div>
+            """
+        )
+    st.markdown(
+        f'<div class="ws-cmp-podium">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Comparison matrix — destinations as columns, factors as heat-mapped rows
+    n = len(dests)
+    cols = f"1.35fr repeat({n}, minmax(0,1fr))"
+    parts = [f'<div class="ws-cmp-matrix" style="grid-template-columns:{cols};">']
+    parts.append('<div class="ws-cmp-mcorner">Factor ↓ / Destination →</div>')
+    for v in dests:
+        wc = " is-winner" if v.is_winner else ""
+        lvl_hue = _CMP_LEVEL_HUE.get(v.advisory_level, v.level_color)
+        parts.append(f'<div class="ws-cmp-mhead{wc}" style="--hue:{lvl_hue};">{_esc(v.label)}</div>')
+
+    # Headline Compass-score row
+    parts.append('<div class="ws-cmp-mlabel"><strong>Compass score</strong></div>')
+    for v in dests:
+        g = v.compass_score / 100.0
+        ch = _goodness_hue(g)
+        parts.append(
+            f'<div class="ws-cmp-cell head-row" style="background:{_hex_to_rgba(ch, 0.18)}; color:{ch};">'
+            f'{v.compass_score}</div>'
+        )
+
+    # Per-factor rows
+    for fi, (_key, label) in enumerate(result.factor_order):
+        parts.append(f'<div class="ws-cmp-mlabel">{_esc(label)}</div>')
+        for v in dests:
+            f = v.factors[fi]
+            ch = _goodness_hue(f.goodness)
+            parts.append(
+                f'<div class="ws-cmp-cell" style="background:{_hex_to_rgba(ch, 0.15)}; color:{ch};">'
+                f'{_esc(f.display)}</div>'
+            )
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+    st.caption("Greener = safer on that factor. Compass blends safety, the depart-time forecast, and live-cluster pressure.")
+
+
+def render_compass_empty(hint: str = "Pick at least two destinations above, then run the showdown.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-sent-empty">
+          <div class="ws-sent-empty-title">No comparison yet</div>
           <div>{_esc(hint)}</div>
         </div>
         """,
