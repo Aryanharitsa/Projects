@@ -85,6 +85,7 @@ export default function Discover() {
           <nav className="flex items-center gap-6 text-sm text-white/80">
             <Link href="/" className="text-white">Discover</Link>
             <Link href="/roles" className="hover:text-white">Roles</Link>
+            <Link href="/hq" className="hover:text-white">Command Center</Link>
             <Link href="/pipeline" className="hover:text-white">Pipeline</Link>
             <Link href="/submit" className="hover:text-white">Submit</Link>
           </nav>

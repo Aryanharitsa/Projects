@@ -309,6 +309,123 @@ export async function classifyTypologies(account_report: AccountReport): Promise
   return jsonOrThrow(r);
 }
 
+// ---------------------------------------------------------------------------
+// Model validation / backtest (round-7, day-35)
+// ---------------------------------------------------------------------------
+
+export type ConfusionPoint = {
+  threshold: number;
+  tp: number;
+  fp: number;
+  fn: number;
+  tn: number;
+  alerts: number;
+  alert_rate: number;
+  precision: number;
+  recall: number;
+  specificity: number;
+  fpr: number;
+  tpr: number;
+  f1: number;
+  fbeta: number;
+  accuracy: number;
+  balanced_accuracy: number;
+  youden_j: number;
+};
+
+export type DetectorDiscrimination = {
+  key: string;
+  label: string;
+  weight: number;
+  auc: number;
+  lift: number;
+  mean_pos: number;
+  mean_neg: number;
+  fired_pos: number;
+  fired_neg: number;
+  n_pos: number;
+  n_neg: number;
+  strength: "strong" | "moderate" | "weak" | "noise";
+  note: string;
+};
+
+export type BacktestAccount = {
+  account_id: string;
+  display_name: string;
+  score: number;
+  label: 0 | 1;
+  predicted: 0 | 1;
+  outcome: "tp" | "fp" | "fn" | "tn";
+  intensities: Record<string, number>;
+};
+
+export type BacktestResult = {
+  ok: boolean;
+  engine: string;
+  labels: {
+    positives: string[];
+    n_pos: number;
+    n_neg: number;
+    n_total: number;
+    base_rate: number;
+    mode: "dict" | "positive-list";
+  };
+  beta: number;
+  operating_threshold: number;
+  effective_weights: Record<string, number>;
+  sanctions_threshold: number;
+  metrics_at: {
+    current: ConfusionPoint;
+    recommended: ConfusionPoint;
+    youden: ConfusionPoint;
+  };
+  roc: { auc: number; points: { fpr: number; tpr: number; threshold: number }[] };
+  pr: {
+    average_precision: number;
+    points: { recall: number; precision: number; threshold: number }[];
+  };
+  sweep: ConfusionPoint[];
+  detectors: DetectorDiscrimination[];
+  accounts: BacktestAccount[];
+  verdict: { grade: "strong" | "fair" | "marginal" | "poor"; headline: string; notes: string[] };
+};
+
+export async function getBacktestSample(): Promise<{
+  ok: boolean;
+  engine: string;
+  transactions: Tx[];
+  labels: string[];
+  note: string;
+}> {
+  const r = await fetch(`${API_BASE}/aml/backtest/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function runBacktest(
+  transactions: Tx[],
+  labels: string[] | Record<string, boolean | number>,
+  opts: {
+    weights?: WeightOverrides;
+    beta?: number;
+    operating_threshold?: number;
+    sanctions_threshold?: number;
+  } = {},
+): Promise<BacktestResult> {
+  const body: any = { transactions, labels };
+  if (opts.weights && Object.keys(opts.weights).length) body.weights = opts.weights;
+  if (typeof opts.beta === "number") body.beta = opts.beta;
+  if (typeof opts.operating_threshold === "number")
+    body.operating_threshold = opts.operating_threshold;
+  if (typeof opts.sanctions_threshold === "number")
+    body.sanctions_threshold = opts.sanctions_threshold;
+  const r = await fetch(`${API_BASE}/aml/backtest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
 export async function uploadKyc(file: File, subject: string, verifier = "VERIFIER-1") {
   const fd = new FormData();
   fd.append("file", file);

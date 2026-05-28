@@ -39,6 +39,21 @@ threshold live, and watch your topical clusters discover themselves.
   Greedy modularity (Newman-style) partitions the synapse graph; a
   TF-IDF-style "distinctiveness" score names each cluster from its own
   members' words. Click a topic to *isolate* it in the canvas.
+- **Synthesis — read your clusters, don't just see them.** The topic
+  palette tells you *that* a cluster exists and what it's called.
+  Synthesis tells you what it *says*. Click ❍ on any cluster and get a
+  briefing built straight from its member notes: a **cited synthesis
+  paragraph** (the most representative sentences, stitched into prose,
+  ordered by how central each source is to the topic), the **key
+  claims**, the **open threads** you haven't resolved (member notes
+  phrased as questions + under-developed stubs), and the **bridges** —
+  notes elsewhere in your graph that are semantically close to this
+  topic but that the synapse graph hasn't linked yet. A **cohesion**
+  score says how tightly the topic actually holds together. Every
+  sentence and claim links back to its source note; **⤓ md** exports the
+  whole brief as portable Markdown. Extractive + deterministic by
+  default; optional LLM polish (`SYNAPSE_LLM_KEY`) rewrites the synthesis
+  under a strict citation contract, falling back silently on any error.
 - **Orphan rescue.** Notes with no synapses surface in their own panel
   alongside their strongest near-miss neighbor and the exact `τ` value
   that would attach them. Lower the threshold, or refine the note —
@@ -112,7 +127,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief modal · Distill modal · TrailPlayer modal                  │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis modals                 │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -131,9 +146,10 @@ threshold live, and watch your topical clusters discover themselves.
 │   segment +    embedder           (staleness · suggest_next· to provider │
 │   title +      (L2-normalized)     centrality·  markdown   APIs)         │
 │   tags +                           orphan ·     export)                  │
-│   cluster +                        diversity)                            │
-│   neighbor                                                               │
-│   preview)                                                               │
+│   cluster +                        diversity)   synthesis.py             │
+│   neighbor                                      (centroid · cohesion ·   │
+│   preview)                                       cited overview · claims ·│
+│                                                  open threads · bridges)  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -380,6 +396,52 @@ SYNAPSE_LLM_MODEL     model id                (default: claude-haiku-4-5-2025100
 
 Zero new Python deps — `urllib.request` does the HTTP.
 
+### Synthesis
+
+Clustering (Day 9) made your topics *visible* and *named*. But a violet
+blob labelled "embeddings" still isn't knowledge — you have to open each
+member note to learn what it says. Synthesis turns a cluster into a
+readable brief, all extractively and deterministically:
+
+```
+1. CENTROID    mean of member embeddings, L2-normalized → the topic's
+               "center of mass" in vector space.
+2. COHESION    mean cosine(member, centroid) ∈ [0,1] — how tightly the
+               topic actually holds together. Low cohesion ⇒ the cluster
+               is two half-topics waiting to split.
+3. HARVEST     split every member body into sentences; score each by
+               cosine(sentence, centroid) + 0.04·key_term_hits
+               + 0.02·source_centrality.
+4. SELECT      pick the top sentences with MMR-style dedup (drop any whose
+               cosine to an already-picked sentence > 0.86), preferring
+               one sentence per distinct note so the brief spreads across
+               the cluster. Top 3 → overview, next 5 → key claims.
+5. COMPOSE     order the overview sentences by their source note's
+               centrality and stitch into prose; every sentence keeps an
+               inline [#N] citation to the Sources list.
+6. THREADS     member notes phrased as questions (title or body ends in
+               "?") + under-developed members (thin body, or zero
+               intra-cluster synapses) → "open threads."
+7. BRIDGES     notes in *other* clusters with cosine(note, centroid) ≥
+               0.16 that the synapse graph hasn't linked to any member —
+               cross-pollination the graph is one τ-nudge from drawing.
+```
+
+Sources are numbered by centrality so `[#N]` is a stable, clickable
+reference. **Cohesion** reuses the same embeddings the canvas already
+holds; nothing is recomputed twice. The **markdown export**
+(`GET /digest/export.md`) renders the whole brief — synthesis, claims,
+threads, bridges, sources — as a portable artifact that reads stand-alone
+outside SynapseOS.
+
+**Optional LLM mode.** When `SYNAPSE_LLM_KEY` is set the overview is
+rewritten by a small LLM under a strict contract ("use ONLY the numbered
+sources, every sentence ends with `[#N]`, 2–3 sentences, ≤80 words"). We
+*reject* any LLM answer that drops its citations and fall back to the
+extractive overview — synthesis never silently loses its receipts.
+
+Pure stdlib for the default path — no new Python deps.
+
 ---
 
 ## API surface
@@ -411,6 +473,8 @@ Zero new Python deps — `urllib.request` does the HTTP.
 | `GET`  | `/trails/{id}/export.md`     | Self-contained Markdown export with cosine-annotated transitions                  |
 | `POST` | `/atomize?threshold&top_k`   | Distill long-form text into atomic-note previews (no save). Body: `{ text, mode? }`. Returns `{ atoms: [{ temp_id, title, body, tags, char_count, cluster_id/name/color, cluster_strength, neighbors[], expected_synapses, llm_refined }], total_chars, mode_used, llm_available, llm_provider, notice? }` |
 | `POST` | `/atomize/commit?threshold&top_k` | Bulk insert edited atoms. Body: `{ atoms: [{ title, body, tags[] }] }` (1–64). Returns `{ created: [{ note_id, title, synapses }], synapses_formed }` |
+| `GET`  | `/digest?cluster_id=&threshold&top_k&mode` | Topic synthesis for one cluster: `{ name, color, size, terms[], cohesion, overview, claims[], open_threads[], bridges[], sources[], mode_used, llm_available, notice? }`. `mode` ∈ `auto/extractive/llm`. |
+| `GET`  | `/digest/export.md?cluster_id=…` | Self-contained Markdown brief for one cluster (synthesis · claims · open threads · bridges · sources). |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -478,6 +542,9 @@ Incremental moves for future rotation days:
 - [x] **Distill** — atomize pasted long-form text into preview cards
       with title/tag/cluster/neighbor predictions and bulk commit
       *(shipped)*
+- [x] **Synthesis** — auto-written, cited topic briefings per cluster
+      (synthesis prose · key claims · open threads · cross-cluster
+      bridges · cohesion score · portable Markdown export) *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

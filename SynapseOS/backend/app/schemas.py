@@ -325,3 +325,53 @@ class AtomCommitResult(BaseModel):
 class AtomizeCommitOut(BaseModel):
     created: list[AtomCommitResult]
     synapses_formed: int  # total new edges introduced by the bulk insert
+
+
+# --------------------------------------------------------------- synthesis
+
+
+class DigestSourceOut(BaseModel):
+    ref: int
+    note_id: int
+    title: str
+    centrality: float
+
+
+class DigestClaimOut(BaseModel):
+    text: str
+    note_id: int
+    ref: int
+
+
+class OpenThreadOut(BaseModel):
+    note_id: int
+    title: str
+    text: str
+    kind: Literal["question", "underdeveloped"]
+
+
+class BridgeOut(BaseModel):
+    note_id: int
+    title: str
+    cluster_id: int
+    cluster_name: str
+    cluster_color: str
+    strength: float
+
+
+class ClusterDigestOut(BaseModel):
+    cluster_id: int
+    name: str
+    color: str
+    size: int
+    terms: list[str]
+    cohesion: float
+    overview: str
+    claims: list[DigestClaimOut]
+    open_threads: list[OpenThreadOut]
+    bridges: list[BridgeOut]
+    sources: list[DigestSourceOut]
+    mode_used: Literal["extractive", "llm"]
+    llm_available: bool
+    llm_provider: str | None = None
+    notice: str | None = None

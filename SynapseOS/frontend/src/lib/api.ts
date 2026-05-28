@@ -7,6 +7,7 @@ import type {
   ChatMode,
   ChatResponse,
   ChatStatus,
+  ClusterDigest,
   Community,
   Graph,
   Neighbor,
@@ -171,4 +172,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ atoms }),
     }),
+
+  digest: (clusterId: number, opts?: { mode?: ChatMode }) => {
+    const q = new URLSearchParams({ cluster_id: String(clusterId) });
+    if (opts?.mode) q.set("mode", opts.mode);
+    return j<ClusterDigest>(`/digest?${q.toString()}`);
+  },
+
+  digestExportUrl: (clusterId: number) =>
+    `${BASE}/digest/export.md?cluster_id=${clusterId}`,
 };

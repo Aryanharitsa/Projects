@@ -279,3 +279,52 @@ export type AtomizeCommitResponse = {
   created: AtomCommitResult[];
   synapses_formed: number;
 };
+
+// --------------------------------------------------------------- synthesis
+
+export type DigestSource = {
+  ref: number;
+  note_id: number;
+  title: string;
+  centrality: number;
+};
+
+export type DigestClaim = {
+  text: string;
+  note_id: number;
+  ref: number;
+};
+
+export type OpenThread = {
+  note_id: number;
+  title: string;
+  text: string;
+  kind: "question" | "underdeveloped";
+};
+
+export type DigestBridge = {
+  note_id: number;
+  title: string;
+  cluster_id: number;
+  cluster_name: string;
+  cluster_color: string;
+  strength: number;
+};
+
+export type ClusterDigest = {
+  cluster_id: number;
+  name: string;
+  color: string;
+  size: number;
+  terms: string[];
+  cohesion: number;
+  overview: string;
+  claims: DigestClaim[];
+  open_threads: OpenThread[];
+  bridges: DigestBridge[];
+  sources: DigestSource[];
+  mode_used: "extractive" | "llm";
+  llm_available: boolean;
+  llm_provider: string | null;
+  notice: string | null;
+};
