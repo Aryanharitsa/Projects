@@ -9,15 +9,73 @@ entire pool, **close** in an Offer Studio that benchmarks comp against
 the market, simulates the candidate's accept-probability live, and ships
 a print-ready offer letter, **audits the offer for fairness** against the
 team's accepted peer offers so a one-week sprint doesn't quietly torch six
-months of pay-band discipline — and now rolls every role up into a
+months of pay-band discipline, rolls every role up into a
 **Command Center** so a recruiter running ten reqs sees the whole portfolio
-on one screen. All from a dark, fast, single-page workspace.
+on one screen — and now **calibrates the panel** itself, surfacing which
+interviewers are lenient or severe, how reliably the panel agrees, and
+whether removing that bias changes who you'd hire. All from a dark, fast,
+single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Calibration Studio (Day 37)
+
+Every interview surface so far assumed a **single rater**: one scorecard,
+one composite. Real hiring runs panels — and the loudest hidden source of
+unfair decisions is that interviewers aren't calibrated. Some rate everyone
+high (leniency), some low (severity), some give everyone a 3 (central
+tendency), and some just disagree with the room. A candidate's fate then
+turns on *who happened to interview them*. **Calibration Studio**
+(`/roles/[id]/calibration`) models the whole panel and answers the three
+questions no single scorecard can.
+
+- **Interviewer bias** — for each panelist, *leniency* (mean deviation from
+  the per-cell panel consensus, signed: + lenient / − severe), *spread*
+  (rating stdev — a near-zero spread is central-tendency "flat" scoring),
+  and *consensus correlation* (Pearson r against the panel mean — low =
+  off-consensus). Rendered as a diverging severe ←→ lenient bar chart with
+  auto-flags: `lenient` · `severe` · `flat` · `off-consensus`.
+- **Panel reliability** — two complementary numbers. A **consensus index**
+  (`1 − cellVar/4`, averaged over multi-rated cells) for cell-level
+  agreement, and **ICC(1)** — an unbalanced one-way intraclass correlation
+  over the candidate×dimension cells that measures how much of the rating
+  variance is *real candidate signal* vs. rater noise. Both handle
+  unbalanced panels (different candidates seen by different interviewers).
+- **De-biasing recovers signal** — the same ICC is recomputed after
+  subtracting each rater's leniency. On a biased panel the lift is dramatic
+  (the seed lands ICC **0.00 → 0.34**): proof that calibration isn't
+  cosmetic — it restores the panel's power to tell candidates apart.
+- **Raw vs. de-biased ranking** — every candidate gets a raw consensus
+  composite and a *calibrated* composite (each rater's systematic offset
+  removed before averaging), then a bump chart draws the rank shifts. When
+  the lenient EM only saw the juniors and the severe staffer only saw the
+  seniors, the raw ranking compresses the real gap — and calibration pulls
+  it back apart, reordering the boundary candidates.
+- **Agreement heatmap** — a candidate × rubric-dimension grid heat-mapped
+  by panel agreement (rose = split, emerald = consensus); disagreement
+  hot-cells are ringed. Click any cell to inspect each interviewer's rating
+  and **edit it inline (1–5)** — bias, ranking and reliability all recompute
+  live.
+- **Manage the panel** — a drawer to add/remove interviewers; new
+  interviewers are auto-scored on every shortlisted candidate (pick a
+  *calibrated / lenient / severe / flat* archetype) so the audit stays
+  populated, or reset to the seed. Persisted per role in localStorage.
+- **One-click report** — Copy or download a Markdown calibration report
+  (verdict, reliability, per-interviewer calibration, raw-vs-de-biased
+  ranking, hot-cells, actions) for a calibration meeting.
+- **Backend mirror** — `POST /calibration/summary` takes the panel
+  (interviewers + ratings), the candidates, and the rubric and returns the
+  identical audit. The engine is **byte-for-byte parity** with the browser
+  engine — confirmed by transpiling `calibration.ts` standalone and running
+  the same fixture through both (every rater stat, cell, composite, rank,
+  consensus index, ICC and verdict matched exactly). Accepts `camelCase`
+  and `snake_case` payloads.
 
 ---
 
@@ -538,6 +596,35 @@ curl -X POST http://127.0.0.1:8000/portfolio/summary \
   }'
 ```
 
+### `POST /calibration/summary`
+Audit an interview panel. Accepts `{ roleId, interviewers, ratings,
+candidates, rubric }` where `ratings` is a flat list of
+`{ interviewerId, candidateId, dimKey, rating }`. Returns per-interviewer
+bias (`leniency · spread · consensusCorr · flags`), per-cell agreement +
+disagreement hot-cells, each candidate's `rawComposite` /
+`calibratedComposite` / `rankShift`, the panel `consensusIndex`, raw and
+de-biased `icc`, the overall `verdict`, suggestions and notes. Both
+`camelCase` and `snake_case` payloads accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8000/calibration/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "roleId": "r1",
+    "interviewers": [{"id":"a","name":"Meera","title":"EM"},
+                     {"id":"b","name":"Arjun","title":"Staff"}],
+    "candidates": [{"id":1,"name":"Asha"},{"id":2,"name":"Dev"}],
+    "rubric": [{"key":"backend_depth","label":"Backend depth","weight":0.6},
+               {"key":"communication","label":"Communication","weight":0.4}],
+    "ratings": [
+      {"interviewerId":"a","candidateId":1,"dimKey":"backend_depth","rating":5},
+      {"interviewerId":"b","candidateId":1,"dimKey":"backend_depth","rating":3},
+      {"interviewerId":"a","candidateId":2,"dimKey":"communication","rating":4},
+      {"interviewerId":"b","candidateId":2,"dimKey":"communication","rating":4}
+    ]
+  }'
+```
+
 ### `POST /peer-parity/check_team?team=ID`
 Same response shape but pulls peers from the in-memory team pool
 keyed by `team` (defaults to `"default"`). Useful when an agentic
@@ -572,6 +659,7 @@ returns 404 if the id wasn't in the pool. Thread-safe via `RLock`.
 | POST   | `/peer-parity/peers`          | add / upsert a peer in the team pool                    |
 | DELETE | `/peer-parity/peers/{id}`     | remove a peer from the team pool                        |
 | POST   | `/portfolio/summary`          | portfolio rollup across every role (Command Center)     |
+| POST   | `/calibration/summary`        | panel bias + reliability + de-biased ranking            |
 
 ---
 
@@ -589,7 +677,8 @@ Credicrew/
 │       │   ├── decision.py         # POST /decision/{summary,debrief}
 │       │   ├── offer.py            # POST /offer/{benchmark,simulate,compose,full}
 │       │   ├── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
-│       │   └── portfolio.py        # POST /portfolio/summary
+│       │   ├── portfolio.py        # POST /portfolio/summary
+│       │   └── calibration.py      # POST /calibration/summary
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
@@ -597,7 +686,8 @@ Credicrew/
 │           ├── decision.py         # calibrated ranking + verdicts
 │           ├── offer.py            # comp band · win-prob · letter
 │           ├── peer_parity.py      # regression · z-scores · inversions · suggestions
-│           └── portfolio.py        # portfolio rollup · funnel · comp forecast · health
+│           ├── portfolio.py        # portfolio rollup · funnel · comp forecast · health
+│           └── calibration.py      # rater bias · consensus · ICC · de-biased ranking
 ├── frontend/
 │   └── src/
 │       ├── app/
@@ -612,8 +702,11 @@ Credicrew/
 │       │           ├── page.tsx    # Role detail (JD, matches, shortlist, CSV)
 │       │           ├── decision/page.tsx                 # Decision Studio
 │       │           ├── interview/[candidateId]/page.tsx  # Interview workspace
-│       │           └── offer/[candidateId]/page.tsx      # Offer Studio (NEW)
+│       │           ├── offer/[candidateId]/page.tsx      # Offer Studio
+│       │           └── calibration/page.tsx              # Calibration Studio (NEW)
 │       ├── components/
+│       │   ├── AgreementGrid.tsx        # candidate × dim heatmap + cell editor (NEW)
+│       │   ├── CalibrationBias.tsx      # diverging interviewer-bias bars (NEW)
 │       │   ├── CandidateCard.tsx
 │       │   ├── CompLadder.tsx           # P25→P90 comp band with offer marker
 │       │   ├── DecisionMatrix.tsx       # rubric × candidate heatmap
@@ -622,10 +715,12 @@ Credicrew/
 │       │   ├── MatchExplain.tsx
 │       │   ├── OfferLetterPreview.tsx   # print-ready offer letter renderer
 │       │   ├── OutreachModal.tsx
+│       │   ├── PanelDrawer.tsx          # add/remove interviewers (NEW)
 │       │   ├── PeerParityPanel.tsx      # SVG scatter + per-dim bars + suggestions
 │       │   ├── PeerPoolDrawer.tsx       # right-side drawer for peer CRUD
 │       │   ├── PipelineAnalytics.tsx    # funnel + conversion rates
 │       │   ├── QuestionCard.tsx
+│       │   ├── RankShiftChart.tsx       # raw→de-biased bump chart (NEW)
 │       │   ├── RecommendationRing.tsx
 │       │   ├── RoleCard.tsx
 │       │   ├── RubricSlider.tsx
@@ -643,6 +738,8 @@ Credicrew/
 │           ├── peer_parity.ts      # regression · z-scores · inversions (parity w/ backend)
 │           ├── peer_seed.ts        # 8-peer realistic seed for fresh roles
 │           ├── portfolio.ts        # portfolio rollup · funnel · comp forecast · health
+│           ├── calibration.ts      # rater bias · consensus · ICC · de-biased ranking (parity w/ backend)
+│           ├── panel_seed.ts       # deterministic biased-panel seed for a role
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
 └── docs/
@@ -654,6 +751,8 @@ Credicrew/
 - Server-persisted roles (Postgres) so they survive across browsers.
 - LLM-assisted JD parsing for messy real-world specs (still fall back to
   the deterministic path).
+- Pull real per-interviewer ratings from the Interview workspace into the
+  panel (today the studio seeds a panel; next, wire live scorecards in).
 - ~~Per-role "team peer parity" check — flag offers that drift too far
   from the team's existing accepted offers at similar interview composite.~~ ✅ Day 27.
 - ~~iCal export for an "Interview" status with proposed slots.~~ ✅ Day 17.
@@ -661,6 +760,8 @@ Credicrew/
 - ~~Interview kit: tailored prompts, weighted rubric, scorecard, hire/no-hire signal.~~ ✅ Day 12.
 - ~~Decision Studio: calibrated comparison, hire signal, committee debrief.~~ ✅ Day 17.
 - ~~Offer Studio: comp benchmarking, accept-probability simulator, print-ready letter.~~ ✅ Day 22.
+- ~~Command Center: portfolio rollup, funnel, comp forecast, health, attention feed.~~ ✅ Day 32.
+- ~~Calibration Studio: rater bias, inter-rater reliability, de-biased ranking.~~ ✅ Day 37.
 
 ---
 
