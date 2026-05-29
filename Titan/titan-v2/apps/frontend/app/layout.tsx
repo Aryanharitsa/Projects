@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/", label: "Overview" },
   { href: "/aml", label: "AML Console" },
   { href: "/network", label: "Network" },
+  { href: "/validation", label: "Validation" },
   { href: "/cases", label: "Cases", pill: "cases" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/kyc", label: "KYC Pipeline" },

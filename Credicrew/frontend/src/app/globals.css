@@ -158,6 +158,41 @@ body::before {
   to   { transform: translateX(0); opacity: 1; }
 }
 
+/* ---------- Command Center ---------- */
+
+.cc-hq-ring { transition: filter 200ms ease; }
+.cc-hq-ring:hover { filter: drop-shadow(0 0 8px rgba(167,139,250,0.40)); }
+.cc-hq-hero {
+  background-image:
+    radial-gradient(520px 180px at 100% -30%, rgba(99,102,241,0.10), transparent 60%),
+    radial-gradient(420px 160px at -10% 130%, rgba(52,211,153,0.06), transparent 60%);
+}
+.cc-hq-comp { background-image: radial-gradient(420px 160px at 100% -20%, rgba(52,211,153,0.06), transparent 60%); }
+.cc-hq-attn { transition: transform 130ms ease, border-color 130ms ease; }
+.cc-hq-attn:hover { transform: translateX(2px); }
+
+/* ---------- Calibration Studio ---------- */
+
+.cc-cal-verdict {
+  background-image: radial-gradient(420px 140px at 0% -30%, rgba(232,121,249,0.10), transparent 60%);
+}
+.cc-cal-bias {
+  background-image: radial-gradient(420px 150px at 100% -30%, rgba(232,121,249,0.07), transparent 60%);
+}
+.cc-cal-row { transition: transform 130ms ease, border-color 130ms ease; }
+.cc-cal-row:hover { transform: translateX(2px); border-color: rgba(255,255,255,0.14); }
+.cc-cal-bump {
+  background-image: radial-gradient(440px 160px at 100% -30%, rgba(56,189,248,0.07), transparent 60%);
+}
+.cc-cal-cell { transition: transform 120ms ease, filter 120ms ease; }
+.cc-cal-cell:hover { transform: scale(1.05); filter: brightness(1.12); }
+.cc-cal-inspect {
+  background-image: radial-gradient(380px 120px at 0% -40%, rgba(232,121,249,0.08), transparent 60%);
+}
+.cc-cal-hotrow { transition: transform 130ms ease; }
+.cc-cal-hotrow:hover { transform: translateX(2px); }
+.cc-cal-drawer { animation: cc-parity-slide 220ms ease; }
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }

@@ -14,6 +14,7 @@ export default function Navbar() {
         <nav className="flex items-center gap-1">
           <Link href="/" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Discover</Link>
           <Link href="/roles" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Roles</Link>
+          <Link href="/hq" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Command Center</Link>
           <Link href="/pipeline" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Pipeline</Link>
           <Link href="/submit" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Submit</Link>
         </nav>

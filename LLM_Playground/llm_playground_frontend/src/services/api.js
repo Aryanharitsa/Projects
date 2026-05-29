@@ -279,6 +279,16 @@ class ApiService {
     );
   }
 
+  // ─── Studio Insights ───────────────────────────────────────────────────────
+  // Cross-cutting analytics over the whole run history: model scorecards, the
+  // quality/cost efficiency frontier, spend timeline, and provider roll-up.
+  async insights({ minAppearances = 1 } = {}) {
+    const qs = new URLSearchParams();
+    if (minAppearances && minAppearances > 1) qs.set('min_appearances', minAppearances);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/insights${suffix}`);
+  }
+
   // Upload August JSON file
   async uploadAugustJson(file) {
     const formData = new FormData();

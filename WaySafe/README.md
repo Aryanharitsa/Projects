@@ -33,7 +33,30 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 - **Forecast-aware safest route** — each edge is priced by the *predicted*
   risk at the time the traveller will reach its midpoint
   (`t = depart + cum_km / 32 km/h`), blended 65/35 with current-time risk.
-- **🆕 Sentinel — Live Cluster Intel** — DBSCAN over haversine groups raw
+- **🆕 Travel Advisory brief** — the *one page* a tourist actually wants
+  before walking out the door. For any destination (your current
+  location, a POI, or a custom lat/lon) WaySafe fuses every engine in the
+  repo — Safety Intelligence, Sentinel clusters, the forecast, geofences,
+  POIs — into a single shareable brief with an **All clear / Caution /
+  Elevated / Critical** advisory level, a per-incident timeline, a 7-day
+  trend sparkline, the *safer depart windows* for the next 12 h, the five
+  nearest help POIs and a ranked checklist of what to do. Exports as
+  **PDF**, **JSON** (`waysafe.advisory.v1` schema) and **markdown** so it
+  drops into a WhatsApp message, an email, or a printed handout for the
+  family fridge. Live clusters that are escalating *force-bump* the
+  advisory level — a static safety score won't reflect activity that's
+  still in motion, so the advisory does.
+- **🆕 Compass — Destination Showdown** — the *comparative* answer to
+  "where should I go tonight?". Pick 2–5 candidates (curated Goa presets,
+  your current location, or custom points) and Compass ranks them **at
+  your depart time**, fusing the safety score, the depart-hour forecast,
+  and live Sentinel cluster pressure into one forward-looking **Compass
+  score** (0–100). It declares a winner with a margin ("Anjuna is the
+  clear safe pick — 18 pts clear of Baga"), names the *deciding factor*,
+  and lays every candidate out in a heat-mapped **comparison matrix** so
+  the trade-offs are obvious at a glance. Exports as JSON
+  (`waysafe.compass.v1`) and markdown.
+- **Sentinel — Live Cluster Intel** — DBSCAN over haversine groups raw
   incidents into discrete hotspots; each cluster is graded
   Critical / Emerging / Steady / Cooling by **velocity** (recent rate ÷
   historical baseline rate). A global **Risk Pulse** rolls every cluster up
@@ -57,6 +80,130 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   next-24h forecast curve and likely-hotspots panel.
 - **Tamper-evident audit** — Merkle-rollup auditor over incident hashes
   (no blockchain required, anchor on-chain later if needed).
+
+---
+
+## 🧭 Travel Advisory — pre-trip brief (Day 31)
+
+The Advisory tab takes one (lat, lon) — your current location, a POI from
+the dataset, or a custom point you type in — and produces a single-page,
+shareable safety brief. It's the *answer-in-30-seconds* surface for the
+four questions every tourist actually asks before a trip:
+
+1. **Is it safe to go right now?** — `All clear / Caution / Elevated / Critical`
+2. **Why?** — recent incidents within scan radius, ranked by recency × severity
+3. **When would be safer?** — top-3 lowest-risk depart windows in the next 12 h
+4. **Where is the nearest help if it goes wrong?** — top-5 ranked help POIs
+
+### Advisory level
+
+```
+safety score 80..100  →  All clear   (#10B981)
+safety score 60..79   →  Caution     (#FBBF24)
+safety score 35..59   →  Elevated    (#F59E0B)
+safety score  0..34   →  Critical    (#EF4444)
+```
+
+The level is then *force-bumped* if Sentinel sees escalating clusters
+overlapping the scan disc:
+
+```
+≥ 2 severe clusters (Critical/Emerging + severity_mean ≥ 3.5)  →  Critical
+≥ 1 severe cluster but base level == All clear                 →  Elevated
+```
+
+Static scoring alone can't see "things are moving"; the bump folds the
+*velocity* signal in so the advisory matches what's happening on the
+ground rather than what's already happened.
+
+### What the brief contains
+
+- A **hero card** with a conic-gradient score ring, the advisory level
+  stripe and a one-line headline tailored to the level.
+- Four **KPI tiles**: incidents nearby, live clusters near here, the
+  safer depart window, and the nearest help POI.
+- A **recent-incidents** list with severity dots, distance, age, status
+  (verified / pending) and a short note.
+- A **7-day incident trend** sparkline aligned to weekdays.
+- **Live clusters near here** — Sentinel pills with edge distance,
+  radius and days-since-last.
+- **Safer depart windows** — top-3 lowest-risk hours in the next 12 h,
+  pulled from the same `forecaster.hotspots(...)` engine the Forecast
+  tab uses.
+- **Nearest help** — top-5 hospitals / police / clinics / fire / tourist
+  help-desks with distance.
+- A numbered, prioritised **recommendations** checklist tailored to the
+  advisory level, the geofence membership, the cluster mix, and the
+  time-of-day.
+
+### Exports
+
+| Format | Use |
+|---|---|
+| **PDF** (`reportlab`) | colour-stripe header, two-column factor + help layout, incident list with notes, cluster row, recommendations checklist — print or attach |
+| **JSON** | stable `waysafe.advisory.v1` schema — diff two briefs, store in a CRM, embed in a chatbot |
+| **Markdown** | drop into a WhatsApp / email / Notion page in one paste |
+
+Engine in `advisory.py` (≈540 LOC, pure-stdlib + reuse of every other
+project module + `reportlab` for the PDF only). UI render lives in
+`theme.render_advisory_brief`.
+
+---
+
+## 🧭 Compass — Destination Showdown (Day 36)
+
+The Advisory answers *"is **this** place safe?"*. But tourists rarely have
+one fixed destination — they choose between options. Compass answers the
+**comparative** question: *Baga or Anjuna for dinner? Stay in Calangute or
+move to Panaji?* It runs every engine over 2–5 candidates **at your depart
+time** and returns one ranked verdict.
+
+### Compass score
+
+```
+compass = clip( safety_score
+                − 16 · forecast_risk_at_depart      (0..1 → up to −16)
+                − cluster_penalty ,                  (capped at −20)
+                0, 100 )
+
+cluster_penalty = Σ over overlapping clusters  status_weight · (severity_mean / 5)
+   status_weight:  Critical 12 · Emerging 6 · Steady 2 · Cooling 0
+```
+
+The safety score is a static snapshot. The **forecast term** prices *when*
+you're going (a calm beach at 3 PM is not the same beach at 2 AM). The
+**cluster term** folds in Sentinel's *velocity* — an escalating hotspot
+drags a destination down even when its historical score looks fine. The
+advisory level shown per card uses the same thresholds (and the same
+"escalating clusters force-bump" rule) as the Advisory tab, so the two
+surfaces never disagree.
+
+### What the showdown contains
+
+- A **verdict hero** — the winner's Compass ring, the headline
+  (`clear safe pick` / `edges it` / `just shades it` / `neck-and-neck`
+  scaled by margin), the *deciding factor* ("wins mainly on nearest
+  help"), and a margin badge.
+- A **podium** of ranked cards — gold/silver/bronze rank badge, advisory
+  pill, a Compass-score bar coloured red→amber→green, and three mini-stats
+  (incidents nearby · nearest help km · depart-hour forecast %).
+- A heat-mapped **comparison matrix** — destinations as columns, factors
+  as rows (Compass score, Safety score, Forecast risk, Incidents nearby,
+  Nearest help, Live clusters). Every cell is coloured by *goodness*
+  (greener = safer) so the trade-offs read at a glance, with the winner's
+  column highlighted.
+- A **"why each destination scored that way"** drill-down with the raw
+  safety factor breakdown and the safer hour to visit *that* spot.
+
+### Exports
+
+| Format | Use |
+|---|---|
+| **JSON** | stable `waysafe.compass.v1` schema — full per-destination breakdown + verdict |
+| **Markdown** | a verdict + leaderboard table + per-destination notes, one paste into WhatsApp / email / Notion |
+
+Engine in `compass.py` (≈460 LOC, pure-stdlib + reuse of `safety`,
+`forecast`, and `sentinel`). UI render lives in `theme.render_compass`.
 
 ---
 
@@ -248,12 +395,14 @@ positions.
 
 ```
 WaySafe/
-│── app.py              # Streamlit shell — Tourist / Authority / Auditor roles, 10 tabs
+│── app.py              # Streamlit shell — Tourist / Authority / Auditor roles, 12 tabs
 │── safety.py           # Live 0–100 score + heatmap weights + point_risk()
 │── routing.py          # A* over priced grid + GPX + forecast-aware variant
 │── forecast.py         # Empirical-Bayes spatiotemporal hazard model
 │── itinerary.py        # Multi-stop planner — 2-opt order + iCal/GPX export
-│── sentinel.py         # 🆕 DBSCAN clusters + velocity grading + Risk Pulse
+│── sentinel.py         # DBSCAN clusters + velocity grading + Risk Pulse
+│── advisory.py         # Travel Advisory brief — fusion engine + PDF / JSON / markdown
+│── compass.py          # 🆕 Destination Showdown — multi-target ranking + JSON / markdown
 │── companion.py        # Live Trip Companion — trips, alerts, broadcasts
 │── theme.py            # Dark theme + render_* helpers
 │── utils.py            # haversine, point_in_polygon, sha256, build_merkle
@@ -362,6 +511,13 @@ velocity ≥ 1.3   →  Emerging          n_emerging ≥ 2                  → 
 velocity < 0.6   →  Cooling           otherwise                       →  Pulse: Calm
 ```
 
+**Compass score (destination showdown)**
+```
+compass = clip( safety_score − 16·forecast_risk_at_depart − cluster_penalty, 0, 100)
+cluster_penalty = min(20, Σ_overlap status_weight · severity_mean/5)
+   status_weight:  Critical 12 · Emerging 6 · Steady 2 · Cooling 0
+```
+
 ---
 
 ## 📍 Roadmap
@@ -372,6 +528,8 @@ velocity < 0.6   →  Cooling           otherwise                       →  Pul
 - [x] **Live Trip Companion + trusted-contacts broadcast** (round 3 closer)
 - [x] **Multi-stop itinerary chaining** (2-opt order + Gantt + iCal export, Day 21)
 - [x] **Sentinel — live cluster intel + emerging-hotspot alerts** (DBSCAN + velocity grading + Risk Pulse, Day 26)
+- [x] **Travel Advisory — single-page pre-trip brief** (fusion engine + PDF / JSON / markdown, Day 31)
+- [x] **Compass — multi-destination safety showdown** (depart-time ranking + heat-mapped matrix, Day 36)
 - [ ] Real-time push (web-sockets) instead of file-tail simulation
 - [ ] Mobile-first PWA shell with native geolocation feed
 - [ ] Live traffic / road-closure overlay (HERE or Mapbox)

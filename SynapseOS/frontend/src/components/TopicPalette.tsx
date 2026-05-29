@@ -6,15 +6,17 @@ type Props = {
   communities: Community[];
   isolated: number | null;
   onIsolate: (id: number | null) => void;
+  onSynthesize?: (id: number) => void;
 };
 
 /**
  * The "topic palette" — the list of auto-derived clusters with their
  * names, sizes, and the three terms that distinguish them. Clicking a
  * cluster *isolates* it in the canvas (everything outside fades out);
- * clicking the active one again clears the isolation.
+ * clicking the active one again clears the isolation. The ❍ button opens
+ * a Synthesis brief — the cluster's notes synthesized into readable prose.
  */
-export function TopicPalette({ communities, isolated, onIsolate }: Props) {
+export function TopicPalette({ communities, isolated, onIsolate, onSynthesize }: Props) {
   if (communities.length === 0) {
     return (
       <div className="rounded-xl bg-white/[0.015] ring-1 ring-white/5 p-4 text-xs text-ink-300">
@@ -48,15 +50,18 @@ export function TopicPalette({ communities, isolated, onIsolate }: Props) {
         {communities.map((c) => {
           const active = isolated === c.id;
           return (
-            <li key={c.id}>
+            <li
+              key={c.id}
+              className={`group flex items-stretch gap-1 rounded-lg pr-1 transition ${
+                active
+                  ? "bg-white/[0.05] ring-1 ring-white/15"
+                  : "hover:bg-white/[0.03] ring-1 ring-transparent"
+              }`}
+            >
               <button
                 onClick={() => onIsolate(active ? null : c.id)}
                 title={active ? "click to clear isolation" : "isolate this cluster"}
-                className={`group w-full text-left flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition ${
-                  active
-                    ? "bg-white/[0.05] ring-1 ring-white/15"
-                    : "hover:bg-white/[0.03] ring-1 ring-transparent"
-                }`}
+                className="flex-1 min-w-0 text-left flex items-start gap-2.5 px-2 py-1.5"
               >
                 <span
                   className="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
@@ -88,6 +93,17 @@ export function TopicPalette({ communities, isolated, onIsolate }: Props) {
                   )}
                 </span>
               </button>
+              {onSynthesize && (
+                <button
+                  onClick={() => onSynthesize(c.id)}
+                  title="synthesize this topic"
+                  aria-label={`synthesize ${c.name}`}
+                  className="self-center shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-ink-400 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-white/[0.06] transition"
+                  style={{ color: c.color }}
+                >
+                  <span aria-hidden className="text-sm leading-none">❍</span>
+                </button>
+              )}
             </li>
           );
         })}
