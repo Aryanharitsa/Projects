@@ -2,17 +2,141 @@
 
 A side‑by‑side LLM evaluation studio. Run the **same prompt** against multiple
 frontier models in parallel, score them with an LLM‑as‑judge (or a **panel of
-judges**), **vote on them yourself**, version your prompts, and keep **every
-run** in a queryable, comparable history — all in one view. Then open
-**Insights** and the whole history rolls up into model scorecards and a
-**quality/cost efficiency frontier** that answers the one question this tool
-exists for: *which model is actually worth your money?*
+judges**), **vote on them yourself**, version your prompts, keep **every
+run** in a queryable, comparable history, see the **quality/cost frontier**
+across your whole spend in Insights, and — new this round — define **Eval
+Suites**: reproducible test batteries you can re‑run against any model to
+catch regressions before users do.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Studio Insights (model scorecards + the quality/cost frontier)
+## 🆕 What's new — Eval Suites (reproducible test batteries + regression detection)
+
+> Round‑8. The playground had every *one‑off* measurement tool (Arena,
+> Judge, Consensus, Vote, History, Library, Insights) but no way to run the
+> **same fixed battery of cases** against every candidate model and watch
+> for regressions when you change the prompt. That's what every real
+> LLM‑ops workflow eventually needs — and that's what this move ships.
+
+Hit **Suites** in the sidebar. A suite is a named, ordered list of *test
+cases*. Each case is a user prompt plus zero or more pass criteria
+(AND‑combined):
+
+- **`must contain`** — case‑insensitive substring.
+- **`must NOT contain`** — substring must be absent (catches refusals,
+  hallucinated phrases, banned style).
+- **`regex match`** — Python `re.search` over the response.
+- **`valid JSON`** — response (with optional ```json fences stripped) must
+  parse with `json.loads`.
+- **`judge ≥ N`** — LLM‑as‑judge composite must clear a threshold; checked
+  only when the run is judged.
+
+A case with no criteria is a **latency‑only smoke** — pass = the call
+succeeded with a non‑empty body.
+
+### What you get for free
+
+- **First‑click "Seed Smoke Test"** — six starter cases (factual recall,
+  refusal, JSON formatting, arithmetic, summarisation quality, code
+  synthesis) so a brand‑new user can press *Run* in 10 seconds and see
+  every column populate.
+- **The Run Config panel** — pick a provider/model, optionally turn on a
+  judge model, and a single click fans the whole suite out in parallel
+  (`ThreadPoolExecutor`, cap of 6 workers — a 12‑case suite finishes in
+  ~2× the slowest call, not 12×).
+- **The Run Report** — 4 gradient KPI tiles (pass rate, avg composite,
+  total cost, wall time), a **criteria breakdown** that pivots every
+  AND‑combined rule across cases ("`regex` passed 4/5, `judge_min` passed
+  3/5"), and per‑case rows you can expand to see the prompt, the
+  response, the judge rationale, and a **per‑criterion checklist** of why
+  it passed or failed.
+- **Run history per suite** with a **side‑by‑side compare drawer**: pick
+  any two runs (different models, same model after a prompt edit, or the
+  same model at different points in time), see the headline deltas
+  (Δpass‑rate, Δcomposite, Δcost, Δwall‑time) and a **per‑case regression
+  table** that calls out **fixed** vs **regressed** vs **same** with an
+  icon. This is the screenshot you ship in PRs.
+- **A global stats banner** at the top — total suites, cases, runs,
+  spend, plus the **best model** crown (highest avg pass‑rate across all
+  its runs, with run count next to it).
+
+### Why every criterion has its own reason
+
+Pass/fail isn't a black box. The engine returns a `reasons[]` array per
+case — each entry is `{kind, expected, ok, detail?}` — so the UI can
+render a per‑criterion chip‑row showing which rules fired green, which
+fired red, and *why* (e.g. `judge_min: ≥70 · got 64.2`). When you fail a
+case, you can see in two seconds whether it was the substring, the
+regex, the JSON parse, or the judge.
+
+### API surface
+
+```
+POST   /api/suites                       create suite
+GET    /api/suites                       list (q, tag, starred, limit, offset)
+POST   /api/suites/seed                  idempotent "Smoke Test" starter
+GET    /api/suites/stats                 portfolio rollup + best model
+GET    /api/suites/<id>                  detail + cases + recent_runs[]
+POST   /api/suites/<id>/meta             rename / re‑tag / star
+DELETE /api/suites/<id>                  cascade‑delete cases + runs + results
+POST   /api/suites/<id>/cases            add case
+POST   /api/suites/<id>/cases/<cid>      update case
+DELETE /api/suites/<id>/cases/<cid>      delete + re‑pack indices
+POST   /api/suites/<id>/cases/reorder    body: { case_ids: [...] }
+POST   /api/suites/<id>/runs             kick off a run (sync, parallel)
+GET    /api/suites/<id>/runs             list recent runs for this suite
+GET    /api/suites/runs/<rid>            run report + per‑case results[]
+DELETE /api/suites/runs/<rid>            delete a run + its results
+POST   /api/suites/runs/compare          body: { a, b } → per‑case diff
+```
+
+### `POST /api/suites/<id>/runs` body
+
+```json
+{
+  "provider":       "OpenAI",
+  "model":          "gpt-4o",
+  "system_prompt":  "optional, applied to every case",
+  "judge_provider": "Anthropic",
+  "judge_model":    "claude-3-5-sonnet-20241022",
+  "rubric":         [{"name": "Correctness", "weight": 0.4, ...}],
+  "note":           "after tightening the system prompt"
+}
+```
+
+Response (`run`) includes `n_passed/n_failed/n_errored`, `pass_rate`,
+`avg_composite`, `total_cost`, `wall_latency`, plus a `results[]` array
+where every entry carries the response, latency, cost, judge composite +
+rationale, the boolean `passed`, and the per‑criterion `reasons[]` so you
+never have to ask "*why* did this fail?"
+
+### `POST /api/suites/runs/compare` returns
+
+```json
+{
+  "summary": {
+    "a": { "id": "...", "model_key": "OpenAI:gpt-4o", "pass_rate": 83.3, "avg_composite": 71 },
+    "b": { "id": "...", "model_key": "OpenAI:gpt-4o-mini", "pass_rate": 66.6, "avg_composite": 62 },
+    "delta": { "pass_rate": -16.7, "avg_composite": -9, "total_cost": -0.0085, "wall_latency": -1.2 }
+  },
+  "rows": [
+    { "case_id": "...", "title": "Capital of France",
+      "a": { "passed": true, "composite": 88 },
+      "b": { "passed": true, "composite": 71 },
+      "delta": { "composite": -17, "passed": 0, "latency": -0.4, "cost": -0.001 } }
+  ]
+}
+```
+
+`delta.passed` is `+1 = fixed`, `-1 = regressed`, `0 = same` — so a
+single column tells you whether the new model/prompt fixed cases,
+regressed them, or held steady.
+
+---
+
+## Studio Insights (model scorecards + the quality/cost frontier)
 
 > Round‑7. The playground could *measure* everything — Arena latency & cost,
 > judge composites, multi‑judge consensus, blind‑vote ELO — and *persist* it

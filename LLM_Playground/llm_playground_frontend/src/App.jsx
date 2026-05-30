@@ -52,6 +52,7 @@ import {
   GitBranch,
   Save,
   Gauge,
+  FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -59,6 +60,7 @@ import HistoryPanel from './components/HistoryPanel';
 import VotePanel from './components/VotePanel';
 import PromptLibrary from './components/PromptLibrary';
 import InsightsPanel from './components/InsightsPanel';
+import EvalSuites from './components/EvalSuites';
 import './App.css';
 
 const App = () => {
@@ -1051,7 +1053,14 @@ const App = () => {
                       <RadioGroupItem value="insights" id="insights" />
                       <Label htmlFor="insights" className="cursor-pointer flex items-center gap-1">
                         <Gauge className="w-3.5 h-3.5 text-indigo-600" />
-                        Insights <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500 to-emerald-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Insights
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="suites" id="suites" />
+                      <Label htmlFor="suites" className="cursor-pointer flex items-center gap-1">
+                        <FlaskConical className="w-3.5 h-3.5 text-indigo-600" />
+                        Suites <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1318,7 +1327,11 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'insights' ? (
+          {selectedMode === 'suites' ? (
+            <div className="lg:col-span-3">
+              <EvalSuites />
+            </div>
+          ) : selectedMode === 'insights' ? (
             <div className="lg:col-span-3">
               <InsightsPanel />
             </div>

@@ -279,6 +279,99 @@ class ApiService {
     );
   }
 
+  // ─── Eval Suites ───────────────────────────────────────────────────────────
+  // Reproducible test batteries — define a fixed list of cases, fan them out
+  // against any model, watch pass-rate + judge composite move when you change
+  // the prompt or swap the model. Round-8 move.
+
+  async listSuites(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '' || v === false) return;
+      qs.set(k, v === true ? '1' : String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/suites${suffix}`);
+  }
+
+  async createSuite(payload) {
+    return this.request('/suites', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedSmokeSuite() {
+    return this.request('/suites/seed', { method: 'POST' });
+  }
+
+  async getSuite(suiteId) {
+    return this.request(`/suites/${encodeURIComponent(suiteId)}`);
+  }
+
+  async deleteSuite(suiteId) {
+    return this.request(`/suites/${encodeURIComponent(suiteId)}`, { method: 'DELETE' });
+  }
+
+  async setSuiteMeta(suiteId, meta) {
+    return this.request(`/suites/${encodeURIComponent(suiteId)}/meta`, {
+      method: 'POST',
+      body: JSON.stringify(meta),
+    });
+  }
+
+  async addSuiteCase(suiteId, payload) {
+    return this.request(`/suites/${encodeURIComponent(suiteId)}/cases`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateSuiteCase(suiteId, caseId, payload) {
+    return this.request(
+      `/suites/${encodeURIComponent(suiteId)}/cases/${encodeURIComponent(caseId)}`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
+  async deleteSuiteCase(suiteId, caseId) {
+    return this.request(
+      `/suites/${encodeURIComponent(suiteId)}/cases/${encodeURIComponent(caseId)}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  async runSuite(suiteId, payload) {
+    return this.request(`/suites/${encodeURIComponent(suiteId)}/runs`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listSuiteRuns(suiteId, { limit = 50, offset = 0 } = {}) {
+    const qs = new URLSearchParams();
+    if (limit) qs.set('limit', limit);
+    if (offset) qs.set('offset', offset);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/suites/${encodeURIComponent(suiteId)}/runs${suffix}`);
+  }
+
+  async getSuiteRun(runId) {
+    return this.request(`/suites/runs/${encodeURIComponent(runId)}`);
+  }
+
+  async deleteSuiteRun(runId) {
+    return this.request(`/suites/runs/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+  }
+
+  async compareSuiteRuns(a, b) {
+    return this.request('/suites/runs/compare', {
+      method: 'POST',
+      body: JSON.stringify({ a, b }),
+    });
+  }
+
+  async suitesStats() {
+    return this.request('/suites/stats');
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.
