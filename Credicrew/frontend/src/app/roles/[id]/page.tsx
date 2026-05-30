@@ -319,6 +319,18 @@ export default function RoleDetail() {
             >
               Decision Studio →
             </Link>
+            <Link
+              href={`/roles/${role.id}/calibration`}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                total === 0
+                  ? 'pointer-events-none border border-white/10 bg-white/5 text-white/40'
+                  : 'border border-fuchsia-400/40 bg-gradient-to-r from-fuchsia-400/15 to-sky-400/15 text-fuchsia-100 hover:from-fuchsia-400/25 hover:to-sky-400/25'
+              }`}
+              title={total === 0 ? 'Shortlist is empty' : 'Open Calibration Studio'}
+              aria-disabled={total === 0}
+            >
+              Calibration →
+            </Link>
             <button
               onClick={onExportCsv}
               disabled={total === 0}

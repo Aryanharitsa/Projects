@@ -283,6 +283,26 @@ async def aml_typologies_classify(payload: Dict[str, Any]) -> Dict[str, Any]:
         return r.json()
 
 
+# ----- Model validation / backtest pass-through (round-7, day-35)
+
+
+@app.get("/aml/backtest/sample")
+async def aml_backtest_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/backtest/sample")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/backtest")
+async def aml_backtest(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/backtest", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
 # ----- AML case management pass-through (round-3, day-15)
 
 

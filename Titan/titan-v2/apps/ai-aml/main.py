@@ -42,6 +42,13 @@ GET    /aml/cases/{id}/network              auto-runs analysis from the case's
 POST   /aml/cases/{id}/network/clearing     re-runs the clearing counterfactual
                                             with caller-supplied transactions
                                             (override path for the AML console)
+
+Model validation / backtest (round-7, day-35)
+---------------------------------------------
+GET    /aml/backtest/sample        bundled labelled validation set (one-click demo)
+POST   /aml/backtest               replay the engine against labelled outcomes →
+                                   confusion matrix + threshold sweep + ROC AUC +
+                                   per-detector discrimination + tuning verdict
 """
 
 from __future__ import annotations
@@ -52,6 +59,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+import backtest as backtest_engine
 import cases as case_store
 import network as network_engine
 import risk as risk_engine
@@ -59,7 +67,7 @@ import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.5.0"
+ENGINE_VERSION = "titan-aml/1.6.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -227,6 +235,70 @@ def typology_classify(req: TypologyClassifyReq = Body(...)) -> Dict[str, Any]:
         "typology_engine": typology_engine.ENGINE_VERSION,
         "account_id": req.account_report.get("account_id"),
         "typologies": matches,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Model validation / backtest (round-7, day-35)
+# ---------------------------------------------------------------------------
+
+
+class BacktestReq(BaseModel):
+    transactions: List[Tx]
+    labels: Any = Field(
+        ...,
+        description=(
+            "Ground-truth labels. Either a list of confirmed-suspicious "
+            "account ids (every other scored account is treated as benign), "
+            "or a map of account_id -> truthy that restricts the evaluation "
+            "to adjudicated accounts only."
+        ),
+    )
+    weights: Optional[Dict[str, float]] = Field(
+        default=None,
+        description="Candidate per-detector weight overrides to validate.",
+    )
+    beta: float = Field(
+        default=backtest_engine.DEFAULT_BETA, gt=0.0, le=10.0,
+        description="Fβ recall-weighting (compliance default 2.0).",
+    )
+    operating_threshold: float = Field(
+        default=backtest_engine.DEFAULT_OPERATING_THRESHOLD, ge=0.0, le=100.0,
+        description="The current production alert cut to benchmark against.",
+    )
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+@app.get("/aml/backtest/sample")
+def backtest_sample() -> Dict[str, Any]:
+    """Bundled labelled validation set for the one-click backtest demo."""
+
+    return {"ok": True, "engine": ENGINE_VERSION, **backtest_engine.get_sample()}
+
+
+@app.post("/aml/backtest")
+def run_backtest(req: BacktestReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    if not req.labels:
+        raise HTTPException(status_code=400, detail="labels are required to backtest")
+    rows = [t.model_dump() for t in req.transactions]
+    threshold = (
+        req.sanctions_threshold
+        if req.sanctions_threshold is not None
+        else risk_engine.SANCTIONS_HIT_THRESHOLD
+    )
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        **backtest_engine.backtest(
+            rows,
+            req.labels,
+            weights=req.weights,
+            beta=req.beta,
+            operating_threshold=req.operating_threshold,
+            sanctions_threshold=threshold,
+        ),
     }
 
 

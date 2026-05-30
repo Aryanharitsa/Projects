@@ -15,6 +15,8 @@ from src.judge import DEFAULT_RUBRIC, judge_compare, judge_consensus_compare
 from src import history
 from src import vote_arena
 from src import prompts as prompts_lib
+from src import insights as insights_lib
+from src import evals as evals_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -898,6 +900,215 @@ def prompts_version_runs(prompt_id, version_id):
         limit = 50
     rows = prompts_lib.runs_for_version(version_id, limit=limit)
     return jsonify({'success': True, 'runs': rows, 'total': len(rows)})
+
+
+# ---------------------------------------------------------------------------
+# Eval Suites — reproducible test batteries. Define a fixed list of test
+# cases, fan them out against any model, watch pass-rate + judge composite
+# regress (or improve) as you change the prompt / swap the model. Round-8.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/suites', methods=['GET'])
+def suites_list():
+    args = request.args
+
+    def _bool(name: str) -> bool:
+        v = args.get(name, '').strip().lower()
+        return v in ('1', 'true', 'yes', 'on')
+
+    rows, total = evals_lib.list_suites(
+        q=(args.get('q') or '').strip() or None,
+        tag=(args.get('tag') or '').strip() or None,
+        starred_only=_bool('starred'),
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'suites': rows, 'total': total})
+
+
+@llm_bp.route('/suites', methods=['POST'])
+def suites_create():
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'name is required'}), 400
+    suite = evals_lib.create_suite(
+        name=name,
+        description=(data.get('description') or ''),
+        tag=(data.get('tag') or '').strip() or None,
+    )
+    return jsonify({'success': True, 'suite': suite}), 201
+
+
+@llm_bp.route('/suites/seed', methods=['POST'])
+def suites_seed():
+    """Idempotently create the 'Smoke Test' starter suite."""
+    suite = evals_lib.seed_smoke_suite()
+    return jsonify({'success': True, 'suite': suite}), 201
+
+
+@llm_bp.route('/suites/stats', methods=['GET'])
+def suites_stats():
+    return jsonify({'success': True, 'stats': evals_lib.stats()})
+
+
+@llm_bp.route('/suites/runs/compare', methods=['POST'])
+def suites_runs_compare():
+    data = request.get_json() or {}
+    a = (data.get('a') or '').strip()
+    b = (data.get('b') or '').strip()
+    if not a or not b:
+        return jsonify({'success': False, 'error': 'a and b are required'}), 400
+    if a == b:
+        return jsonify({'success': False, 'error': 'a and b must differ'}), 400
+    result = evals_lib.compare_runs(a, b)
+    if result is None:
+        return jsonify({'success': False, 'error': 'one or both runs not found'}), 404
+    return jsonify({'success': True, 'compare': result})
+
+
+@llm_bp.route('/suites/runs/<run_id>', methods=['GET'])
+def suites_run_get(run_id):
+    run = evals_lib.get_run(run_id)
+    if not run:
+        return jsonify({'success': False, 'error': 'run not found'}), 404
+    return jsonify({'success': True, 'run': run})
+
+
+@llm_bp.route('/suites/runs/<run_id>', methods=['DELETE'])
+def suites_run_delete(run_id):
+    if not evals_lib.delete_run(run_id):
+        return jsonify({'success': False, 'error': 'run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/suites/<suite_id>', methods=['GET'])
+def suites_get(suite_id):
+    suite = evals_lib.get_suite(suite_id)
+    if not suite:
+        return jsonify({'success': False, 'error': 'suite not found'}), 404
+    return jsonify({'success': True, 'suite': suite})
+
+
+@llm_bp.route('/suites/<suite_id>', methods=['DELETE'])
+def suites_delete(suite_id):
+    if not evals_lib.delete_suite(suite_id):
+        return jsonify({'success': False, 'error': 'suite not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/suites/<suite_id>/meta', methods=['POST'])
+def suites_set_meta(suite_id):
+    data = request.get_json() or {}
+    ok = evals_lib.set_suite_meta(
+        suite_id,
+        name=data.get('name') if isinstance(data.get('name'), str) else None,
+        description=data.get('description') if isinstance(data.get('description'), str) else None,
+        tag=data.get('tag') if isinstance(data.get('tag'), str) else None,
+        starred=bool(data['starred']) if 'starred' in data else None,
+    )
+    if not ok:
+        return jsonify({'success': False, 'error': 'suite not found or nothing to update'}), 404
+    return jsonify({'success': True, 'suite': evals_lib.get_suite(suite_id)})
+
+
+@llm_bp.route('/suites/<suite_id>/cases', methods=['POST'])
+def suites_add_case(suite_id):
+    data = request.get_json() or {}
+    case = evals_lib.add_case(
+        suite_id,
+        title=data.get('title', ''),
+        user_prompt=data.get('user_prompt', ''),
+        expected_contains=data.get('expected_contains', ''),
+        expected_not_contains=data.get('expected_not_contains', ''),
+        expected_regex=data.get('expected_regex', ''),
+        expect_json=bool(data.get('expect_json', False)),
+        judge_min=data.get('judge_min'),
+        note=data.get('note', ''),
+    )
+    if not case:
+        return jsonify({'success': False, 'error': 'suite not found'}), 404
+    return jsonify({'success': True, 'case': case,
+                    'suite': evals_lib.get_suite(suite_id)}), 201
+
+
+@llm_bp.route('/suites/<suite_id>/cases/<case_id>', methods=['POST'])
+def suites_update_case(suite_id, case_id):
+    data = request.get_json() or {}
+    case = evals_lib.update_case(case_id, **data)
+    if not case:
+        return jsonify({'success': False, 'error': 'case not found'}), 404
+    return jsonify({'success': True, 'case': case,
+                    'suite': evals_lib.get_suite(suite_id)})
+
+
+@llm_bp.route('/suites/<suite_id>/cases/<case_id>', methods=['DELETE'])
+def suites_delete_case(suite_id, case_id):
+    if not evals_lib.delete_case(case_id):
+        return jsonify({'success': False, 'error': 'case not found'}), 404
+    return jsonify({'success': True, 'suite': evals_lib.get_suite(suite_id)})
+
+
+@llm_bp.route('/suites/<suite_id>/cases/reorder', methods=['POST'])
+def suites_reorder_cases(suite_id):
+    data = request.get_json() or {}
+    ids = data.get('case_ids') or []
+    if not isinstance(ids, list):
+        return jsonify({'success': False, 'error': 'case_ids must be a list'}), 400
+    evals_lib.reorder_cases(suite_id, ids)
+    return jsonify({'success': True, 'suite': evals_lib.get_suite(suite_id)})
+
+
+@llm_bp.route('/suites/<suite_id>/runs', methods=['POST'])
+def suites_run(suite_id):
+    data = request.get_json() or {}
+    provider = (data.get('provider') or '').strip()
+    model = (data.get('model') or '').strip()
+    if not provider or not model:
+        return jsonify({'success': False, 'error': 'provider and model are required'}), 400
+    try:
+        run = evals_lib.run_suite(
+            suite_id,
+            provider=provider,
+            model=model,
+            system_prompt=(data.get('system_prompt') or ''),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            rubric=data.get('rubric'),
+            note=(data.get('note') or ''),
+            provider_factory=provider_factory,
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    if run is None:
+        return jsonify({'success': False, 'error': 'suite not found'}), 404
+    if isinstance(run, dict) and run.get('error') == 'no cases in suite':
+        return jsonify({'success': False, 'error': 'suite has no cases'}), 400
+    return jsonify({'success': True, 'run': run})
+
+
+@llm_bp.route('/suites/<suite_id>/runs', methods=['GET'])
+def suites_runs_list(suite_id):
+    rows, total = evals_lib.list_runs(
+        suite_id=suite_id,
+        limit=int(request.args.get('limit', 50) or 50),
+        offset=int(request.args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'runs': rows, 'total': total})
+
+
+@llm_bp.route('/insights', methods=['GET'])
+def studio_insights():
+    """Cross-cutting analytics over the whole run history: model scorecards,
+    the quality/cost efficiency frontier, spend timeline, provider roll-up, and
+    a headline summary — all derived from the persisted runs + ELO votes."""
+    try:
+        min_appearances = int(request.args.get('min_appearances', 1) or 1)
+    except (TypeError, ValueError):
+        min_appearances = 1
+    data = insights_lib.build_insights(min_appearances=max(1, min_appearances))
+    return jsonify({'success': True, **data})
 
 
 @llm_bp.route('/august/upload', methods=['POST'])

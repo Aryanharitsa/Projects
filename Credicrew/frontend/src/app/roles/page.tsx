@@ -28,6 +28,7 @@ export default function RolesIndex() {
           <nav className="flex items-center gap-6 text-sm text-white/80">
             <Link href="/" className="hover:text-white">Discover</Link>
             <Link href="/roles" className="text-white">Roles</Link>
+            <Link href="/hq" className="hover:text-white">Command Center</Link>
             <Link href="/pipeline" className="hover:text-white">Pipeline</Link>
             <Link href="/submit" className="hover:text-white">Submit</Link>
           </nav>
