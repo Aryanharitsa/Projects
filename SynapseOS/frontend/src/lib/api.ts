@@ -15,6 +15,7 @@ import type {
   OrphanSuggestion,
   PathResult,
   SearchHit,
+  TensionReport,
   Trail,
   TrailDraftStep,
   TrailOrigin,
@@ -181,4 +182,22 @@ export const api = {
 
   digestExportUrl: (clusterId: number) =>
     `${BASE}/digest/export.md?cluster_id=${clusterId}`,
+
+  tensions: (opts?: { floor?: number; limit?: number; threshold?: number; topK?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.floor !== undefined) q.set("floor", String(opts.floor));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    const qs = q.toString();
+    return j<TensionReport>(`/tensions${qs ? `?${qs}` : ""}`);
+  },
+
+  tensionsExportUrl: (opts?: { floor?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.floor !== undefined) q.set("floor", String(opts.floor));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return `${BASE}/tensions/export.md${qs ? `?${qs}` : ""}`;
+  },
 };

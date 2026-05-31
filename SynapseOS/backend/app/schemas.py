@@ -375,3 +375,50 @@ class ClusterDigestOut(BaseModel):
     llm_available: bool
     llm_provider: str | None = None
     notice: str | None = None
+
+
+# --------------------------------------------------------------- tensions
+
+
+class TensionSignalOut(BaseModel):
+    kind: Literal["polarity", "antonym", "contrast", "title"]
+    weight: float
+    detail: str
+
+
+class TensionEvidenceOut(BaseModel):
+    note_id: int
+    title: str
+    sentence: str
+    polarity: int
+
+
+class TensionOut(BaseModel):
+    a_id: int
+    a_title: str
+    b_id: int
+    b_title: str
+    cosine: float
+    magnitude: float
+    signals: list[TensionSignalOut]
+    evidence: list[TensionEvidenceOut]
+    bridge_title: str
+    bridge_prompt: str
+    bridge_tags: list[str]
+    kind: Literal["internal", "cross"]
+    cluster_a: int | None = None
+    cluster_a_name: str | None = None
+    cluster_a_color: str | None = None
+    cluster_b: int | None = None
+    cluster_b_name: str | None = None
+    cluster_b_color: str | None = None
+
+
+class TensionReportOut(BaseModel):
+    threshold: float
+    floor: float
+    total_pairs_scanned: int
+    candidate_count: int
+    tension_count: int
+    tensions: list[TensionOut]
+    stats: dict

@@ -54,6 +54,20 @@ threshold live, and watch your topical clusters discover themselves.
   whole brief as portable Markdown. Extractive + deterministic by
   default; optional LLM polish (`SYNAPSE_LLM_KEY`) rewrites the synthesis
   under a strict citation contract, falling back silently on any error.
+- **Tensions — where your second brain disagrees with itself.**
+  Synthesis surfaces what a cluster *says*; Tensions surfaces where
+  your graph *contradicts itself*. For every pair of semantically-close
+  notes whose stances diverge — opposing valence ("good · works · ship"
+  vs "bad · breaks · overrated"), an antonym pair (simple/complex,
+  fast/slow, overrated/underrated), both-sided contrast cues, or a
+  title clash ("Against folders" vs "Why folders work") — the panel
+  shows the conflict with one quote per side as proof, a magnitude
+  meter, and a **⤴ Reconcile** button that pre-fills the composer with
+  an auto-generated bridge note draft. Tabs split internal (same
+  cluster, where you expected agreement) from cross (philosophical
+  disagreement between topics). The header badge tells you how many
+  unresolved contradictions your second brain is currently carrying.
+  Pure stdlib · deterministic · portable Markdown export.
 - **Orphan rescue.** Notes with no synapses surface in their own panel
   alongside their strongest near-miss neighbor and the exact `τ` value
   that would attach them. Lower the threshold, or refine the note —
@@ -127,7 +141,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis modals                 │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions modals      │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -149,7 +163,11 @@ threshold live, and watch your topical clusters discover themselves.
 │   cluster +                        diversity)   synthesis.py             │
 │   neighbor                                      (centroid · cohesion ·   │
 │   preview)                                       cited overview · claims ·│
-│                                                  open threads · bridges)  │
+│                                                  open threads · bridges) │
+│                                                 tensions.py              │
+│                                                 (polarity · antonyms ·   │
+│                                                  contrast · title-clash ·│
+│                                                  bridge-prompt + md export) │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -442,6 +460,75 @@ extractive overview — synthesis never silently loses its receipts.
 
 Pure stdlib for the default path — no new Python deps.
 
+### Tensions
+
+Every other surface in SynapseOS reveals what *agrees*: clusters bind
+related notes together, synapses draw the strongest links, Synthesis
+paraphrases the consensus inside a cluster. None of them surface where
+your graph **disagrees with itself**. A note that says
+*"boring tech wins"* sitting next to one that says *"that framework was
+a mistake"* is a **tension** — a place where your beliefs haven't been
+reconciled — and that's the highest-value PKM signal nobody else exposes.
+
+Click **⟷ tensions** in the header. Each row pairs two
+semantically-close notes whose stances disagree, named with a magnitude
+meter and a one-quote-per-side proof of the conflict. The **Reconcile**
+button pre-fills the composer with a bridge note draft so the
+disagreement turns into the next atomic note in one click.
+
+For any pair `(a, b)` we declare a tension when ``cosine(a, b) ≥ floor``
+(default `0.18`) **and** at least one detector fires:
+
+```
+polarity   one note leans positive (good · best · ship · wins · works ·
+           scale · …), the other negative (bad · worst · breaks · fails ·
+           overrated · slow · …). Negation flips local valence so
+           "not bad" reads positive, "not great" negative. Fires when
+           sign(pol_a) ≠ sign(pol_b) and both magnitudes ≥ 1.
+
+antonym    a polar antonym pair appears one per side
+           (simple/complex, fast/slow, overrated/underrated,
+           robust/brittle, …). Two pairs saturates the signal —
+           contradictions aren't additive past a point.
+
+contrast   explicit contrast cues ("but", "however", "although",
+           "actually", …) appear on BOTH sides. One side's hedge is
+           just writing; both sides' is each qualifying the other.
+
+title      title-form contention: "Against X" vs a title sharing X's
+           topic words, or opposite-polarity titles with a shared
+           non-stopword topic token. Light stemming (folder ≈ folders)
+           so the most common plural doesn't hide the obvious pair.
+```
+
+```
+magnitude = clip(cosine(a, b) · (1 + Σ signal weights),  0, 1)
+```
+
+A **title-clash bypass** lets unambiguous "Against X" pairs surface even
+below the cosine floor — the hashing-trick embedder isn't a transformer
+and shouldn't override a deterministic linguistic signal.
+
+Each tension carries:
+
+- **kind** — `internal` (same cluster — where you expected agreement
+  and got conflict) or `cross` (philosophical disagreement between
+  topics). The brief tabs split on this.
+- **evidence** — one quote per side, the most-polarized sentence in
+  each note in the direction of that note's own stance. The UI shows it
+  with a `↑`/`↓` arrow tinted lime/rose.
+- **bridge** — an auto-generated `(title, prompt, tags)` triple. Hit
+  **⤴ Reconcile** and the NoteComposer fills with it; commit and the
+  graph rewires.
+- **markdown export** (`GET /tensions/export.md`) — the whole brief
+  as a portable artifact, sectioned by `internal`/`cross`, every quote
+  and signal preserved.
+
+Pure stdlib, deterministic, pure function of `(notes, embeddings, floor,
+limit)`. The O(N²) pair scan precomputes per-note polarity, word set,
+and best evidence sentence once before the loop so each pair is
+constant-time.
+
 ---
 
 ## API surface
@@ -475,6 +562,8 @@ Pure stdlib for the default path — no new Python deps.
 | `POST` | `/atomize/commit?threshold&top_k` | Bulk insert edited atoms. Body: `{ atoms: [{ title, body, tags[] }] }` (1–64). Returns `{ created: [{ note_id, title, synapses }], synapses_formed }` |
 | `GET`  | `/digest?cluster_id=&threshold&top_k&mode` | Topic synthesis for one cluster: `{ name, color, size, terms[], cohesion, overview, claims[], open_threads[], bridges[], sources[], mode_used, llm_available, notice? }`. `mode` ∈ `auto/extractive/llm`. |
 | `GET`  | `/digest/export.md?cluster_id=…` | Self-contained Markdown brief for one cluster (synthesis · claims · open threads · bridges · sources). |
+| `GET`  | `/tensions?floor=&limit=&threshold=&top_k=` | Detected contradictions: `{ threshold, floor, total_pairs_scanned, candidate_count, tension_count, tensions: [ { a_id, a_title, b_id, b_title, cosine, magnitude, signals: [{ kind, weight, detail }], evidence: [{ note_id, title, sentence, polarity }], bridge_title, bridge_prompt, bridge_tags[], kind: "internal"\|"cross", cluster_a/b/_name/_color } ], stats }`. |
+| `GET`  | `/tensions/export.md?floor=&limit=` | Tensions brief as portable Markdown, sectioned by `internal` / `cross` with both quotes and the bridge prompt per tension. |
 
 Interactive docs at `http://localhost:8000/docs`.
 

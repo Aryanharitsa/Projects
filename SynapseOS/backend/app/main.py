@@ -29,16 +29,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import atomize as atomize_engine
 from . import chat as chat_engine
-from . import community, revisit, schemas, store, synapse, synthesis, trails
+from . import community, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
 app = FastAPI(
     title="SynapseOS",
-    version="0.2.0",
+    version="0.3.0",
     description=(
         "Second-brain OS. Notes auto-link via embedding-based synapses; "
-        "query and traverse the graph through a small, honest API."
+        "query and traverse the graph through a small, honest API. "
+        "Surfaces clusters, synthesises them, and exposes the contradictions "
+        "inside your own writing via /tensions."
     ),
 )
 
@@ -720,4 +722,55 @@ def digest_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{safe}-synthesis.md"'},
+    )
+
+
+# --------------------------------------------------------------- tensions
+
+
+@app.get("/tensions", response_model=schemas.TensionReportOut)
+def tensions_report(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    floor: float = Query(tensions.DEFAULT_FLOOR, ge=0.0, le=1.0),
+    limit: int = Query(tensions.DEFAULT_LIMIT, ge=1, le=100),
+) -> dict:
+    """Detected contradictions across your notes.
+
+    A *tension* is a pair of semantically-close notes whose stances,
+    antonyms, contrast cues, or titles disagree. We return them
+    magnitude-sorted with one evidence sentence per side and an
+    auto-generated bridge prompt the user can adopt in one click.
+
+    ``floor`` is the cosine below which a pair is considered "unrelated"
+    and skipped entirely — overrides let you sweep the brief without a
+    restart.
+    """
+    report = tensions.find_tensions(
+        threshold=threshold, top_k=top_k, floor=floor, limit=limit
+    )
+    return tensions.serialize(report)
+
+
+@app.get("/tensions/export.md")
+def tensions_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    floor: float = Query(tensions.DEFAULT_FLOOR, ge=0.0, le=1.0),
+    limit: int = Query(tensions.DEFAULT_LIMIT, ge=1, le=100),
+) -> Response:
+    """Tensions brief as portable Markdown.
+
+    Two sections (Inside a cluster, Across clusters), one sub-section
+    per tension with both quotes, the firing signals, and the bridge
+    prompt — paste-into-anywhere stand-alone.
+    """
+    report = tensions.find_tensions(
+        threshold=threshold, top_k=top_k, floor=floor, limit=limit
+    )
+    md = tensions.to_markdown(report)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="tensions.md"'},
     )

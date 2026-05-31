@@ -12,6 +12,7 @@ import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { SearchBar } from "@/components/SearchBar";
 import { Synthesis } from "@/components/Synthesis";
+import { Tensions } from "@/components/Tensions";
 import { TopicPalette } from "@/components/TopicPalette";
 import { TrailPlayer } from "@/components/TrailPlayer";
 import { TrailsPanel } from "@/components/TrailsPanel";
@@ -21,6 +22,7 @@ import type {
   Community,
   Graph as GraphT,
   GraphNode,
+  NoteDraft,
   OrphanSuggestion,
   Trail,
   TrailDraftStep,
@@ -43,6 +45,9 @@ export default function Page() {
   const [distillOpen, setDistillOpen] = useState(false);
   const [distillFlash, setDistillFlash] = useState<string | null>(null);
   const [synthClusterId, setSynthClusterId] = useState<number | null>(null);
+  const [tensionsOpen, setTensionsOpen] = useState(false);
+  const [tensionsCount, setTensionsCount] = useState<number | null>(null);
+  const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
   // so the canvas can paint trail mode (dim + overlay polyline) and so
@@ -103,6 +108,29 @@ export default function Page() {
       setBriefBadge(true);
     }
   }, []);
+
+  // Cheap probe of the tension count so the header badge reflects
+  // "your second brain has N unresolved contradictions" without forcing
+  // a full modal-load. Re-runs after every graph refresh so the count
+  // moves when you add or delete notes.
+  useEffect(() => {
+    if (!graph || graph.nodes.length < 2) {
+      setTensionsCount(0);
+      return;
+    }
+    let cancelled = false;
+    api
+      .tensions({ limit: 50 })
+      .then((r) => {
+        if (!cancelled) setTensionsCount(r.tension_count);
+      })
+      .catch(() => {
+        if (!cancelled) setTensionsCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph]);
 
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
@@ -215,6 +243,8 @@ export default function Page() {
         onOpenBrief={() => setBriefOpen(true)}
         briefBadge={briefBadge}
         onOpenDistill={() => setDistillOpen(true)}
+        onOpenTensions={() => setTensionsOpen(true)}
+        tensionsBadge={tensionsCount ?? undefined}
       />
 
       <DailyBrief
@@ -273,9 +303,24 @@ export default function Page() {
         }}
       />
 
+      <Tensions
+        open={tensionsOpen}
+        onClose={() => setTensionsOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onReconcile={(draft) => setComposerDraft(draft)}
+      />
+
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
         <aside className="col-span-12 lg:col-span-3 space-y-5">
-          <NoteComposer onCreate={handleCreate} />
+          <NoteComposer
+            onCreate={handleCreate}
+            draft={composerDraft}
+            onDraftConsumed={() => setComposerDraft(null)}
+          />
           <SearchBar onSelect={setSelected} />
           <TopicPalette
             communities={communities}

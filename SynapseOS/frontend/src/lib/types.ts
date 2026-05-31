@@ -328,3 +328,65 @@ export type ClusterDigest = {
   llm_provider: string | null;
   notice: string | null;
 };
+
+// --------------------------------------------------------------- tensions
+
+export type TensionSignalKind = "polarity" | "antonym" | "contrast" | "title";
+
+export type TensionSignal = {
+  kind: TensionSignalKind;
+  weight: number;
+  detail: string;
+};
+
+export type TensionEvidence = {
+  note_id: number;
+  title: string;
+  sentence: string;
+  polarity: number;
+};
+
+export type TensionKind = "internal" | "cross";
+
+export type Tension = {
+  a_id: number;
+  a_title: string;
+  b_id: number;
+  b_title: string;
+  cosine: number;
+  magnitude: number;
+  signals: TensionSignal[];
+  evidence: TensionEvidence[];
+  bridge_title: string;
+  bridge_prompt: string;
+  bridge_tags: string[];
+  kind: TensionKind;
+  cluster_a: number | null;
+  cluster_a_name: string | null;
+  cluster_a_color: string | null;
+  cluster_b: number | null;
+  cluster_b_name: string | null;
+  cluster_b_color: string | null;
+};
+
+export type TensionReport = {
+  threshold: number;
+  floor: number;
+  total_pairs_scanned: number;
+  candidate_count: number;
+  tension_count: number;
+  tensions: Tension[];
+  stats: {
+    notes?: number;
+    candidate_pairs?: number;
+    internal?: number;
+    cross?: number;
+    top_magnitude?: number;
+  };
+};
+
+export type NoteDraft = {
+  title: string;
+  body: string;
+  tags: string[];
+};

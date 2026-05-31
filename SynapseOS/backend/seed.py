@@ -138,6 +138,22 @@ SEED: list[tuple[str, str, list[str]]] = [
         "Decide the graph UI now.",
         ["engineering", "design", "product"],
     ),
+    # --- tensions (intentional contradictions so the Tensions tab lights
+    # up on first run — pair-mates already exist above) ---
+    (
+        "Unit tests are underrated",
+        "Unit tests are fast, simple, and the right tool when you want "
+        "feedback in milliseconds. They are essential and central to a "
+        "healthy codebase — write more of them, not fewer.",
+        ["engineering", "testing"],
+    ),
+    (
+        "Why folders work",
+        "Folders are simple and robust. They are durable, easy to grok, and "
+        "have worked for decades. Tags get messy fast and are overrated "
+        "for personal knowledge that fits in one hierarchy.",
+        ["pkm", "product"],
+    ),
 ]
 
 

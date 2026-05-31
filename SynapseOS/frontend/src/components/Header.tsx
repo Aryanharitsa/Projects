@@ -10,6 +10,8 @@ type Props = {
   onOpenBrief?: () => void;
   briefBadge?: boolean;
   onOpenDistill?: () => void;
+  onOpenTensions?: () => void;
+  tensionsBadge?: number;
 };
 
 export function Header({
@@ -20,6 +22,8 @@ export function Header({
   onOpenBrief,
   briefBadge,
   onOpenDistill,
+  onOpenTensions,
+  tensionsBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -77,6 +81,22 @@ export function Header({
             >
               <span aria-hidden>✨</span>
               distill
+            </button>
+          )}
+          {onOpenTensions && (
+            <button
+              onClick={onOpenTensions}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500/20 to-synapse-violet/15 ring-1 ring-rose-400/40 hover:ring-rose-400/70 px-3 py-1 font-mono text-[11px] text-rose-200 hover:text-ink-100 transition"
+              aria-label="open tensions"
+              title="Surface contradictions in your second brain"
+            >
+              <span aria-hidden>⟷</span>
+              tensions
+              {tensionsBadge !== undefined && tensionsBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-rose-500/30 ring-1 ring-rose-300/60 text-[10px] text-rose-100 px-1">
+                  {tensionsBadge > 99 ? "99+" : tensionsBadge}
+                </span>
+              )}
             </button>
           )}
           {onOpenBrief && (
