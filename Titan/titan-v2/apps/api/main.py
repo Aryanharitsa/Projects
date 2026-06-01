@@ -303,6 +303,34 @@ async def aml_backtest(payload: Dict[str, Any]) -> Dict[str, Any]:
         return r.json()
 
 
+# ----- Behavioral drift pass-through (round-8, day-40)
+
+
+@app.get("/aml/drift/rules")
+async def aml_drift_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/drift/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/drift/sample")
+async def aml_drift_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/drift/sample")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/drift")
+async def aml_drift(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/drift", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
 # ----- AML case management pass-through (round-3, day-15)
 
 

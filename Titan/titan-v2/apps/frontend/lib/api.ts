@@ -426,6 +426,172 @@ export async function runBacktest(
   return jsonOrThrow(r);
 }
 
+// ---------------------------------------------------------------------------
+// Behavioral drift (round-8, day-40)
+// ---------------------------------------------------------------------------
+
+export type DriftVerdict =
+  | "stable"
+  | "mild"
+  | "drifting"
+  | "erratic"
+  | "transformed";
+
+export type DriftDimensionKey =
+  | "amount"
+  | "hour"
+  | "dow"
+  | "direction"
+  | "velocity"
+  | "cparty_diversity"
+  | "cparty_novelty"
+  | "geo"
+  | "round_rate"
+  | "median_shift";
+
+export type DriftDimension = {
+  key: DriftDimensionKey;
+  label: string;
+  score: number;
+  weight: number;
+  contribution: number;
+  baseline: Record<string, any>;
+  current: Record<string, any>;
+  detail: string;
+};
+
+export type DriftCounterparty = {
+  counterparty: string;
+  baseline_count: number;
+  current_count: number;
+  baseline_volume: number;
+  current_volume: number;
+  is_new: boolean;
+  activity_lift: number | null;
+  volume_lift: number | null;
+};
+
+export type DriftChangePoint = {
+  detected: boolean;
+  onset_iso: string | null;
+  days_ago: number | null;
+  rolling_ks: { day: string; ks: number; n: number }[];
+};
+
+export type DriftWindow = {
+  tx_count: number;
+  start_iso: string | null;
+  end_iso: string | null;
+  span_days: number;
+  active_days: number;
+  volume_total: number;
+  median_amount: number;
+  inflow_share: number;
+  unique_counterparties: number;
+};
+
+export type DriftReport = {
+  account_id: string;
+  display_name: string;
+  overall: number;
+  verdict: DriftVerdict;
+  headline: string;
+  drivers: string[];
+  narrative: string;
+  baseline_window: DriftWindow;
+  current_window: DriftWindow;
+  dimensions: DriftDimension[];
+  counterparties: DriftCounterparty[];
+  change_point: DriftChangePoint;
+  suggested_action: string;
+};
+
+export type DriftPortfolioSummary = {
+  total_accounts: number;
+  by_verdict: Record<DriftVerdict, number>;
+  drifters: number;
+  avg_overall: number;
+  top_account_id: string | null;
+  top_overall: number;
+};
+
+export type DriftResponse =
+  | {
+      ok: true;
+      engine: string;
+      scope: "single";
+      account_id: string;
+      split_mode: "explicit" | "fraction";
+      baseline_fraction: number;
+      split_at: string | null;
+      report: DriftReport | null;
+      reason: string | null;
+    }
+  | {
+      ok: true;
+      engine: string;
+      scope: "portfolio";
+      split_mode: "explicit" | "fraction";
+      baseline_fraction: number;
+      split_at: string | null;
+      summary: DriftPortfolioSummary;
+      reports: DriftReport[];
+      skipped: { account_id: string; reason: string }[];
+    };
+
+export type DriftRules = {
+  ok: boolean;
+  engine: string;
+  weights: Record<string, number>;
+  bands: { floor: number; verdict: DriftVerdict }[];
+  dim_labels: Record<string, string>;
+  min_baseline_txs: number;
+  min_current_txs: number;
+  default_baseline_fraction: number;
+  driver_floor: number;
+  change_point_ks_floor: number;
+};
+
+export type DriftSample = {
+  ok: boolean;
+  engine: string;
+  transactions: Tx[];
+  highlight_account: string;
+  recommended_split_at: string;
+  note: string;
+};
+
+export async function getDriftRules(): Promise<DriftRules> {
+  const r = await fetch(`${API_BASE}/aml/drift/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getDriftSample(): Promise<DriftSample> {
+  const r = await fetch(`${API_BASE}/aml/drift/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function runDrift(
+  transactions: Tx[],
+  opts: {
+    account_id?: string;
+    baseline_fraction?: number;
+    split_at?: string;
+  } = {},
+): Promise<DriftResponse> {
+  const body: any = { transactions };
+  if (opts.account_id) body.account_id = opts.account_id;
+  if (typeof opts.baseline_fraction === "number")
+    body.baseline_fraction = opts.baseline_fraction;
+  if (opts.split_at) body.split_at = opts.split_at;
+  const r = await fetch(`${API_BASE}/aml/drift`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
 export async function uploadKyc(file: File, subject: string, verifier = "VERIFIER-1") {
   const fd = new FormData();
   fd.append("file", file);

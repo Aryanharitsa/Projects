@@ -74,6 +74,36 @@ here's the freeze-and-investigate paragraph".
 > function of `(transactions, labels, weights)` — admissible as model
 > evidence.
 
+> **Day-40 — Behavioral Drift.** The eight rule detectors catch
+> *threshold breaches* — a single transaction (or recent batch)
+> crossed a line. They cannot catch the other half of laundering:
+> **accounts whose recent behavior no longer matches their own
+> historical baseline**. Sleeper takeovers, mule recruitments, slow
+> operator shifts — the line itself moved, no single transaction
+> crossed it. The new `apps/ai-aml/drift.py` engine measures that
+> directly. For each account it splits transactions into a
+> **baseline** and **current** window (either by fraction or an
+> explicit ISO split timestamp) and compares the two along ten
+> distribution-distance axes — amount distribution (Kolmogorov-
+> Smirnov), hour-of-day & day-of-week histograms (Jensen-Shannon
+> divergence), inflow/outflow balance, transaction velocity,
+> counterparty concentration (Herfindahl) and **counterparty
+> novelty** (the % of recent counterparties never seen in the
+> baseline), geographic mix (total variation distance),
+> round-amount tendency, and median ticket shift. Each axis
+> produces a 0..1 sub-score; the composite is a fixed weighted
+> sum bucketed into a verdict: `stable · mild · drifting ·
+> erratic · transformed`. A rolling-window KS over the current
+> window estimates a **change-point** (the earliest day the trailing
+> 7-day slice crossed the floor). New `/drift` console: verdict-
+> tinted hero ring + plain-English narrative + 10-axis polar
+> fingerprint (baseline outer rim, drift dents inward) + per-
+> dimension breakdown with weight×contribution bars + baseline-vs-
+> current hour/day-of-week overlays + rolling-KS timeline +
+> counterparty contribution table flagging new entrants and
+> sudden-activity spikes. Pure function of
+> `(transactions, split)`, no ML deps.
+
 ---
 
 ## What it does
@@ -109,6 +139,9 @@ here's the freeze-and-investigate paragraph".
 | **Typology classify** | `POST /aml/typologies/classify` | Re-classify one account report on demand — used by the what-if simulator after a weights override has reshuffled the factors |
 | **Backtest sample** | `GET  /aml/backtest/sample` | Bundled labelled validation set (43 txs, 8 confirmed-bad across 5 typologies + 2 hard cases) for the one-click demo |
 | **Backtest** | `POST /aml/backtest` | Replay the engine against labelled outcomes → confusion matrix · threshold sweep · ROC AUC · average precision · Fβ-recommended cut · per-detector discrimination · tuning verdict; honours a candidate `weights` override |
+| **Drift rules** | `GET  /aml/drift/rules` | Auditor view of the drift engine's 10 weights, 5 verdict bands, change-point floor, and min-tx guards |
+| **Drift sample** | `GET  /aml/drift/sample` | Bundled three-account demo (`ACC-STABLE`, `ACC-MILD`, `ACC-DRIFT` sleeper-burst) + a recommended ISO split timestamp |
+| **Drift** | `POST /aml/drift` | Account-vs-self drift across ten axes (KS · JS · TVD · HHI · log-ratio) → verdict + driver ranking + change-point onset + per-counterparty contribution; portfolio mode ranks every eligible account |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
@@ -563,6 +596,116 @@ randomness. That is what makes a backtest admissible as model evidence.
 
 ---
 
+## Behavioral drift, in detail
+
+The risk engine asks *"did this transaction cross a line?"*. Drift asks
+the opposite question: *"does this account still look like itself?"*.
+
+Same account holder, same wallet, same KYC document. Months of routine
+inflows from a single contact, mid-afternoon hours, ₹5k tickets. Then
+the account starts firing ₹50k+ round-amount outflows at 3 AM to a
+fresh set of counterparties in a different jurisdiction. Every single
+one of those transactions sits below every per-transaction threshold —
+no rule fires. But the account is no longer behaving like itself, and
+that, in real AML, is the signal.
+
+### Inputs
+
+`POST /aml/drift` takes:
+
+* `transactions[]` — the same `Tx` shape every other route accepts.
+* `account_id?` — when present, the response is `scope: "single"`. When
+  absent, the engine ranks **every** account that has enough
+  transactions on both sides of the split.
+* `baseline_fraction?` (default `0.7`) — fraction of the timeline that
+  forms the baseline window.
+* `split_at?` — explicit ISO timestamp. Overrides the fraction. Use
+  this when an analyst already has a hypothesis about *when* drift
+  started; the engine will validate it against the data.
+
+### Ten axes
+
+| Axis | Stat | Sub-score |
+|---|---|---:|
+| `amount`             | two-sample Kolmogorov-Smirnov on tx amounts | KS statistic |
+| `hour`               | Jensen-Shannon divergence on 24-bucket hour-of-day | JS / ln 2 |
+| `dow`                | Jensen-Shannon on 7-bucket day-of-week | JS / ln 2 |
+| `direction`          | absolute delta in inflow / total ratio | scaled to 0..1 |
+| `velocity`           | log-ratio of tx-per-active-day | abs(log) / log 5 |
+| `cparty_diversity`   | absolute delta in Herfindahl-Hirschman of counterparty share | direct |
+| `cparty_novelty`     | % of current counterparties never seen in baseline | direct |
+| `geo`                | total-variation distance between geo-mix vectors | direct |
+| `round_rate`         | abs delta in % of round-amount transfers | scaled to 0..1 |
+| `median_shift`       | log₂ shift of median amount | abs(log₂) / 3 |
+
+```
+overall = clip(
+    0.18·amount + 0.14·hour + 0.10·dow + 0.10·direction
+  + 0.08·velocity + 0.08·cparty_diversity + 0.12·cparty_novelty
+  + 0.08·geo + 0.05·round_rate + 0.07·median_shift,
+  0, 1)
+```
+
+The weights sum to 1.0 and live in `apps/ai-aml/drift.py::WEIGHTS` —
+they're dumped at `GET /aml/drift/rules` so auditors can verify them
+before the engine ships.
+
+### Verdict bands
+
+| Composite | Verdict | Recommended action |
+|---:|---|---|
+| < 0.18 | `stable`      | no action — within tolerance |
+| < 0.35 | `mild`        | monitor — schedule a routine review next cycle |
+| < 0.55 | `drifting`    | review — flag for an analyst pass within 5 business days |
+| < 0.75 | `erratic`     | escalate — promote to a case at medium priority |
+| ≥ 0.75 | `transformed` | escalate — promote to a case at high priority and confirm account-holder identity |
+
+### Change-point estimate
+
+For every day in the current window we take the trailing 7-day slice of
+recent activity and compute KS against the **full baseline**. The first
+day above `change_point_ks_floor` (default `0.30`, configurable in
+`/aml/drift/rules`) — with at least three transactions in the trailing
+slice — is reported as the **drift onset**. The full rolling-KS series
+ships with the response so the frontend renders a timeline with the
+floor as a dashed line and the onset as a pulsing dot.
+
+### Counterparty contribution
+
+A small table per account: top 8 counterparties ranked with brand-new
+ones first, then by current activity. Each row carries
+`(baseline_count, current_count, baseline_volume, current_volume,
+is_new, activity_lift, volume_lift)` so the analyst can spot *which*
+counterparties are the source of the drift, not just *that* drift
+happened.
+
+### Bundled demo
+
+`GET /aml/drift/sample` ships a deterministic three-account dataset
+that exercises every verdict band:
+
+* `ACC-STABLE` — six months of routine vendor transfers; landing
+  verdict `stable`.
+* `ACC-MILD` — same routine, gentle ticket growth; landing `mild`.
+* `ACC-DRIFT` — eighteen weeks of small, mid-afternoon inflows from
+  a single contact, then a nine-day burst of large round-amount
+  outflows at 2–5 AM to three brand-new counterparties, half abroad.
+  Landing `drifting` on the default fraction split and `transformed`
+  (overall `0.84`) when split at the recommended ISO timestamp.
+
+A single click loads the data + the recommended split timestamp into
+the `/drift` console so a first-time visitor sees the full surface
+populate immediately.
+
+### Determinism
+
+`drift.analyze(transactions, ...)` is a pure function. Same inputs →
+identical report, every dimension score, every per-day KS value, every
+narrative byte. That's the contract: a drift verdict has to be
+defensible to a regulator the same way a rule-based alert is.
+
+---
+
 ## Frontend
 
 | Route | Purpose |
@@ -570,7 +713,8 @@ randomness. That is what makes a backtest admissible as model evidence.
 | `/` | Hero + 4-step pipeline + six feature cards + flow diagram |
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
 | `/network` | Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
-| `/validation` | **(new)** Model-validation console: verdict banner, six headline tiles (ROC AUC · avg precision · recommended cut · recall/alert-rate @ rec · base rate, each with Δ-vs-canonical when you tune), an interactive confusion matrix + ROC curve + scrubable metric-sweep (precision/recall/Fβ/alert-rate vs threshold), ranked per-detector discrimination bars, the scored-account ledger with per-row outcome chips, and a live weight-tuning panel that re-validates a hypothesis |
+| `/drift` | **(new — day-40)** Behavioral-drift console: verdict-tinted hero ring with plain-English narrative + recommended action, 10-axis polar fingerprint (baseline ring on the outer rim, drift dents inward), baseline-vs-current window cards, ranked per-dimension breakdown with score × weight × contribution bars, baseline-vs-current hour-of-day and day-of-week distribution overlays, rolling-KS change-point timeline with onset pulse, and counterparty contribution table flagging new entrants and sudden-activity spikes. Portfolio mode adds a 6-tile summary banner + a ranked left rail that swaps the active report on click |
+| `/validation` | Model-validation console: verdict banner, six headline tiles (ROC AUC · avg precision · recommended cut · recall/alert-rate @ rec · base rate, each with Δ-vs-canonical when you tune), an interactive confusion matrix + ROC curve + scrubable metric-sweep (precision/recall/Fβ/alert-rate vs threshold), ranked per-detector discrimination bars, the scored-account ledger with per-row outcome chips, and a live weight-tuning panel that re-validates a hypothesis |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
 | `/cases/{id}` | Big alert ring, priority/SLA pills, **typology badge in the header**, frozen evidence snapshot (factor bars + tx graph), **`TypologyPanel`** with full breakdown (confidence ring, ranked evidence bars, auto-narrative, recommended action), **network panel** auto-running entity resolution + propagation + member-aware attribution + "if cleared" deltas on the case's snapshot, sanctions hits panel, status workflow buttons, assignment widget, note composer, full **timeline** rail (now renders `typology_assigned` events with the badge), attached SAR with collapsible markdown view |
 | `/watchlist` | Batch screening (paste names, set jurisdiction prior + similarity floor), per-query result cards with a `SimilarityRing` and component-level breakdown, plus a searchable browse view of the bundled watchlist |
@@ -677,6 +821,10 @@ apps/
     backtest.py         model validation — confusion sweep + ROC AUC + average precision
                          · Fβ-optimal recommended cut · per-detector discrimination (single-
                          feature AUC) · tuning verdict · bundled labelled validation set
+    drift.py            behavioral drift — 10-axis account-vs-self engine (KS · JS · TVD ·
+                         HHI · log-ratio) · 5-band verdict · rolling-KS change-point ·
+                         per-counterparty contribution · auto-narrative · bundled
+                         three-account demo (stable + mild + sleeper-burst)
     cases.py            SQLite-backed case store + workflow engine + SLA
                          + typology_code/typology_confidence mirror columns
                          + typology_assigned timeline events
@@ -704,6 +852,11 @@ apps/
     components/ConfusionMatrix.tsx  2×2 TP/FP/FN/TN grid, tone-coded by cost
     components/MetricSweep.tsx      P/R/Fβ/alert-rate vs threshold, scrubable cursor + guides
     components/RocCurve.tsx         ROC curve with shaded AUC + operating-point markers
+    app/drift/page.tsx             behavioral-drift console: verdict hero + radar + per-dim
+                                    bars + hour/dow overlays + KS timeline + cparty table
+    components/DriftRadar.tsx       10-axis polar fingerprint (baseline rim, drift dents inward)
+    components/DistributionOverlay.tsx baseline-vs-current normalised-histogram pair
+    components/DriftTimeline.tsx    rolling-KS curve with onset pulse + threshold guide
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -738,4 +891,11 @@ datasets/           sample inputs
   (✅ shipped, day-35 — `backtest.py` + `/validation` console: confusion
   sweep, ROC/PR, Fβ-recommended cut, per-detector single-feature AUC,
   and a what-if loop that validates a weights override against the
-  canonical rule set).
+  canonical rule set);
+  ~~behavioral-drift / anomaly layer — catch accounts whose recent
+  behavior no longer matches their own historical baseline (sleeper
+  takeovers, mule recruitment, slow operator shifts) using
+  distribution-distance statistics, complementary to the rule engine~~
+  (✅ shipped, day-40 — `drift.py` + `/drift` console: 10-axis
+  fingerprint, 5-band verdict, rolling-KS change-point onset,
+  per-counterparty contribution, portfolio ranking).
