@@ -49,6 +49,13 @@ GET    /aml/backtest/sample        bundled labelled validation set (one-click de
 POST   /aml/backtest               replay the engine against labelled outcomes →
                                    confusion matrix + threshold sweep + ROC AUC +
                                    per-detector discrimination + tuning verdict
+
+Behavioral drift / anomaly (round-8, day-40)
+--------------------------------------------
+GET    /aml/drift/rules            weights + verdict bands + every tunable knob
+GET    /aml/drift/sample           three-account demo (stable + mild + sleeper-burst)
+POST   /aml/drift                  account-vs-self drift across 10 axes → verdict
+                                   + driver ranking + change-point + per-cparty view
 """
 
 from __future__ import annotations
@@ -61,13 +68,14 @@ from pydantic import BaseModel, Field
 
 import backtest as backtest_engine
 import cases as case_store
+import drift as drift_engine
 import network as network_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.6.0"
+ENGINE_VERSION = "titan-aml/1.7.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -300,6 +308,63 @@ def run_backtest(req: BacktestReq = Body(...)) -> Dict[str, Any]:
             sanctions_threshold=threshold,
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Behavioral drift / anomaly (round-8, day-40)
+# ---------------------------------------------------------------------------
+
+
+class DriftReq(BaseModel):
+    transactions: List[Tx]
+    account_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "If provided, drift is computed for this account only. "
+            "Otherwise every account with enough txs is scored and "
+            "ranked by drift."
+        ),
+    )
+    baseline_fraction: float = Field(
+        default=drift_engine.DEFAULT_BASELINE_FRACTION,
+        gt=0.0,
+        lt=1.0,
+        description="Share of the timeline that constitutes the baseline window.",
+    )
+    split_at: Optional[str] = Field(
+        default=None,
+        description=(
+            "Explicit ISO timestamp to split baseline vs current. "
+            "Overrides `baseline_fraction` when set."
+        ),
+    )
+
+
+@app.get("/aml/drift/rules")
+def drift_rules() -> Dict[str, Any]:
+    """Auditor view of the drift engine's tunables."""
+
+    return {"ok": True, **drift_engine.get_rules()}
+
+
+@app.get("/aml/drift/sample")
+def drift_sample() -> Dict[str, Any]:
+    """Bundled three-account demo dataset exercising every verdict band."""
+
+    return drift_engine.sample_dataset()
+
+
+@app.post("/aml/drift")
+def run_drift(req: DriftReq = Body(...)) -> Dict[str, Any]:
+    if not req.transactions:
+        raise HTTPException(status_code=400, detail="transactions[] is empty")
+    rows = [t.model_dump() for t in req.transactions]
+    return drift_engine.analyze(
+        rows,
+        account_id=req.account_id,
+        baseline_fraction=req.baseline_fraction,
+        split_at=req.split_at,
+    )
 
 
 # ---------------------------------------------------------------------------

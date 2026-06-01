@@ -664,3 +664,59 @@ body::before {
     grid-template-columns: 1fr 60px 40px !important;
   }
 }
+
+/* ---------------------------------------------------------------
+   Day-40 — Behavioral Drift surface.
+   Verdict-tinted accent variables drive the hero ring, the radar
+   accent, and the rolling-KS curve so the entire surface re-themes
+   in one prop swap.
+   --------------------------------------------------------------- */
+
+.ws-drift-hero {
+  background:
+    radial-gradient(700px 300px at 95% -30%, var(--drift-accent-tint, rgba(251,113,133,0.18)), transparent 65%),
+    radial-gradient(500px 400px at -10% 110%, rgba(110,91,255,0.12), transparent 60%);
+  transition: background 360ms ease;
+}
+
+.ws-drift-ring {
+  transition: box-shadow 260ms ease;
+}
+.ws-drift-ring-glow {
+  box-shadow: 0 0 32px -2px var(--drift-accent, #fb7185);
+}
+
+.ws-drift-verdict-stable      { --drift-accent: #2DE1C2; --drift-accent-tint: rgba(45,225,194,0.18); }
+.ws-drift-verdict-mild        { --drift-accent: #38BDF8; --drift-accent-tint: rgba(56,189,248,0.18); }
+.ws-drift-verdict-drifting    { --drift-accent: #FBBF24; --drift-accent-tint: rgba(251,191,36,0.20); }
+.ws-drift-verdict-erratic     { --drift-accent: #FB923C; --drift-accent-tint: rgba(251,146,60,0.22); }
+.ws-drift-verdict-transformed { --drift-accent: #F43F5E; --drift-accent-tint: rgba(244,63,94,0.24); }
+
+.ws-drift-pill-stable      { background: rgba(45,225,194,0.14); color: #5eead4; border-color: rgba(45,225,194,0.35); }
+.ws-drift-pill-mild        { background: rgba(56,189,248,0.14); color: #7dd3fc; border-color: rgba(56,189,248,0.35); }
+.ws-drift-pill-drifting    { background: rgba(251,191,36,0.14); color: #fcd34d; border-color: rgba(251,191,36,0.40); }
+.ws-drift-pill-erratic     { background: rgba(251,146,60,0.14); color: #fdba74; border-color: rgba(251,146,60,0.45); }
+.ws-drift-pill-transformed { background: rgba(244,63,94,0.16); color: #fda4af; border-color: rgba(244,63,94,0.50); }
+
+.ws-drift-dim-row {
+  transition: background 160ms ease, transform 160ms ease;
+}
+.ws-drift-dim-row:hover {
+  background: rgba(255,255,255,0.04);
+  transform: translateX(1px);
+}
+
+.ws-drift-cparty-row {
+  transition: background 160ms ease;
+}
+.ws-drift-cparty-row:hover {
+  background: rgba(255,255,255,0.035);
+}
+
+@keyframes ws-drift-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.ws-drift-onset-pulse {
+  animation: ws-drift-pulse 1.8s ease-in-out infinite;
+}

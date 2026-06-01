@@ -18,6 +18,14 @@ const FEATURES = [
     cta: "Open graph",
   },
   {
+    href: "/drift",
+    title: "Behavioral Drift",
+    eyebrow: "Anomaly",
+    body: "Rules catch threshold breaches. Drift catches what they miss — sleeper accounts that wake up, takeovers where the holder didn't change but the operator did, slow operator shifts. Ten distribution-distance axes vs the account's own baseline, with an estimated onset day.",
+    accent: "from-rose-400/25 via-violet-500/15 to-transparent",
+    cta: "Run drift",
+  },
+  {
     href: "/cases",
     title: "Case Workflow",
     eyebrow: "Triage",
@@ -53,10 +61,10 @@ const FEATURES = [
 
 const STATS = [
   { label: "Pattern detectors", value: "8" },
+  { label: "Drift axes", value: "10" },
   { label: "Laundering typologies", value: "6" },
   { label: "Watchlist entries", value: "30" },
   { label: "Workflow states", value: "5" },
-  { label: "Graph propagation", value: "α 0.7" },
   { label: "External ML deps", value: "0" },
 ];
 
