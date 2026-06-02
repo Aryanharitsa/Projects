@@ -56,6 +56,22 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   and lays every candidate out in a heat-mapped **comparison matrix** so
   the trade-offs are obvious at a glance. Exports as JSON
   (`waysafe.compass.v1`) and markdown.
+- **🆕 StaySafe — Accommodation Safety Picker** — the *bookable*
+  counterpart to Compass. Compass answers "where should I *go*?";
+  StaySafe answers "where should I *sleep*?" — a fundamentally different
+  question because you spend 16+ hours a day at your stay across the
+  **sleep**, **evening-return** and **morning-depart** windows. Each
+  candidate is scored on six time-aware dimensions (sleep / evening /
+  morning forecast risk + walkability to nearest hospital, police and
+  clinic + quiet score around the property + reach to the area's centre
+  of gravity), the weights re-balance by **traveller profile** (Solo /
+  Couple / Family-with-kids / Business-or-solo-F), and the verdict comes
+  with a podium, a 24-hour risk **sparkline per stay**, a three-column
+  *walk to help* breakdown for the winner, and a heat-mapped factor
+  matrix that surfaces every dimension's weighted **points contribution**.
+  Ships with a curated **15-stay Goa preset list** (hotels, resorts,
+  hostels, homestays), takes custom lat/lon rows, and exports as JSON
+  (`waysafe.staysafe.v1`) and markdown for WhatsApp/email.
 - **Sentinel — Live Cluster Intel** — DBSCAN over haversine groups raw
   incidents into discrete hotspots; each cluster is graded
   Critical / Emerging / Steady / Cooling by **velocity** (recent rate ÷
@@ -204,6 +220,84 @@ surfaces never disagree.
 
 Engine in `compass.py` (≈460 LOC, pure-stdlib + reuse of `safety`,
 `forecast`, and `sentinel`). UI render lives in `theme.render_compass`.
+
+---
+
+## 🛏️ StaySafe — Accommodation Safety Picker (Day 41)
+
+Compass and StaySafe are the same shape — pick candidates, get a podium
++ a heat-mapped matrix — but the *physics* is different. A destination
+visit is a single point in time; a stay is **16+ hours every day** at
+the same address, so the score has to be time-of-stay weighted.
+
+The StaySafe tab takes a multiselect over a curated 15-stay Goa preset
+(hotels, resorts, hostels, homestays — `data/stays.csv`), takes any
+number of custom (name, lat, lon, kind) rows you add, asks for your
+**check-in date/time**, **nights**, and **traveller profile**, and
+returns a ranked verdict.
+
+### Six dimensions, weight-aware
+
+Each candidate is scored along six 0..1 sub-dimensions; the
+composite is the weighted sum × 100. The window terms are computed by
+blending the **temporal forecast** (`forecaster.risk_at`) with the
+**static physics** (`safety.point_risk`) at 45 / 55 so a stay that's
+surrounded by recent verified incidents is *always* downgraded even
+if the forecaster has no late-night history for that cell.
+
+| Dim | What it measures | Default w | Why |
+|---|---|---:|---|
+| `sleep` | mean risk 22:00 → 06:00 on check-in date | **0.30** | Largest exposure window |
+| `evening` | mean risk 19:00 → 22:00 | 0.20 | Walking back from dinner |
+| `morning` | mean risk 06:00 → 09:00 | 0.10 | Stepping out fresh |
+| `walkability` | mean of (hospital / police / clinic) walk-distance goodness, ceiling 4 / 2 / 1.5 km, gracefully degrades to 2-of-3 when the dataset has no clinic | 0.18 | "How far is help if it goes wrong?" |
+| `quiet` | inverse Sentinel cluster pressure within **0.8 km**, with night-active clusters (peak hour ∈ [20..3]) carrying a 1.6× multiplier | 0.12 | Loud-at-night hotspots can't hide |
+| `reach` | U-shaped score around the trip's centre of gravity (mean of the candidates) — sweet spot 1.5 km, full penalty under 0.2 km or beyond 6 km | 0.10 | Not too isolated, not crowded |
+
+If the stay sits inside a geofenced **risk zone**, the composite is
+floored to Elevated (score ≤ 59) regardless of the per-window math —
+the static safety reflects this but the composite is forecast-heavy,
+so we force the floor.
+
+### Traveller profiles re-balance the weights
+
+| Profile | sleep | evening | morning | walk | quiet | reach |
+|---|---:|---:|---:|---:|---:|---:|
+| Solo traveller | 0.32 | 0.24 | 0.08 | 0.18 | 0.10 | 0.08 |
+| Couple | 0.30 | 0.20 | 0.10 | 0.18 | 0.12 | 0.10 |
+| Family with kids | 0.28 | 0.18 | 0.10 | **0.22** | **0.16** | 0.06 |
+| Business / solo F | **0.34** | 0.22 | 0.10 | 0.18 | 0.10 | 0.06 |
+
+### Verdict surface
+
+```
+Recommend Vivanta Goa Panaji — 14 pts clear of Lemon Tree Amarante Candolim.
+Vivanta Goa Panaji wins mainly on walk to help.
+```
+
+The render stack includes:
+
+- **Hero card** with the winner's 0–100 ring, level chip, profile chip,
+  check-in / nights / "N stays compared" meta, and a `+pts ahead` margin.
+- **Podium row** of stay cards — rank chip, kind chip, level chip, score
+  bar, sleep / evening / morning tri-cell mini-stats, a **24-hour risk
+  sparkline** (one bar per hour, hue and height encode risk), the
+  headline blurb and a one-line *why pick* rationale tailored to the
+  actual numbers (e.g. *"Hospital 1.2 km away; calm sleep window."*).
+- **Walk-to-help** breakdown for the winner: three cards (hospital /
+  police / clinic) with name, distance + walk-time at 4.8 km/h, and a
+  goodness bar.
+- **Heat-mapped factor matrix** — destinations as columns, factors as
+  rows, every cell hue-coded green↔red by that factor's goodness, with
+  a sub-text inside each cell showing the **weighted points
+  contribution** to the composite so users can see *which* dimension is
+  driving the score, not just that it does.
+- A **per-stay text breakdown** in an expander.
+- **JSON** (`waysafe.staysafe.v1`) and **markdown** exports.
+
+Engine in `stays.py` (≈580 LOC, pure-stdlib + reuse of `safety` and
+`forecast`). UI render in `theme.render_staysafe`. Preset data in
+`data/stays.csv` (15 Goa stays).
 
 ---
 

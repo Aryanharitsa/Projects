@@ -957,6 +957,183 @@ def inject_theme() -> None:
         .ws-cmp-cell {{ text-align:center; border-radius:8px; padding:8px 4px;
             font-weight:800; font-size:.9rem; font-variant-numeric:tabular-nums; }}
         .ws-cmp-cell.head-row {{ font-size:1.05rem; }}
+
+        /* ---------- StaySafe — accommodation safety picker ---------- */
+        .ws-stay-hero {{
+            position:relative; overflow:hidden;
+            display:flex; gap:24px; align-items:center;
+            background:{CARD}; border:1px solid rgba(255,255,255,0.06);
+            border-left:6px solid var(--hue, {PRIMARY});
+            border-radius:16px; padding:20px 24px; margin-bottom:14px;
+        }}
+        .ws-stay-hero::before {{
+            content:""; position:absolute; inset:0;
+            background: radial-gradient(120% 160% at 0% 0%, var(--glow, transparent) 0%, transparent 55%);
+            pointer-events:none;
+        }}
+        .ws-stay-hero-body {{ position:relative; flex:1; min-width:0; }}
+        .ws-stay-crown {{
+            display:inline-flex; align-items:center; gap:6px;
+            font-size:.72rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+            color: var(--hue, {PRIMARY});
+            background: rgba(255,255,255,0.04); border:1px solid var(--hue, {PRIMARY});
+            border-radius:999px; padding:4px 12px; margin-bottom:8px;
+        }}
+        .ws-stay-hero-title {{ font-size:1.5rem; font-weight:800; line-height:1.25; color:#F2F4FA; }}
+        .ws-stay-hero-title strong {{ color: var(--hue, {PRIMARY}); }}
+        .ws-stay-hero-detail {{ font-size:.95rem; color:#C7CEDE; margin-top:6px; }}
+        .ws-stay-hero-detail strong {{ color: var(--hue, {PRIMARY}); }}
+        .ws-stay-hero-meta {{ font-size:.78rem; color:{MUTED}; margin-top:10px; }}
+        .ws-stay-chip {{
+            display:inline-block; font-size:.66rem; font-weight:700; letter-spacing:.06em;
+            text-transform:uppercase; padding:2px 8px; border-radius:999px;
+            background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+            color:#C7CEDE; margin-right:6px;
+        }}
+        .ws-stay-chip.profile {{ color: var(--hue, {PRIMARY}); border-color: var(--hue, {PRIMARY}); }}
+        .ws-stay-margin {{
+            position:relative; text-align:center; flex-shrink:0;
+            background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:14px; padding:12px 18px; min-width:96px;
+        }}
+        .ws-stay-margin-val {{ font-size:2rem; font-weight:800; color: var(--hue, {PRIMARY}); line-height:1; }}
+        .ws-stay-margin-lbl {{ font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; color:{MUTED}; margin-top:4px; font-weight:700; }}
+
+        .ws-stay-podium {{
+            display:grid; gap:12px; margin-bottom:14px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }}
+        .ws-stay-card {{
+            background:{CARD}; border:1px solid rgba(255,255,255,0.06);
+            border-radius:14px; padding:14px 16px; position:relative; overflow:hidden;
+        }}
+        .ws-stay-card.is-winner {{
+            border-color: var(--hue, {PRIMARY});
+            box-shadow: 0 0 0 1px var(--hue, {PRIMARY}), 0 10px 30px -12px var(--hue, {PRIMARY});
+        }}
+        .ws-stay-card-top {{
+            display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+        }}
+        .ws-stay-rank {{
+            width:26px; height:26px; border-radius:8px; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:800; font-size:.82rem; color:#0E1117;
+            background: rgba(255,255,255,0.16);
+        }}
+        .ws-stay-rank.r1 {{ background: linear-gradient(135deg,#FFD66B,#F9A825); }}
+        .ws-stay-rank.r2 {{ background: linear-gradient(135deg,#D7DCE6,#9AA3B5); }}
+        .ws-stay-rank.r3 {{ background: linear-gradient(135deg,#E2A772,#B97A45); }}
+        .ws-stay-kind {{
+            font-size:.6rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+            padding:2px 8px; border-radius:999px;
+            background: rgba(255,255,255,0.05); color:#C7CEDE;
+            border:1px solid rgba(255,255,255,0.08);
+        }}
+        .ws-stay-level {{
+            font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+            padding:3px 9px; border-radius:999px; background: rgba(255,255,255,0.05);
+        }}
+        .ws-stay-card-name {{
+            font-size:1.02rem; font-weight:800; color:#F2F4FA; line-height:1.2;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }}
+        .ws-stay-card-score {{ display:flex; align-items:baseline; gap:6px; margin:8px 0 2px; }}
+        .ws-stay-card-score b {{ font-size:2rem; font-weight:800; line-height:1; }}
+        .ws-stay-card-score span {{ font-size:.72rem; color:{MUTED}; }}
+        .ws-stay-bar-track {{
+            background: rgba(255,255,255,0.06); height:6px; border-radius:999px;
+            overflow:hidden; margin:6px 0 10px;
+        }}
+        .ws-stay-bar-fill {{ height:100%; border-radius:999px; transition: width .8s ease; }}
+        .ws-stay-tri {{ display:flex; gap:6px; margin-top:4px; }}
+        .ws-stay-tri-cell {{
+            flex:1; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05);
+            border-radius:9px; padding:6px 4px; text-align:center;
+        }}
+        .ws-stay-tri-val {{
+            font-size:.92rem; font-weight:800; color:#E6E9F2; font-variant-numeric:tabular-nums;
+        }}
+        .ws-stay-tri-lbl {{
+            font-size:.58rem; letter-spacing:.06em; text-transform:uppercase; color:{MUTED}; margin-top:2px;
+        }}
+        .ws-stay-card-head {{ font-size:.74rem; color:#AAB2C5; margin-top:8px; line-height:1.35; }}
+        .ws-stay-why {{
+            font-size:.72rem; color:#9CA3B8; margin-top:6px;
+            border-top: 1px dashed rgba(255,255,255,0.06); padding-top:8px;
+        }}
+
+        /* 24-hour risk sparkline (per stay card + per matrix row) */
+        .ws-stay-spark {{
+            display:flex; gap:1px; align-items:flex-end; height:32px; margin-top:8px;
+            background: rgba(255,255,255,0.02); border-radius:6px; padding:3px 4px 2px;
+        }}
+        .ws-stay-spark-bar {{
+            flex:1; min-width:0; border-radius:2px 2px 0 0; opacity:.95;
+            transition: opacity .15s ease;
+        }}
+        .ws-stay-spark-bar:hover {{ opacity:1; }}
+        .ws-stay-spark-axis {{
+            display:flex; justify-content:space-between; font-size:.55rem; color:{MUTED};
+            letter-spacing:.06em; margin-top:2px; padding: 0 4px;
+        }}
+
+        /* Help-leg breakdown — 3 columns with walk time */
+        .ws-stay-legs {{
+            display:grid; gap:8px; grid-template-columns: repeat(3, 1fr); margin-top:10px;
+        }}
+        .ws-stay-leg {{
+            background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);
+            border-radius:10px; padding:8px 10px; min-width:0;
+        }}
+        .ws-stay-leg-cat {{
+            font-size:.58rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase;
+            color: var(--hue, #C7CEDE); margin-bottom:2px;
+        }}
+        .ws-stay-leg-name {{
+            font-size:.78rem; font-weight:700; color:#E6E9F2;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }}
+        .ws-stay-leg-meta {{
+            font-size:.7rem; color:{MUTED}; margin-top:2px; font-variant-numeric:tabular-nums;
+        }}
+        .ws-stay-leg-bar {{
+            background: rgba(255,255,255,0.05); height:4px; border-radius:999px; margin-top:6px; overflow:hidden;
+        }}
+        .ws-stay-leg-bar-fill {{ height:100%; border-radius:999px; }}
+
+        /* Matrix (reuses ws-cmp-* patterns but namespaced for tuning) */
+        .ws-stay-matrix {{ display:grid; gap:5px; margin-top:6px; }}
+        .ws-stay-mcorner {{
+            font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:{MUTED};
+            font-weight:700; display:flex; align-items:flex-end; padding:0 4px 6px;
+        }}
+        .ws-stay-mhead {{
+            text-align:center; font-size:.78rem; font-weight:800; color:#E6E9F2;
+            padding:6px 4px; border-bottom:2px solid rgba(255,255,255,0.08);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }}
+        .ws-stay-mhead.is-winner {{
+            color: var(--hue, {PRIMARY}); border-bottom-color: var(--hue, {PRIMARY});
+        }}
+        .ws-stay-mlabel {{
+            font-size:.78rem; color:#AAB2C5; font-weight:600;
+            display:flex; align-items:center; padding:0 4px;
+        }}
+        .ws-stay-mlabel-w {{
+            font-size:.58rem; color:{MUTED}; margin-left:6px;
+            background: rgba(255,255,255,0.04); padding:1px 6px; border-radius:999px;
+        }}
+        .ws-stay-cell {{
+            text-align:center; border-radius:8px; padding:8px 4px;
+            font-weight:800; font-size:.86rem; font-variant-numeric:tabular-nums;
+            line-height:1.2;
+        }}
+        .ws-stay-cell.head-row {{ font-size:1.05rem; }}
+        .ws-stay-cell-sub {{
+            display:block; font-size:.55rem; font-weight:600;
+            letter-spacing:.04em; color:#AAB2C5; margin-top:2px;
+            text-transform:none;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2559,6 +2736,259 @@ def render_compass_empty(hint: str = "Pick at least two destinations above, then
         f"""
         <div class="ws-sent-empty">
           <div class="ws-sent-empty-title">No comparison yet</div>
+          <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------- StaySafe
+
+_STAY_LEVEL_HUE = {
+    "Critical":  "#EF4444",
+    "Elevated":  "#F59E0B",
+    "Caution":   "#FBBF24",
+    "All clear": "#10B981",
+}
+
+_STAY_KIND_LABEL = {
+    "hotel":    "Hotel",
+    "hostel":   "Hostel",
+    "homestay": "Homestay",
+    "villa":    "Villa",
+    "resort":   "Resort",
+}
+
+
+def _spark_html(curve, *, max_val: float = 1.0) -> str:
+    """24-hour risk sparkline. Each bar's hue and height encodes risk."""
+    if not curve:
+        return ""
+    parts = ['<div class="ws-stay-spark">']
+    for v in curve:
+        v = max(0.0, min(max_val, float(v)))
+        h = max(2, int(round(v / max_val * 30)))   # 2..30 px
+        hue = _goodness_hue(1.0 - (v / max_val))
+        parts.append(
+            f'<div class="ws-stay-spark-bar" style="height:{h}px; background:{hue};"></div>'
+        )
+    parts.append("</div>")
+    parts.append('<div class="ws-stay-spark-axis"><span>00</span>'
+                 '<span>06</span><span>12</span><span>18</span><span>24</span></div>')
+    return "".join(parts)
+
+
+def _hr_to_str(risk: float) -> str:
+    return f"{int(round(float(risk) * 100))}%"
+
+
+def _stay_card_html(v) -> str:
+    """One stay card for the podium row."""
+    lvl_hue = _STAY_LEVEL_HUE.get(v.level, v.level_color)
+    bar_hue = _goodness_hue(v.stay_score / 100.0)
+    winner_cls = " is-winner" if v.is_winner else ""
+    rank_cls = f"r{v.rank}" if v.rank <= 3 else ""
+    kind_label = _STAY_KIND_LABEL.get(v.candidate.kind.lower(),
+                                       v.candidate.kind or "Stay")
+
+    spark = _spark_html(v.hourly_risk) if v.hourly_risk else ""
+
+    return f"""
+        <div class="ws-stay-card{winner_cls}" style="--hue:{lvl_hue};">
+          <div class="ws-stay-card-top">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="ws-stay-rank {rank_cls}">{v.rank}</span>
+              <span class="ws-stay-kind">{_esc(kind_label)}</span>
+            </div>
+            <span class="ws-stay-level" style="color:{lvl_hue}; border:1px solid {_hex_to_rgba(lvl_hue, 0.45)};">
+              {_esc(v.level)}
+            </span>
+          </div>
+          <div class="ws-stay-card-name" title="{_esc(v.candidate.name)}">{_esc(v.candidate.name)}</div>
+          <div class="ws-stay-card-score">
+            <b style="color:{bar_hue}">{v.stay_score}</b><span>/ 100 stay-safe</span>
+          </div>
+          <div class="ws-stay-bar-track">
+            <div class="ws-stay-bar-fill" style="width:{v.stay_score}%; background:{bar_hue};"></div>
+          </div>
+          <div class="ws-stay-tri">
+            <div class="ws-stay-tri-cell">
+              <div class="ws-stay-tri-val">{_hr_to_str(v.sleep_risk_mean)}</div>
+              <div class="ws-stay-tri-lbl">Sleep</div>
+            </div>
+            <div class="ws-stay-tri-cell">
+              <div class="ws-stay-tri-val">{_hr_to_str(v.evening_risk_mean)}</div>
+              <div class="ws-stay-tri-lbl">Evening</div>
+            </div>
+            <div class="ws-stay-tri-cell">
+              <div class="ws-stay-tri-val">{_hr_to_str(v.morning_risk_mean)}</div>
+              <div class="ws-stay-tri-lbl">Morning</div>
+            </div>
+          </div>
+          {spark}
+          <div class="ws-stay-card-head">{_esc(v.headline)}</div>
+          <div class="ws-stay-why">{_esc(v.why_pick)}</div>
+        </div>
+    """
+
+
+def _help_legs_html(v) -> str:
+    """3-column hospital/police/clinic walk breakdown for the winner card."""
+    if not v.help_legs:
+        return ""
+    parts = ['<div class="ws-stay-legs">']
+    for leg in v.help_legs:
+        if leg.distance_km is None:
+            name = "— no nearby option in dataset"
+            meta = "—"
+            bar_w = 0
+            hue = "#6B7280"
+        else:
+            name = leg.name or "(unnamed)"
+            mins = f"{leg.walk_min} min" if leg.walk_min is not None else "—"
+            meta = f"{leg.distance_km:.1f} km · {mins} walk"
+            bar_w = int(round(leg.goodness * 100))
+            hue = _goodness_hue(leg.goodness)
+        cat_label = leg.category.upper()
+        parts.append(
+            f"""
+            <div class="ws-stay-leg" style="--hue:{hue};">
+              <div class="ws-stay-leg-cat">{_esc(cat_label)}</div>
+              <div class="ws-stay-leg-name" title="{_esc(name)}">{_esc(name)}</div>
+              <div class="ws-stay-leg-meta">{_esc(meta)}</div>
+              <div class="ws-stay-leg-bar">
+                <div class="ws-stay-leg-bar-fill"
+                     style="width:{bar_w}%; background:{hue};"></div>
+              </div>
+            </div>
+            """
+        )
+    parts.append("</div>")
+    return "".join(parts)
+
+
+def render_staysafe(result) -> None:
+    """Hero verdict + podium + matrix + help-legs for one StayComparisonResult."""
+    stays = result.stays
+    if not stays:
+        render_staysafe_empty()
+        return
+
+    win = result.winner
+    hue = _STAY_LEVEL_HUE.get(win.level, win.level_color)
+    glow = _hex_to_rgba(hue, 0.20)
+
+    margin_html = ""
+    if result.runner_up is not None:
+        margin_html = (
+            f'<div class="ws-stay-margin" style="--hue:{hue};">'
+            f'<div class="ws-stay-margin-val">+{result.margin}</div>'
+            f'<div class="ws-stay-margin-lbl">pts ahead</div></div>'
+        )
+
+    profile_chip = (
+        f'<span class="ws-stay-chip profile" style="--hue:{hue};">{_esc(result.profile)}</span>'
+    )
+    nights_label = f"{result.nights} night" + ("s" if result.nights != 1 else "")
+
+    st.markdown(
+        f"""
+        <div class="ws-stay-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-ring" style="--pct:{win.stay_score}; --ring:{hue};">
+            <div class="ws-ring-inner">
+              <div class="ws-ring-val" style="color:{hue}">{win.stay_score}</div>
+              <div class="ws-ring-band" style="color:{hue}">STAY-SAFE</div>
+            </div>
+          </div>
+          <div class="ws-stay-hero-body">
+            <span class="ws-stay-crown">🛏️ Recommended stay · {_esc(win.level)}</span>
+            <div class="ws-stay-hero-title">{_rec_to_html(result.verdict_headline)}</div>
+            <div class="ws-stay-hero-detail">{_rec_to_html(result.verdict_detail)}</div>
+            <div class="ws-stay-hero-meta">
+              {profile_chip}
+              <span class="ws-stay-chip">Check-in {result.check_in:%a %d %b · %H:%M}</span>
+              <span class="ws-stay-chip">{_esc(nights_label)}</span>
+              <span class="ws-stay-chip">{len(stays)} stays compared</span>
+            </div>
+          </div>
+          {margin_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Podium row
+    cards = [_stay_card_html(v) for v in stays]
+    st.markdown(
+        f'<div class="ws-stay-podium">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Winner-detail: help legs (closeup) — only render for the winner
+    if win:
+        st.markdown(
+            f"<div style='font-size:.78rem; color:#AAB2C5; margin: 6px 4px 0; "
+            f"letter-spacing:.06em; text-transform:uppercase; font-weight:700;'>"
+            f"Walk to help · from {_esc(win.candidate.name)}</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(_help_legs_html(win), unsafe_allow_html=True)
+
+    # Heat-mapped comparison matrix
+    n = len(stays)
+    cols = f"1.55fr repeat({n}, minmax(0,1fr))"
+    parts = [f'<div class="ws-stay-matrix" style="grid-template-columns:{cols};">']
+    parts.append('<div class="ws-stay-mcorner">Factor ↓ / Stay →</div>')
+    for v in stays:
+        wc = " is-winner" if v.is_winner else ""
+        lvl_hue = _STAY_LEVEL_HUE.get(v.level, v.level_color)
+        parts.append(
+            f'<div class="ws-stay-mhead{wc}" style="--hue:{lvl_hue};" '
+            f'title="{_esc(v.candidate.name)}">{_esc(v.candidate.name)}</div>'
+        )
+
+    # Headline stay-score row
+    parts.append('<div class="ws-stay-mlabel"><strong>Stay-safe score</strong></div>')
+    for v in stays:
+        g = v.stay_score / 100.0
+        ch = _goodness_hue(g)
+        parts.append(
+            f'<div class="ws-stay-cell head-row" '
+            f'style="background:{_hex_to_rgba(ch, 0.18)}; color:{ch};">'
+            f'{v.stay_score}</div>'
+        )
+
+    # Per-factor rows with weight chip
+    for fi, (_key, label) in enumerate(result.factor_order):
+        w_pct = int(round(stays[0].factors[fi].weight * 100))
+        parts.append(
+            f'<div class="ws-stay-mlabel">{_esc(label)}'
+            f'<span class="ws-stay-mlabel-w">{w_pct}%</span></div>'
+        )
+        for v in stays:
+            f = v.factors[fi]
+            ch = _goodness_hue(f.goodness)
+            parts.append(
+                f'<div class="ws-stay-cell" '
+                f'style="background:{_hex_to_rgba(ch, 0.15)}; color:{ch};">'
+                f'{_esc(f.display)}'
+                f'<span class="ws-stay-cell-sub">{int(round(f.contribution))} pts</span>'
+                f'</div>'
+            )
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+    st.caption(
+        "Greener = safer on that factor. Per-cell sub-value = weighted "
+        "contribution to the 0–100 stay-safe score. Weights vary by profile."
+    )
+
+
+def render_staysafe_empty(hint: str = "Pick at least two stays above, then run the comparison.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-sent-empty">
+          <div class="ws-sent-empty-title">No stay comparison yet</div>
           <div>{_esc(hint)}</div>
         </div>
         """,

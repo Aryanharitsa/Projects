@@ -29,12 +29,14 @@ from theme import (
     render_sentinel_watch_banner,
     render_advisory_brief, render_advisory_empty,
     render_compass, render_compass_empty,
+    render_staysafe, render_staysafe_empty,
 )
 import companion as cp
 import itinerary as itn
 import sentinel as sn
 import advisory as adv
 import compass as cmp
+import stays as sts
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -326,7 +328,8 @@ if role == "Tourist App":
 
     tab_labels = [
         "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
-        "Advisory", "Compass", "Sentinel", "Report Hazard", "Alerts", "SOS", "Trip Log",
+        "Advisory", "Compass", "StaySafe", "Sentinel",
+        "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -1362,8 +1365,167 @@ if role == "Tourist App":
                     use_container_width=True,
                 )
 
-    # ---------------- Sentinel (Day 26)
+    # ---------------- StaySafe — Accommodation Safety Picker (Day 41)
     with tabs[7]:
+        st.subheader("🛏️ StaySafe — Accommodation Safety Picker")
+        st.caption(
+            "Compass compares places to *go*. StaySafe compares places to "
+            "*sleep* — and the calculation is fundamentally different because "
+            "you're physically at a stay for 16+ hours/day. Each candidate "
+            "is scored across the **sleep**, **evening-return**, and "
+            "**morning-depart** windows, plus walkability to help, quiet "
+            "score, and reach to the area centre. Weights re-balance by "
+            "traveller profile."
+        )
+
+        stays_csv_path = DATA / "stays.csv"
+        try:
+            preset_stays = sts.load_stays_csv(str(stays_csv_path))
+        except FileNotFoundError:
+            preset_stays = []
+        preset_names = [s.name for s in preset_stays]
+
+        scol1, scol2 = st.columns([3, 2])
+        with scol1:
+            chosen_stays = st.multiselect(
+                "Candidate stays",
+                preset_names,
+                default=preset_names[:4] if len(preset_names) >= 4 else preset_names,
+                key="staysafe_picked",
+            )
+        with scol2:
+            profile = st.selectbox(
+                "Traveller profile",
+                list(sts.PROFILES.keys()),
+                index=list(sts.PROFILES.keys()).index("Couple"),
+                key="staysafe_profile",
+                help="Re-balances the dimension weights for who's staying.",
+            )
+            nights = st.number_input(
+                "Nights", min_value=1, max_value=21, value=2, step=1,
+                key="staysafe_nights",
+            )
+
+        with st.expander("Check-in time"):
+            now_dt = datetime.utcnow()
+            chcol1, chcol2 = st.columns(2)
+            with chcol1:
+                ci_date = st.date_input("Date", value=now_dt.date(), key="staysafe_date")
+            with chcol2:
+                ci_time = st.time_input(
+                    "Time", value=time(15, 0), step=1800, key="staysafe_time",
+                )
+            staysafe_checkin = datetime.combine(ci_date, ci_time)
+            st.caption(
+                "Used as the reference day for the forecast. The 24-hour "
+                "sparkline on each card runs midnight → midnight of that day."
+            )
+
+        with st.expander("Add a custom stay (name + lat/lon)"):
+            custom_stay_df = st.data_editor(
+                pd.DataFrame(columns=["name", "lat", "lon", "kind"]),
+                num_rows="dynamic",
+                use_container_width=True,
+                key="staysafe_custom_editor",
+                column_config={
+                    "name": st.column_config.TextColumn("Name"),
+                    "lat": st.column_config.NumberColumn("Lat", format="%.5f"),
+                    "lon": st.column_config.NumberColumn("Lon", format="%.5f"),
+                    "kind": st.column_config.SelectboxColumn(
+                        "Kind",
+                        options=["hotel", "hostel", "homestay", "villa", "resort"],
+                        default="hotel",
+                    ),
+                },
+            )
+
+        # Build candidate list: presets + custom rows. Dedupe by name.
+        candidates: list[sts.StayCandidate] = []
+        seen: set[str] = set()
+        for s in preset_stays:
+            if s.name in chosen_stays and s.name.lower() not in seen:
+                candidates.append(s)
+                seen.add(s.name.lower())
+        for _, r in custom_stay_df.iterrows():
+            try:
+                la, lo = float(r["lat"]), float(r["lon"])
+            except (TypeError, ValueError):
+                continue
+            nm = str(r.get("name") or f"({la:.3f},{lo:.3f})").strip()
+            if not nm or nm.lower() in seen:
+                continue
+            candidates.append(sts.StayCandidate(
+                name=nm, lat=la, lon=lo,
+                kind=str(r.get("kind") or "hotel").strip() or "hotel",
+            ))
+            seen.add(nm.lower())
+
+        if len(candidates) < 2:
+            render_staysafe_empty(
+                "Pick at least two stays above — try the 4 default picks and the "
+                "podium will appear with a winner, margin, and a heat-mapped "
+                "factor matrix."
+            )
+        else:
+            if len(candidates) > 8:
+                st.info(f"Comparing the first 8 of {len(candidates)} stays for readability.")
+                candidates = candidates[:8]
+            stay_result = sts.compare_stays(
+                candidates,
+                inc_df=inc_df, poi_df=poi_df, geofences=GEOFENCES,
+                forecaster=get_forecaster(),
+                sentinel_clusters=sent_clusters,
+                check_in=staysafe_checkin,
+                nights=int(nights),
+                profile=profile,
+            )
+            render_staysafe(stay_result)
+
+            with st.expander("Per-stay breakdown — windows + walk to help"):
+                for v in stay_result.stays:
+                    hosp = next((l for l in v.help_legs if l.category == "hospital"), None)
+                    pol = next((l for l in v.help_legs if l.category == "police"), None)
+                    hosp_s = f"{hosp.distance_km:.1f} km" if (hosp and hosp.distance_km is not None) else "—"
+                    pol_s = f"{pol.distance_km:.1f} km" if (pol and pol.distance_km is not None) else "—"
+                    st.markdown(
+                        f"**{v.rank}. {v.candidate.name}** — "
+                        f"stay-safe **{v.stay_score}/100** · {v.level}"
+                    )
+                    st.caption(
+                        f"   sleep risk {int(round(v.sleep_risk_mean*100))}% · "
+                        f"evening {int(round(v.evening_risk_mean*100))}% · "
+                        f"morning {int(round(v.morning_risk_mean*100))}% · "
+                        f"hospital {hosp_s} · police {pol_s} · "
+                        f"clusters within 800m: {v.cluster_overlap}"
+                        + (f" ({v.severe_cluster_count} severe)" if v.severe_cluster_count else "")
+                    )
+                    st.caption(f"   why: _{v.why_pick}_")
+
+            st.markdown("---")
+            sslug = "_vs_".join(
+                v.candidate.name.replace(" ", "").lower()[:14]
+                for v in stay_result.stays[:3]
+            )
+            sdl1, sdl2 = st.columns(2)
+            with sdl1:
+                st.download_button(
+                    "⬇️ Download JSON",
+                    data=json.dumps(sts.comparison_to_json(stay_result), indent=2),
+                    file_name=f"waysafe_staysafe_{sslug}_{stay_result.generated_at:%Y%m%d_%H%M}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with sdl2:
+                st.download_button(
+                    "⬇️ Download Markdown",
+                    data=sts.comparison_to_markdown(stay_result),
+                    file_name=f"waysafe_staysafe_{sslug}_{stay_result.generated_at:%Y%m%d_%H%M}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+    # ---------------- Sentinel (Day 26)
+    with tabs[8]:
         st.subheader("🛰️ Sentinel — Live Cluster Intel")
         st.caption(
             "DBSCAN over haversine groups raw incidents into discrete hotspots; each "
@@ -1493,7 +1655,7 @@ if role == "Tourist App":
                     )
 
     # ---------------- Report Hazard
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -1526,7 +1688,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[9]:
+    with tabs[10]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -1545,7 +1707,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[10]:
+    with tabs[11]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -1572,7 +1734,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[11]:
+    with tabs[12]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip
