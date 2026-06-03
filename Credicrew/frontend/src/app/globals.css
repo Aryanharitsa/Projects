@@ -193,6 +193,47 @@ body::before {
 .cc-cal-hotrow:hover { transform: translateX(2px); }
 .cc-cal-drawer { animation: cc-parity-slide 220ms ease; }
 
+/* ---------- Sourcing Intelligence / Channel Studio ---------- */
+
+.cc-src-ring { transition: filter 200ms ease, transform 200ms ease; }
+.cc-src-ring:hover { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--src-accent, #a78bfa) 55%, transparent)); transform: scale(1.02); }
+
+.cc-src-hero {
+  background-image:
+    radial-gradient(520px 200px at 110% -30%, rgba(167,139,250,0.12), transparent 60%),
+    radial-gradient(420px 180px at -10% 130%, rgba(56,189,248,0.08), transparent 60%);
+}
+
+.cc-src-tile { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-src-tile:hover { transform: translateY(-1px); }
+
+.cc-src-card {
+  background-image:
+    radial-gradient(420px 140px at 100% -40%, color-mix(in srgb, var(--src-accent, #a78bfa) 10%, transparent), transparent 60%);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.cc-src-card:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.16); }
+
+.cc-src-best {
+  background-image: radial-gradient(420px 160px at 120% -40%, rgba(52,211,153,0.10), transparent 60%);
+}
+.cc-src-worst {
+  background-image: radial-gradient(420px 160px at -20% 120%, rgba(244,63,94,0.10), transparent 60%);
+}
+.cc-src-recs { background-image: radial-gradient(380px 140px at 100% -20%, rgba(56,189,248,0.06), transparent 60%); }
+
+.cc-src-funnel-cell { transition: transform 120ms ease, background 120ms ease; }
+.cc-src-funnel-cell:hover { transform: translateY(-1px); background: rgba(255,255,255,0.04); }
+
+.cc-src-heat { transition: filter 120ms ease, transform 120ms ease; padding: 4px 6px; }
+.cc-src-heat:hover { transform: scale(1.04); filter: brightness(1.12); }
+
+.cc-src-drawer { animation: cc-src-slide 220ms ease-out; }
+@keyframes cc-src-slide {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }
