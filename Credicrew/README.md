@@ -11,16 +11,89 @@ a print-ready offer letter, **audits the offer for fairness** against the
 team's accepted peer offers so a one-week sprint doesn't quietly torch six
 months of pay-band discipline, rolls every role up into a
 **Command Center** so a recruiter running ten reqs sees the whole portfolio
-on one screen — and now **calibrates the panel** itself, surfacing which
+on one screen, **calibrates the panel** itself, surfacing which
 interviewers are lenient or severe, how reliably the panel agrees, and
-whether removing that bias changes who you'd hire. All from a dark, fast,
-single-page workspace.
+whether removing that bias changes who you'd hire — and now closes the
+loop *back to the top of the funnel* with **Channel Studio**, the missing
+sourcing-intelligence layer that scores every channel on quality,
+conversion, cost, and speed so a recruiter knows where to spend their
+next hour of outreach. All from a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Channel Studio (Day 42)
+
+Every other Credicrew surface analyses what happens *after* a candidate
+is already in the pipeline: match scoring, interview rubric, calibration,
+decision verdict, offer benchmark, peer parity, portfolio health. None
+of them answer the question that sits at the top of the funnel — *where
+should I spend my next hour of outreach?* **Channel Studio** (`/sources`)
+is the missing sourcing-intelligence layer.
+
+- **Per-candidate attribution** — every shortlisted candidate is bucketed
+  into one of eight channels: `linkedin_outreach`, `referral`, `job_post`,
+  `agency`, `community`, `university`, `ai_sourcing`, `silver_medal`.
+  The seed assigns a channel deterministically from the candidate id
+  (FNV-1a hash → weighted choice) so the surface lights up immediately;
+  recruiters can re-tag any candidate from the per-channel drawer and
+  the override persists to localStorage.
+- **Four-dial ROI** — every channel gets a 0–100 ROI ring computed as
+  `0.4·quality + 0.3·conversion + 0.2·cost-efficiency + 0.1·speed`:
+  - **Quality** blends mean match score, mean interview composite (when
+    available), and mean accept-probability. Missing components are
+    re-normalised out so a channel without offers yet isn't unfairly
+    punished — the same philosophy used by the interview rubric.
+  - **Conversion** is `100 · (1 − e^(−12 · reached-offer / count))` —
+    a sigmoid step where 25% to-offer = ~90, 10% = ~60, 5% = ~35.
+  - **Cost efficiency** comes from cost-per-offer (₹k) on a `100 −
+    0.085·cpo` slope; ₹50k/offer ≈ 95, ₹500k ≈ 40, ₹1M ≈ 15. Per-channel
+    default costs ship in the engine (`agency` 60k, `linkedin_outreach`
+    4k, `job_post` 1k, …) and a sidebar editor lets the recruiter tune
+    them globally — the ROI recomputes live.
+  - **Speed** is `clip(120 − 2.5·mean-days-to-offer, 0, 100)`; 14 d ≈ 95,
+    30 d ≈ 60, 45 d ≈ 35.
+  - Each dial rendered as its own progress bar inside the channel card.
+- **Verdict bands** — `scale ≥ 70 · steady ≥ 50 · experiment ≥ 35 · cut
+  < 35`, with a `count < 4` short-circuit to `experiment` so the engine
+  never recommends "scale" from a single data point. Best / worst
+  callouts ignore the `experiment` band.
+- **Funnel per channel** — five-cell strip (`new · outreach · screening
+  · interview · offer`) with reached counts + adjacent-stage conversion
+  rates. The page also draws a **channel × stage heatmap** where every
+  cell is hue-coded by stage-tone × intensity, with a ROI column on the
+  right colour-tinted by the channel's verdict band.
+- **One-liner recommendations** — the engine writes a per-channel
+  recommendation string from the actual numbers ("Cost-per-offer
+  ₹230k is too high — pause Recruiter agency unless quality lifts.";
+  "Highest-quality + highest-converting channel — double InMail seats /
+  referral bonuses here this quarter."), plus a top-of-page
+  **"this week's moves"** list that surfaces the strongest *scale*
+  candidate, the worst *cut* candidate, a **concentration-risk** flag
+  when a single channel owns > 55% of the active pipeline, and a
+  **promote-to-experiment** flag for thin-but-high-quality channels.
+- **Spend rollup** — total ₹k spent across the book, ₹k/interview,
+  ₹k/offer, **diversification score** (normalised Shannon entropy across
+  channel counts — `< 0.5` flags concentration risk).
+- **One-click brief** — Copy or download a Markdown sourcing brief
+  (pipeline · spend · best/worst channel · recommendations · per-channel
+  breakdown table) for a recruiting standup or a budget review.
+- **Backend mirror** — `POST /sources/summary` takes the flat candidate
+  list (each with its match score, interview composite, accept-prob,
+  and source attribution) and returns the identical per-channel rollup
+  the TS engine produces. `POST /sources/brief` re-renders the Markdown
+  from a cached summary. Both accept `camelCase` and `snake_case`
+  payloads via Pydantic aliases.
+- **Theme** — `.cc-src-*` family in `globals.css`: per-card accent CSS
+  custom property (`--src-accent`) driven by the verdict band so the
+  card glow, ROI ring, and top hairline all retheme by swapping one
+  className; hero radial gradient; heatmap hover lift; drawer slide-in
+  via `cc-src-slide`.
 
 ---
 
@@ -635,6 +708,45 @@ Team pool CRUD. `GET` returns `{ team, peers, count }`. `POST` accepts
 a `PeerIn` body and upserts by `id`. `DELETE /peer-parity/peers/{id}`
 returns 404 if the id wasn't in the pool. Thread-safe via `RLock`.
 
+### `POST /sources/summary`
+Per-channel ROI rollup across every role's shortlist. Accepts
+`{ candidates, costOverrides?, now?, includeBrief? }` where each
+candidate carries its `roleId`, `roleName`, `status`, `addedAt`,
+`matchScore`, optional `composite` / `confidence` / `winProbability` /
+`hasOffer`, and `source: { channel, detail?, costOverride? }`. Returns
+`{ byChannel: [{ channel, roi, band, qualityScore, conversionScore,
+costScore, speedScore, reached, conversion, costPerOffer,
+costPerInterview, meanComposite, meanWinProb, meanDaysToOffer,
+topLocations, recommendation, … }], totalCandidates, totalActive,
+totalSpend, totalOffers, totalInterviewed, costPerInterview,
+costPerOffer, bestChannel, worstChannel, diversification, recommendations }`.
+Set `includeBrief: true` to bundle the Markdown brief. Both `camelCase`
+and `snake_case` payloads accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8000/sources/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "candidates": [
+      {"candidateId": 1, "name": "Asha", "roleId": "r1", "roleName": "Senior BE",
+       "status": "offer", "addedAt": 1717000000000, "matchScore": 88,
+       "composite": 82, "confidence": 1.0, "hasOffer": true,
+       "winProbability": 0.7, "location": "Bengaluru",
+       "source": {"channel": "referral", "detail": "Aman P"}},
+      {"candidateId": 2, "name": "Dev", "roleId": "r1", "roleName": "Senior BE",
+       "status": "interview", "addedAt": 1717800000000, "matchScore": 80,
+       "composite": 70, "confidence": 0.8, "location": "Pune",
+       "source": {"channel": "referral"}}
+    ],
+    "includeBrief": true
+  }'
+```
+
+### `POST /sources/brief`
+Re-render the Markdown sourcing brief from a cached summary. Takes
+`{ summary, title? }`, returns `{ markdown }`. Useful when an agentic
+client already has the analysis cached and just wants the prose.
+
 ### Endpoint map
 
 | Method | Path                          | Purpose                                                 |
@@ -660,6 +772,8 @@ returns 404 if the id wasn't in the pool. Thread-safe via `RLock`.
 | DELETE | `/peer-parity/peers/{id}`     | remove a peer from the team pool                        |
 | POST   | `/portfolio/summary`          | portfolio rollup across every role (Command Center)     |
 | POST   | `/calibration/summary`        | panel bias + reliability + de-biased ranking            |
+| POST   | `/sources/summary`            | per-channel ROI rollup (Channel Studio)                 |
+| POST   | `/sources/brief`              | Markdown sourcing brief from a cached summary           |
 
 ---
 
@@ -678,7 +792,8 @@ Credicrew/
 │       │   ├── offer.py            # POST /offer/{benchmark,simulate,compose,full}
 │       │   ├── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
 │       │   ├── portfolio.py        # POST /portfolio/summary
-│       │   └── calibration.py      # POST /calibration/summary
+│       │   ├── calibration.py      # POST /calibration/summary
+│       │   └── sources.py          # POST /sources/{summary,brief}
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
@@ -687,12 +802,14 @@ Credicrew/
 │           ├── offer.py            # comp band · win-prob · letter
 │           ├── peer_parity.py      # regression · z-scores · inversions · suggestions
 │           ├── portfolio.py        # portfolio rollup · funnel · comp forecast · health
-│           └── calibration.py      # rater bias · consensus · ICC · de-biased ranking
+│           ├── calibration.py      # rater bias · consensus · ICC · de-biased ranking
+│           └── sources.py          # channel attribution · ROI rollup · recommendations
 ├── frontend/
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx            # Discover (search + composition + roles)
 │       │   ├── hq/page.tsx         # Command Center (portfolio rollup)
+│       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence — NEW)
 │       │   ├── pipeline/page.tsx   # Quick-saves
 │       │   └── roles/
 │       │       ├── page.tsx        # Roles list
