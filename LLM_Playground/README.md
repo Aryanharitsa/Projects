@@ -2,17 +2,173 @@
 
 A side‑by‑side LLM evaluation studio. Run the **same prompt** against multiple
 frontier models in parallel, score them with an LLM‑as‑judge (or a **panel of
-judges**), **vote on them yourself**, version your prompts, keep **every
-run** in a queryable, comparable history, see the **quality/cost frontier**
-across your whole spend in Insights, and — new this round — define **Eval
-Suites**: reproducible test batteries you can re‑run against any model to
-catch regressions before users do.
+judges**), **vote on them yourself**, version your prompts, keep **every run**
+in a queryable, comparable history, see the **quality/cost frontier** across
+your whole spend in Insights, define **Eval Suites** to catch regressions
+before users do, and — new this round — build **Rubrics**: first‑class,
+anchor‑driven, versioned judge sheets you can save, share, test, and reuse
+across every other surface.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Eval Suites (reproducible test batteries + regression detection)
+## 🆕 What's new — Rubrics Studio (anchor‑driven, versioned judge sheets)
+
+> Round‑9. Every surface in the playground that scores something has been
+> using the same generic "score this 1‑5" rubric since day one. That works
+> for casual A/B, but a real evaluation workflow needs **domain rubrics** —
+> "Groundedness" for RAG, "Tone safety" for support, "Edge cases" for
+> code — each with its own anchor descriptions for what a 0/5/10 looks
+> like. This move ships the studio that builds them.
+
+Hit **Rubrics** in the sidebar. A rubric is a named, reusable scoring sheet:
+
+- **Dimensions** — each dimension has a `name`, a one‑line `description`, an
+  integer `weight` (sliders that normalise to 100 on save), and a 0/5/10
+  **anchor block** explaining what each score level looks like for *this*
+  dimension.
+- **Judge guidance** — an optional addendum the judge model sees alongside the
+  dimensions ("treat unsupported claims as the most severe failure mode" /
+  "penalise generic AI‑flavoured prose").
+- **Server‑computed composite** — the judge returns per‑dimension scores
+  (0‑10) and rationales; the backend computes the 0‑100 composite from the
+  rubric weights so a misbehaving judge can't poison the math.
+- **Versioning** — every dimension/anchor/addendum edit appends a new
+  `rubric_revision` (append‑only, just like `prompt_versions`). The current
+  revision pointer always moves forward; you can restore an older revision
+  with a single click — a restore is itself a new revision so the history
+  is honest.
+- **One‑click test** — paste a `(prompt, response)` pair, pick a judge
+  provider/model, hit *Run rubric judge*. You get a score ring, per‑dimension
+  progress bars, per‑dimension rationale, the judge's verdict line, latency
+  and cost. Each test is logged so the global stats stay live.
+- **Stats** that mean something — total rubrics, total judgements, average
+  composite across all rubrics, total judge spend, the **best candidate
+  model** across all rubric tests (min 3 judgements), and the **top judges**
+  by usage with their average latency + spend.
+
+### Seed → in 10 seconds
+
+First‑click **Seed 4 starter rubrics**:
+
+1. **Code Review** — 40% correctness, 20% idiomatic, 20% edge cases, 20%
+   readability. Each dimension has anchors like "*Doesn't compile / runs but
+   produces wrong output / hallucinated APIs*" at the 0 mark.
+2. **RAG Faithfulness** — 40% groundedness, 25% relevance, 20% citation, 15%
+   calibration. Treats any confidently stated unsupported claim as the most
+   severe failure (anchor 0 = "*Multiple confident claims absent from the
+   context*").
+3. **Customer Support** — 30% tone, 30% resolution, 25% accuracy, 15%
+   brevity. Anchors explicitly call out blame‑the‑customer and missing
+   next‑step failure modes.
+4. **Creative Writing** — 30% voice, 25% imagery, 25% structure, 20%
+   restraint. Anchors penalise generic AI‑flavoured prose and reward earned
+   structural choices.
+
+### Why anchors + per‑dim rationale matter
+
+The judge prompt is generated from the rubric: every dimension's `weight`,
+`description`, *and* its 0/5/10 anchors get serialised into the body
+verbatim. The judge then returns:
+
+```json
+{
+  "scores":     { "Groundedness": 8, "Relevance": 9, "Citation": 6, "Calibration": 7 },
+  "rationales": { "Groundedness": "claim about CVE-2024-1234 isn't in the context",
+                  "Relevance":    "answers the asked question precisely",
+                  "Citation":     "cites the right passage but format is loose",
+                  "Calibration":  "appropriately hedges where context is silent" },
+  "summary":    "Solid faithful answer with one citation hygiene issue."
+}
+```
+
+The composite (0‑100) is computed *server‑side* from `scores × weights`, so
+the judge can't fabricate it. The UI renders a score ring, per‑dimension
+progress bars colour‑coded by score, and each dim's `contributes N pts to
+composite` so the *why* is visible.
+
+### Why every edit is a revision
+
+Pass/fail history is only meaningful if you can answer "did this rubric
+change between these two runs?". `update_rubric` computes a deterministic
+signature over the dimensions+addendum: identical → no new revision;
+different → append‑only insert and the rubric's `current_revision_num`
+moves forward. A restore copies an older revision forward as a new
+revision (so r1 → r4 = "we restored r1"), and the revision list shows
+notes, parent links, dim counts, and a single‑click *Restore* per row.
+
+### API surface
+
+```
+POST   /api/rubrics                                  create
+GET    /api/rubrics                                  list (q, tag, starred, limit, offset)
+POST   /api/rubrics/seed                             idempotent — 4 starter rubrics
+GET    /api/rubrics/stats                            portfolio rollup
+GET    /api/rubrics/:id                              read (current rev + history + recent judgements)
+DELETE /api/rubrics/:id                              cascade delete
+POST   /api/rubrics/:id/meta                         {name?, description?, tag?, starred?}
+POST   /api/rubrics/:id/revisions                    save a new revision iff dims changed
+POST   /api/rubrics/:id/revisions/:n/restore         copy revision n forward as current
+POST   /api/rubrics/:id/test                         judge an ad‑hoc (prompt, response) pair
+GET    /api/rubrics/:id/judgements                   judgement log for this rubric
+DELETE /api/rubrics/judgements/:jid                  drop one logged judgement
+```
+
+### Schema
+
+Three tables share the same `history.db` so a single backup captures
+everything:
+
+| table                | purpose                                         |
+|----------------------|-------------------------------------------------|
+| `rubrics`            | one row per rubric — name, tag, star, head ptr  |
+| `rubric_revisions`   | append‑only chain of `(dimensions_json, addendum, note, parent_revision)` |
+| `rubric_judgements`  | every test logged — prompt, response, per‑dim scores, judge model, latency, cost |
+
+Indexed on `updated_at DESC`, `starred`, `(rubric_id, revision_num DESC)`,
+`(rubric_id, created_at DESC)`, `(candidate_provider, candidate_model)` so
+the UI list, the revision drawer, the judgement log, and the "best model"
+roll‑up all stay snappy under thousands of rows without paying SQLite‑JSON1
+indexing tax.
+
+### Engine highlights
+
+- `_normalise_dimensions` validates names + clamps weights, then re‑packs
+  weights to **integer percents summing to exactly 100** using the
+  largest‑remainder method — the UI sees clean integers and the composite
+  math is deterministic.
+- `build_rubric_judge_prompt` renders the rubric (name + weight + description
+  + per‑level anchors), the user prompt, the optional system prompt, the
+  addendum, the response, and a JSON output schema in one body — same
+  paranoia as `judge.build_judge_prompt`.
+- `parse_rubric_response` strips ```json fences, finds the first balanced
+  `{...}` block, tolerates case‑insensitive dimension keys, **clamps every
+  score to [0, 10]**, and falls back to zeros + a `(judge did not return a
+  verdict)` rationale when parsing fails — `parsed_ok` flags the failure so
+  the UI can warn instead of silently scoring 0.
+- `_composite` computes `Σ (score_i / 10 × weight_i / 100) × 100` server‑side
+  — the judge has no say.
+- All DB writes go through a single non‑reentrant lock; the `update_rubric`
+  no‑op path explicitly exits the lock before calling back into `get_rubric`
+  to avoid the deadlock that catches every "we share a lock with our reader"
+  refactor (asked me how I know).
+
+### How this plugs into the rest of the studio
+
+This round is purely the studio. The next move is the integration pass:
+
+- **Eval Suites** will accept `rubric_id` in `run_suite` so a suite is
+  judged with a named rubric instead of an inline JSON blob, and pass/fail
+  becomes per‑dimension (not just composite ≥ N).
+- **Arena / Judge / Consensus** will offer "score with rubric →" against
+  any saved rubric, persisting the verdict to `rubric_judgements` so the
+  global stats and the best‑model leaderboard always reflect every score
+  the studio has ever produced.
+
+---
+
+## What's new in Round‑8 — Eval Suites (reproducible test batteries + regression detection)
 
 > Round‑8. The playground had every *one‑off* measurement tool (Arena,
 > Judge, Consensus, Vote, History, Library, Insights) but no way to run the

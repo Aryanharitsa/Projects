@@ -372,6 +372,82 @@ class ApiService {
     return this.request('/suites/stats');
   }
 
+  // ─── Rubrics Studio ────────────────────────────────────────────────────────
+  // First-class versioned judge rubrics: anchor-driven dimensions, per-dim
+  // scores + rationales, weighted composite computed server-side. Round-9.
+
+  async listRubrics(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '' || v === false) return;
+      qs.set(k, v === true ? '1' : String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/rubrics${suffix}`);
+  }
+
+  async createRubric(payload) {
+    return this.request('/rubrics', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedRubrics() {
+    return this.request('/rubrics/seed', { method: 'POST' });
+  }
+
+  async rubricsStats() {
+    return this.request('/rubrics/stats');
+  }
+
+  async getRubric(rubricId) {
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}`);
+  }
+
+  async deleteRubric(rubricId) {
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}`, { method: 'DELETE' });
+  }
+
+  async setRubricMeta(rubricId, meta) {
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}/meta`, {
+      method: 'POST',
+      body: JSON.stringify(meta),
+    });
+  }
+
+  async saveRubricRevision(rubricId, payload) {
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}/revisions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async restoreRubricRevision(rubricId, revisionNum, payload = {}) {
+    return this.request(
+      `/rubrics/${encodeURIComponent(rubricId)}/revisions/${encodeURIComponent(revisionNum)}/restore`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
+  async testRubric(rubricId, payload) {
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}/test`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listRubricJudgements(rubricId, { limit = 50, offset = 0 } = {}) {
+    const qs = new URLSearchParams();
+    if (limit) qs.set('limit', limit);
+    if (offset) qs.set('offset', offset);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/rubrics/${encodeURIComponent(rubricId)}/judgements${suffix}`);
+  }
+
+  async deleteRubricJudgement(judgementId) {
+    return this.request(`/rubrics/judgements/${encodeURIComponent(judgementId)}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

@@ -17,6 +17,7 @@ from src import vote_arena
 from src import prompts as prompts_lib
 from src import insights as insights_lib
 from src import evals as evals_lib
+from src import rubrics as rubrics_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1096,6 +1097,174 @@ def suites_runs_list(suite_id):
         offset=int(request.args.get('offset', 0) or 0),
     )
     return jsonify({'success': True, 'runs': rows, 'total': total})
+
+
+# ---------------------------------------------------------------------------
+# Rubrics Studio — first-class, versioned judge rubrics with per-dimension
+# anchor-driven scoring. Round-9.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/rubrics', methods=['GET'])
+def rubrics_list():
+    args = request.args
+
+    def _bool(name: str) -> bool:
+        v = args.get(name, '').strip().lower()
+        return v in ('1', 'true', 'yes', 'on')
+
+    rows, total = rubrics_lib.list_rubrics(
+        q=(args.get('q') or '').strip() or None,
+        tag=(args.get('tag') or '').strip() or None,
+        starred_only=_bool('starred'),
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'rubrics': rows, 'total': total})
+
+
+@llm_bp.route('/rubrics', methods=['POST'])
+def rubrics_create():
+    data = request.get_json() or {}
+    try:
+        rubric = rubrics_lib.create_rubric(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            tag=(data.get('tag') or '').strip(),
+            dimensions=data.get('dimensions') or [],
+            judge_addendum=(data.get('judge_addendum') or ''),
+            note=(data.get('note') or ''),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'rubric': rubric}), 201
+
+
+@llm_bp.route('/rubrics/seed', methods=['POST'])
+def rubrics_seed():
+    seeds = rubrics_lib.seed_rubrics()
+    return jsonify({'success': True, 'rubrics': seeds}), 201
+
+
+@llm_bp.route('/rubrics/stats', methods=['GET'])
+def rubrics_stats():
+    return jsonify({'success': True, 'stats': rubrics_lib.stats()})
+
+
+@llm_bp.route('/rubrics/<rubric_id>', methods=['GET'])
+def rubrics_get(rubric_id):
+    rubric = rubrics_lib.get_rubric(rubric_id)
+    if not rubric:
+        return jsonify({'success': False, 'error': 'rubric not found'}), 404
+    return jsonify({'success': True, 'rubric': rubric})
+
+
+@llm_bp.route('/rubrics/<rubric_id>', methods=['DELETE'])
+def rubrics_delete(rubric_id):
+    if not rubrics_lib.delete_rubric(rubric_id):
+        return jsonify({'success': False, 'error': 'rubric not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/rubrics/<rubric_id>/meta', methods=['POST'])
+def rubrics_set_meta(rubric_id):
+    data = request.get_json() or {}
+    ok = rubrics_lib.set_rubric_meta(
+        rubric_id,
+        name=data.get('name') if isinstance(data.get('name'), str) else None,
+        description=data.get('description') if isinstance(data.get('description'), str) else None,
+        tag=data.get('tag') if isinstance(data.get('tag'), str) else None,
+        starred=bool(data['starred']) if 'starred' in data else None,
+    )
+    if not ok:
+        return jsonify({'success': False, 'error': 'rubric not found or nothing to update'}), 404
+    return jsonify({'success': True, 'rubric': rubrics_lib.get_rubric(rubric_id)})
+
+
+@llm_bp.route('/rubrics/<rubric_id>/revisions', methods=['POST'])
+def rubrics_update(rubric_id):
+    """Save a new revision iff dimensions / addendum changed."""
+    data = request.get_json() or {}
+    try:
+        rubric = rubrics_lib.update_rubric(
+            rubric_id,
+            dimensions=data.get('dimensions') or [],
+            judge_addendum=(data.get('judge_addendum') or ''),
+            change_note=(data.get('note') or ''),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    if rubric is None:
+        return jsonify({'success': False, 'error': 'rubric not found'}), 404
+    return jsonify({'success': True, 'rubric': rubric})
+
+
+@llm_bp.route('/rubrics/<rubric_id>/revisions/<int:revision_num>/restore', methods=['POST'])
+def rubrics_restore(rubric_id, revision_num):
+    data = request.get_json() or {}
+    rubric = rubrics_lib.restore_revision(
+        rubric_id, int(revision_num),
+        note=(data.get('note') or ''),
+    )
+    if rubric is None:
+        return jsonify({'success': False, 'error': 'rubric or revision not found'}), 404
+    return jsonify({'success': True, 'rubric': rubric})
+
+
+@llm_bp.route('/rubrics/<rubric_id>/test', methods=['POST'])
+def rubrics_test(rubric_id):
+    """Run the rubric judging engine against an ad-hoc (prompt, response) pair.
+
+    The response is whatever the user pasted — a real model output, a candidate
+    from Arena, anything. Persisted so the judgement log + stats stay live.
+    """
+    data = request.get_json() or {}
+    user_prompt = (data.get('user_prompt') or '').strip()
+    response = (data.get('response') or '').strip()
+    judge_provider = (data.get('judge_provider') or '').strip()
+    judge_model = (data.get('judge_model') or '').strip()
+    if not user_prompt:
+        return jsonify({'success': False, 'error': 'user_prompt is required'}), 400
+    if not response:
+        return jsonify({'success': False, 'error': 'response is required'}), 400
+    if not judge_provider or not judge_model:
+        return jsonify({'success': False, 'error': 'judge_provider and judge_model are required'}), 400
+
+    try:
+        payload, status = rubrics_lib.judge_with_rubric(
+            rubric_id,
+            user_prompt=user_prompt,
+            response=response,
+            judge_provider=judge_provider,
+            judge_model=judge_model,
+            system_prompt=(data.get('system_prompt') or ''),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            note=(data.get('note') or ''),
+            provider_factory=provider_factory,
+            persist=bool(data.get('persist', True)),
+            revision_num=data.get('revision_num'),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+@llm_bp.route('/rubrics/<rubric_id>/judgements', methods=['GET'])
+def rubrics_judgements_list(rubric_id):
+    rows, total = rubrics_lib.list_judgements(
+        rubric_id,
+        limit=int(request.args.get('limit', 50) or 50),
+        offset=int(request.args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'judgements': rows, 'total': total})
+
+
+@llm_bp.route('/rubrics/judgements/<judgement_id>', methods=['DELETE'])
+def rubrics_judgement_delete(judgement_id):
+    if not rubrics_lib.delete_judgement(judgement_id):
+        return jsonify({'success': False, 'error': 'judgement not found'}), 404
+    return jsonify({'success': True})
 
 
 @llm_bp.route('/insights', methods=['GET'])
