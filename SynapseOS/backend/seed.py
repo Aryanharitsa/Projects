@@ -154,6 +154,33 @@ SEED: list[tuple[str, str, list[str]]] = [
         "for personal knowledge that fits in one hierarchy.",
         ["pkm", "product"],
     ),
+    # --- echoes (deliberate near-duplicates so the Echo tab lights up
+    # on first run; redundant restatements of the same idea are exactly
+    # the PKM hygiene problem Echo exists to solve) ---
+    (
+        "Cosine similarity is the substrate",
+        "Vector embeddings turn prose into coordinates and cosine similarity "
+        "between those coordinates is a cheap proxy for semantic relatedness. "
+        "Most second-brain tools are quietly running on this substrate. "
+        "It's the foundation everything else builds on.",
+        ["ml", "embeddings"],
+    ),
+    (
+        "SQLite is enough",
+        "A single file with zero configuration, much faster than people think "
+        "for reads, and perfectly fine for single-tenant writes. If your "
+        "application fits comfortably on one machine, it almost certainly "
+        "fits in SQLite. The boring choice is the right one.",
+        ["engineering", "infra", "boring"],
+    ),
+    (
+        "Atomic notes, one idea each",
+        "One idea per note, atomic and self-contained, with links instead of "
+        "folders as the primary organizing structure. The index is the "
+        "product — that was Luhmann's real insight, and Zettelkasten in a "
+        "single sentence.",
+        ["pkm", "writing"],
+    ),
 ]
 
 

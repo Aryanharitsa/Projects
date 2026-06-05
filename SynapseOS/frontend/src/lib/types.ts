@@ -390,3 +390,78 @@ export type NoteDraft = {
   body: string;
   tags: string[];
 };
+
+// ----------------------------------------------------------------- echo
+
+export type EchoMember = {
+  note_id: number;
+  title: string;
+  body: string;
+  tags: string[];
+  created_at: string;
+  body_len: number;
+  is_canonical: boolean;
+  centrality: number;
+};
+
+export type EchoPair = {
+  a_id: number;
+  b_id: number;
+  cosine: number;
+};
+
+export type EchoSentence = {
+  text: string;
+  note_ids: number[];
+  is_duplicate: boolean;
+  is_canonical_source: boolean;
+};
+
+export type EchoCluster = {
+  cluster_id: string;
+  size: number;
+  redundancy: number;
+  peak_cosine: number;
+  wasted_chars: number;
+  chars_total: number;
+  chars_unique: number;
+  canonical_id: number;
+  members: EchoMember[];
+  pairs: EchoPair[];
+  merged_title: string;
+  merged_body: string;
+  merged_tags: string[];
+  sentences: EchoSentence[];
+  overlap_ratio: number;
+};
+
+export type EchoReport = {
+  threshold: number;
+  total_notes: number;
+  candidate_pairs: number;
+  cluster_count: number;
+  skipped_pair_count: number;
+  clusters: EchoCluster[];
+  stats: {
+    notes?: number;
+    pairs_above_threshold?: number;
+    clusters?: number;
+    wasted_chars_total?: number;
+    biggest_redundancy?: number;
+  };
+};
+
+export type EchoMergeResult = {
+  merged_note_id: number;
+  merged_title: string;
+  deleted_ids: number[];
+  wasted_chars_recovered: number;
+  final_synapses: number;
+};
+
+export type EchoSkipEntry = {
+  a_id: number;
+  b_id: number;
+  reason: string;
+  created_at: string;
+};
