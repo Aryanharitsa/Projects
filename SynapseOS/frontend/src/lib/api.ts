@@ -9,6 +9,10 @@ import type {
   ChatStatus,
   ClusterDigest,
   Community,
+  EchoCluster,
+  EchoMergeResult,
+  EchoReport,
+  EchoSkipEntry,
   Graph,
   Neighbor,
   Note,
@@ -199,5 +203,59 @@ export const api = {
     if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
     const qs = q.toString();
     return `${BASE}/tensions/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  echo: (opts?: { threshold?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return j<EchoReport>(`/echo${qs ? `?${qs}` : ""}`);
+  },
+
+  echoPreview: (payload: { note_ids: number[]; canonical_id?: number | null }) =>
+    j<EchoCluster>(`/echo/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        note_ids: payload.note_ids,
+        canonical_id: payload.canonical_id ?? null,
+      }),
+    }),
+
+  echoMerge: (payload: {
+    note_ids: number[];
+    canonical_id?: number | null;
+    title?: string;
+    body?: string;
+    tags?: string[];
+  }) =>
+    j<EchoMergeResult>(`/echo/merge`, {
+      method: "POST",
+      body: JSON.stringify({
+        note_ids: payload.note_ids,
+        canonical_id: payload.canonical_id ?? null,
+        title: payload.title,
+        body: payload.body,
+        tags: payload.tags,
+      }),
+    }),
+
+  echoSkip: (payload: { pairs: [number, number][]; reason?: string }) =>
+    j<{ inserted: number; total_skips: number }>(`/echo/skip`, {
+      method: "POST",
+      body: JSON.stringify({ pairs: payload.pairs, reason: payload.reason ?? "" }),
+    }),
+
+  echoSkips: () => j<EchoSkipEntry[]>(`/echo/skips`),
+
+  echoUnskip: (a: number, b: number) =>
+    j<void>(`/echo/skip?a=${a}&b=${b}`, { method: "DELETE" }),
+
+  echoExportUrl: (opts?: { threshold?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return `${BASE}/echo/export.md${qs ? `?${qs}` : ""}`;
   },
 };

@@ -68,6 +68,23 @@ threshold live, and watch your topical clusters discover themselves.
   disagreement between topics). The header badge tells you how many
   unresolved contradictions your second brain is currently carrying.
   Pure stdlib · deterministic · portable Markdown export.
+- **Echoes — collapse the duplicates your second brain quietly accrued.**
+  Every other SynapseOS surface treats similarity as a virtue. Echoes
+  flips the sign. Pairs above a tunable cosine `τ` (default 0.72) form
+  single-linkage **dedup clusters**; each cluster reports its
+  **redundancy %**, the **chars you'd recover by merging**, the
+  auto-picked **canonical "merge-into" target** (highest centrality +
+  longest body), and a **sentence-level overlap ledger**. The modal
+  paints duplicate phrases in cyan inside each member's body
+  (substring-matched against fuzzy-bucketed sentence groups, so
+  re-phrasings collapse — Jaccard ≥ 0.55 over content words). A live
+  **merge preview** rebuilds server-side whenever you flip canonical,
+  drop a member, or edit the title/body — the resulting merge replaces
+  the canonical note **in-place** (id preserved so external links
+  resolve) and deletes the duplicates. A **Mark distinct** button
+  persists `(a, b)` pairs to a `dedupe_skips` table so a "no, those two
+  are different" decision sticks forever. Header badge counts active
+  clusters; deterministic; portable Markdown export.
 - **Orphan rescue.** Notes with no synapses surface in their own panel
   alongside their strongest near-miss neighbor and the exact `τ` value
   that would attach them. Lower the threshold, or refine the note —
@@ -141,7 +158,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions modals      │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo modals │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -168,6 +185,10 @@ threshold live, and watch your topical clusters discover themselves.
 │                                                 (polarity · antonyms ·   │
 │                                                  contrast · title-clash ·│
 │                                                  bridge-prompt + md export) │
+│                                                 echo.py                  │
+│                                                 (single-linkage dedup ·  │
+│                                                  fuzzy sentence buckets ·│
+│                                                  in-place merge + skips) │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -531,6 +552,64 @@ constant-time.
 
 ---
 
+## Echoes — collapse the duplicates your second brain quietly accrued
+
+Every other surface in SynapseOS treats *similarity* as a virtue:
+synapses draw it, communities cluster it, Synthesis paraphrases the
+consensus inside one. **Echo flips the sign.** The same property that
+powers all the good stuff is also a tax — as your store grows you
+naturally restate the same insight in different words, weeks apart.
+Those near-duplicates pollute the graph (hub nodes that shouldn't be
+hubs), inflate cluster sizes, and make search noisier.
+
+Click **⌬ echoes** in the header. The modal lists every near-duplicate
+cluster with a redundancy bar, recoverable-chars badge, and pairwise
+cosine ladder. For each cluster:
+
+```
+threshold   pairs with cosine ≥ τ (default 0.72) form edges; union-find
+            yields connected components of size ≥ 2. Single-linkage is
+            intentional — if A≈B and B≈C, you want A and C in the same
+            merge UI even if A and C only just miss the bar themselves.
+
+canonical   the member with highest centrality (sum of cosine to the
+            rest of the cluster), tie-broken by longest body then
+            oldest id. That's "the one that already says most of what
+            the others say" — the natural merge target.
+
+sentences   every sentence across every member is fuzzy-bucketed by
+            content-word Jaccard (≥ 0.55, stop-words stripped) so
+            rephrasings collapse. Each bucket's representative becomes
+            one sentence in the merged body; ``note_ids`` records every
+            member that contributed so the UI can paint
+            "appears in 3 notes" badges.
+
+merged_body canonical's sentences first (in original order), then any
+            *new* sentences contributed by each other member appended
+            afterwards. The output reads like the canonical augmented
+            with what the duplicates added — not a Frankenstein
+            paragraph.
+```
+
+The **live merge preview** rebuilds server-side every time you flip the
+canonical, drop a member out of the merge, or edit the title/body, so
+the recoverable-char count and merged-tag union always reflect what
+*Merge* would actually persist. **Merge** replaces the canonical note
+**in-place** — its id is preserved so any external bookmarks keep
+resolving — and deletes the other duplicates.
+
+**Mark distinct** persists every pair in the cluster to a
+`dedupe_skips` table; subsequent `/echo` calls filter them out forever,
+so a "no, those two are different" decision sticks. `DELETE /echo/skip`
+forgets a single skip if you change your mind.
+
+Pure stdlib, deterministic, pure function of `(notes, embeddings,
+threshold, skips)`. Cheap enough that the header probe runs on every
+graph refresh — so the badge always reflects "your second brain has N
+duplicate clusters waiting to be merged" without forcing a modal load.
+
+---
+
 ## API surface
 
 | Method | Path                         | Purpose                                              |
@@ -564,6 +643,13 @@ constant-time.
 | `GET`  | `/digest/export.md?cluster_id=…` | Self-contained Markdown brief for one cluster (synthesis · claims · open threads · bridges · sources). |
 | `GET`  | `/tensions?floor=&limit=&threshold=&top_k=` | Detected contradictions: `{ threshold, floor, total_pairs_scanned, candidate_count, tension_count, tensions: [ { a_id, a_title, b_id, b_title, cosine, magnitude, signals: [{ kind, weight, detail }], evidence: [{ note_id, title, sentence, polarity }], bridge_title, bridge_prompt, bridge_tags[], kind: "internal"\|"cross", cluster_a/b/_name/_color } ], stats }`. |
 | `GET`  | `/tensions/export.md?floor=&limit=` | Tensions brief as portable Markdown, sectioned by `internal` / `cross` with both quotes and the bridge prompt per tension. |
+| `GET`  | `/echo?threshold=&limit=`    | Near-duplicate clusters: `{ threshold, total_notes, candidate_pairs, cluster_count, skipped_pair_count, clusters: [ { cluster_id, size, redundancy, peak_cosine, wasted_chars, chars_total/unique, canonical_id, members[], pairs[], merged_title, merged_body, merged_tags[], sentences: [{ text, note_ids[], is_duplicate, is_canonical_source }], overlap_ratio } ], stats }`. |
+| `POST` | `/echo/preview`              | Live merge preview for `{ note_ids[], canonical_id? }` — recomputed when the user flips the canonical or drops a member. No DB writes. |
+| `POST` | `/echo/merge`                | Collapse the cluster: replace canonical in-place (id preserved), delete the duplicates. Body: `{ note_ids[], canonical_id?, title?, body?, tags? }`. Returns `{ merged_note_id, merged_title, deleted_ids[], wasted_chars_recovered, final_synapses }`. |
+| `POST` | `/echo/skip`                 | Mark `(a, b)` pair(s) as intentionally distinct. Body: `{ pairs: [[a,b], …], reason? }`. Persisted to `dedupe_skips`; subsequent `/echo` calls filter them out forever. |
+| `GET`  | `/echo/skips`                | List all currently-skipped pairs.                                                 |
+| `DEL`  | `/echo/skip?a=&b=`           | Forget a single skip so the pair can resurface in the dedup brief.                |
+| `GET`  | `/echo/export.md?threshold=&limit=` | The dedup brief as portable Markdown — one section per cluster with all bodies + the suggested merged body. |
 
 Interactive docs at `http://localhost:8000/docs`.
 
