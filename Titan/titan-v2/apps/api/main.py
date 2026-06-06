@@ -263,6 +263,55 @@ async def aml_sanctions_list(limit: int = 50) -> Dict[str, Any]:
         return r.json()
 
 
+# ----- Adverse-media OSINT pass-through (round-9, day-45)
+
+
+@app.get("/aml/media/rules")
+async def aml_media_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/media/screen")
+async def aml_media_screen(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(f"{AML_SVC}/aml/media/screen", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/media/articles")
+async def aml_media_articles(
+    category: Optional[str] = None,
+    tier: Optional[int] = None,
+    q: Optional[str] = None,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"limit": limit}
+    if category:
+        params["category"] = category
+    if tier is not None:
+        params["tier"] = tier
+    if q:
+        params["q"] = q
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/articles", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/media/articles/{article_id}")
+async def aml_media_article(article_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/articles/{article_id}")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
 # ----- Typology library pass-through (round-6, day-30)
 
 

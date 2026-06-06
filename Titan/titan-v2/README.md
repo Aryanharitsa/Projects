@@ -74,6 +74,52 @@ here's the freeze-and-investigate paragraph".
 > function of `(transactions, labels, weights)` — admissible as model
 > evidence.
 
+> **Day-45 — Adverse Media OSINT.** Sanctions screening answers a
+> *binary* question against a *closed* watchlist. Real EDD asks the
+> open-world question that compliance teams use to escalate KYC
+> reviews even without an SDN hit: *what is the world saying about
+> this entity?* The new `apps/ai-aml/media.py` engine ships a
+> deterministic, dependency-free **adverse-media screener** over a
+> bundled 40-article corpus (`data/adverse_media.json`) that scores
+> every party-name in a transaction batch — subject + counterparty —
+> against an 11-category × 3-tier taxonomy. Per-article hit strength
+> blends four signals that any auditor can recompute by hand:
+>
+> ```
+> hit_strength = name_similarity        (0..1, fuzzy match)
+>              * category_severity      (0..1, money_laundering=1.00 … litigation=0.50)
+>              * source_tier_weight     (0..1, tier-1=1.00, tier-2=0.75, tier-3=0.50)
+>              * recency_decay          (0..1, 0.5^(age_days / half_life_days))
+> ```
+>
+> Per-entity composite is a saturating curve
+> `100·(1 − exp(−Σ top_k(hit_strength) / 2.5))` bucketed into
+> `clear · elevated · material · severe`, so one strong recent hit
+> lands ≈ 29, four ≈ 73, ten saturate near 96. Name matching reuses
+> the same token-set + char-3gram + containment blend as sanctions
+> screening — only the floor is relaxed (0.55 vs 0.65) because media
+> coverage is fuzzier than a SDN list. The new **`adverse_media`
+> detector** is wired into the risk engine at weight 14, ramps
+> linearly across composite 35–85, and ships evidence pointing at the
+> top three articles. New `/media` console: hero with corpus stats +
+> half-life knob, two tabs — `Screen entities` (left rail with names
+> textarea + similarity floor / half-life sliders + presets;
+> per-entity result cards with `MediaScoreRing`, category rollup
+> bars, 4-bucket recency histogram, expandable article cards showing
+> the per-hit similarity × severity × tier × recency breakdown and
+> the matched mention) and `Browse corpus` (category + tier filter
+> chips + search + an article grid). AML console now surfaces a
+> `media · <composite>` chip on any account whose adverse-media grade
+> hits `material` or `severe`, and the case snapshot carries the
+> rollup so the case-detail surface inherits it. Pure function of
+> `(names, similarity_floor, half_life)`, no ML deps.
+>
+> **Endpoints:**
+> `GET  /aml/media/rules` — corpus metadata + tunable knobs;
+> `POST /aml/media/screen` — batch entity screen with composite + grade + hits;
+> `GET  /aml/media/articles` — browse the corpus (`category`, `tier`, `q`, `limit`);
+> `GET  /aml/media/articles/{id}` — single article with severity / tier weights.
+
 > **Day-40 — Behavioral Drift.** The eight rule detectors catch
 > *threshold breaches* — a single transaction (or recent batch)
 > crossed a line. They cannot catch the other half of laundering:
@@ -113,11 +159,15 @@ here's the freeze-and-investigate paragraph".
 | KYC ingest | `POST /kyc/verify` | PDF → SHA-256 → IPFS pin (Kubo) → on-chain attest |
 | Attestation lookup | `GET  /attest/{docHash}` | Reads `AttestationRegistry.attestations[hash]` |
 | Recent attestations | `GET  /attestations/recent` | Replays `Attested` events for the explorer feed |
-| AML score | `POST /aml/score` | 8 detectors → 0..100 risk per account; accepts `weights` override |
-| AML rules | `GET  /aml/rules` | Auditor-facing dump of weights / thresholds / watchlist meta |
+| AML score | `POST /aml/score` | 9 detectors → 0..100 risk per account; accepts `weights` override |
+| AML rules | `GET  /aml/rules` | Auditor-facing dump of weights / thresholds / watchlist + adverse-media meta |
 | SAR draft | `POST /aml/sar` | Markdown narrative + structured payload |
 | Sanctions screen | `POST /aml/sanctions/screen` | Fuzzy-match a batch of names against the watchlist |
 | Sanctions list | `GET  /aml/sanctions/list` | Paged dump of bundled watchlist entries |
+| **Adverse-media rules** | `GET  /aml/media/rules` | Auditor view of the corpus (size · categories · tiers · year coverage) + engine knobs |
+| **Adverse-media screen** | `POST /aml/media/screen` | Batch-screen party names against the corpus → composite + grade + per-article hits |
+| **Adverse-media browse** | `GET  /aml/media/articles` | Filter the corpus by `category`, `tier`, full-text `q` |
+| **Adverse-media article** | `GET  /aml/media/articles/{id}` | One article with severity / tier weights |
 | **Case queue** | `GET  /aml/cases` | Filter by status/priority/assignee/SLA/q |
 | **Open case** | `POST /aml/cases/open` | Promote one `account_report` snapshot |
 | **Bulk open** | `POST /aml/cases/bulk_open` | Promote a `/aml/score` response in one call |
@@ -157,12 +207,13 @@ score(acct) = clip( Σ wᵢ · iᵢ(acct, txs, watchlist) , 0..100 )
 
 | Detector | Weight | Fires when … |
 |---|---:|---|
-| `structuring`     | 26 | ≥3 transfers in `[40k, 50k)` within 24h (CTR-evasion proxy) |
-| `velocity_spike`  | 16 | recent 1h volume ≥ 5× the trailing 30d baseline rate |
-| `round_trip`      | 20 | a closed cycle of length ≤4 with every leg ≥ ₹50 000 |
-| `sanctions_hit`   | 22 | subject or counterparty name matches the watchlist ≥ 65% similarity |
-| `fan_in`          |  8 | distinct senders ≥ 8 |
-| `fan_out`         |  8 | distinct recipients ≥ 8 |
+| `structuring`     | 24 | ≥3 transfers in `[40k, 50k)` within 24h (CTR-evasion proxy) |
+| `velocity_spike`  | 14 | recent 1h volume ≥ 5× the trailing 30d baseline rate |
+| `round_trip`      | 18 | a closed cycle of length ≤4 with every leg ≥ ₹50 000 |
+| `sanctions_hit`   | 20 | subject or counterparty name matches the watchlist ≥ 65% similarity |
+| `adverse_media`   | 14 | party-name composite in the adverse-media corpus ≥ 35 (intensity ramps to 1.0 at composite 85) |
+| `fan_in`          |  7 | distinct senders ≥ 8 |
+| `fan_out`         |  7 | distinct recipients ≥ 8 |
 | `high_risk_geo`   |  6 | counterparty geo ∈ FATF-style watchlist |
 | `round_amount`    |  4 | ≥3 transfers ≥ ₹100 000 that are perfect ₹10 000 multiples |
 
@@ -205,6 +256,88 @@ The bundled watchlist (`apps/ai-aml/data/sanctions.json`) ships 30
 **illustrative** entries spanning OFAC SDN, UN-1267, UN-1718, EU-CFSP, and
 UK-OFSI lists. Production deployments swap it via the `TITAN_WATCHLIST_PATH`
 env var; the loader contract stays the same.
+
+---
+
+## Adverse-media OSINT, in detail
+
+The `adverse_media` detector + `/media` console is a deterministic
+open-source-intelligence layer. Sanctions screening answers a *binary*
+question against a *closed* watchlist; adverse media answers the
+**open-world** question that compliance teams use to escalate KYC
+reviews even when no SDN hit exists — *what is the world saying about
+this entity?*
+
+### Composite formula
+
+```
+hit_strength = similarity                 (0..1, fuzzy name match)
+              × category_severity         (0..1, money_laundering 1.00 … litigation 0.50)
+              × source_tier_weight        (0..1, tier-1 1.00, tier-2 0.75, tier-3 0.50)
+              × recency_decay             (0..1, 0.5 ^ (age_days / half_life_days))
+
+raw       = Σ top_k (hit_strength)        (k default 12, saturates the long tail)
+composite = 100 · (1 − exp(−raw / 2.5))   (saturating; 1 strong hit ≈ 29, 4 ≈ 73, 10 ≈ 96)
+```
+
+Name matching reuses the same physics as sanctions screening —
+`0.55·token_set + 0.30·char_3gram + 0.15·containment` — only the floor
+is relaxed (0.55 vs 0.65) because media coverage is fuzzier than a SDN
+alias and false positives cost less than missing a real adverse hit.
+
+### Grade bands
+
+| Composite | Grade | UI hue |
+|----------:|---|---|
+| < 15      | `clear`    | teal |
+| 15 – 39   | `elevated` | amber |
+| 40 – 69   | `material` | orange |
+| ≥ 70      | `severe`   | rose |
+
+### How it lights up the AML score
+
+The new `adverse_media` detector pulls every `subject_name` +
+`counterparty_name` in the account's transactions, calls
+`media.hits_for_account(names, similarity_floor=0.55)`, and converts
+the rolled-up composite into a 0–1 intensity over the **35..85**
+composite band. Intensity × `weight=14` = factor points. The detector's
+evidence list points at the top three articles by hit-strength so the
+case-detail surface can show the analyst exactly which articles drove
+the alert.
+
+### Corpus
+
+The bundled corpus (`apps/ai-aml/data/adverse_media.json`) ships **40
+illustrative articles** across **11 categories** and **3 source tiers**,
+spanning 2023–2026 so the recency decay is exercised. Production
+deployments plug in a licensed feed (Refinitiv World-Check, Dow Jones
+Risk & Compliance, RDC, ComplyAdvantage) or a curated open-source
+signal (FATF case studies, FinCEN enforcement actions, SEC press
+releases) by overriding the loader path via
+`TITAN_ADVERSE_MEDIA_PATH`; the loader contract stays the same.
+
+### Frontend surface
+
+The `/media` page is a two-tab analyst surface:
+
+* **Screen entities** — names textarea on the left rail (with a
+  similarity-floor slider, half-life slider + four presets:
+  `90d · 180d · 1y · 2y`); per-entity result cards with a
+  `MediaScoreRing` and category-strength chips; an expanded detail
+  pane for the active name showing the composite ring, category
+  rollup bars, a 4-bucket recency histogram (≤30d · ≤90d · ≤1y ·
+  older), and the top hits as cards with their similarity × severity
+  × tier × recency breakdown and the matched mention quoted back.
+* **Browse corpus** — category + tier filter chips + full-text search
+  + an article grid keyed by category accent.
+
+AML console integration: any account whose adverse-media grade is
+`material` or `severe` gets a `media · <composite>` chip on its row
+(violet, click-through to `/media`); the run-summary tile strip grows
+an **Adverse media** tile (count of accounts whose grade ≥ material);
+the what-if simulator gets a 9th slider for the `adverse_media` weight.
+The case-snapshot persists the adverse-media rollup so a re-opened
+case sees the same evidence the analyst originally triaged.
 
 ---
 

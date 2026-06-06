@@ -13,6 +13,13 @@ POST /aml/sar                   generate a SAR draft from one account report
 POST /aml/sanctions/screen      fuzzy-match one or more names against the watchlist
 GET  /aml/sanctions/list        full bundled watchlist (paged)
 
+Adverse-media OSINT (round-9, day-45)
+-------------------------------------
+GET  /aml/media/rules           corpus + engine knobs (auditor-facing)
+POST /aml/media/screen          batch-screen names against the adverse-media corpus
+GET  /aml/media/articles        browse the corpus (category/tier/q filters)
+GET  /aml/media/articles/{id}   single article + severity/tier weights
+
 Case-management surface (round-3, day-15)
 -----------------------------------------
 GET    /aml/cases               queue with priority/status/assignee filters
@@ -69,13 +76,14 @@ from pydantic import BaseModel, Field
 import backtest as backtest_engine
 import cases as case_store
 import drift as drift_engine
+import media as media_engine
 import network as network_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.7.0"
+ENGINE_VERSION = "titan-aml/1.8.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -205,6 +213,83 @@ def sanctions_list(limit: int = 50) -> Dict[str, Any]:
         "watchlist": sanctions_engine.get_metadata(),
         "entries": sanctions_engine.list_entries(limit=limit),
     }
+
+
+# ---------------------------------------------------------------------------
+# Adverse-media OSINT (round-9, day-45)
+# ---------------------------------------------------------------------------
+
+
+class MediaScreenReq(BaseModel):
+    names: List[str] = Field(..., min_length=1)
+    jurisdiction: Optional[str] = None
+    similarity_floor: float = Field(
+        default=media_engine.DEFAULT_SIMILARITY_FLOOR, ge=0.0, le=1.0,
+        description="Fuzzy-match floor for entity-name matching against article mentions.",
+    )
+    half_life_days: float = Field(
+        default=media_engine.DEFAULT_HALF_LIFE_DAYS, ge=30.0, le=3650.0,
+        description="Recency half-life in days for exponential decay (default 365).",
+    )
+    top_k: int = Field(default=media_engine.DEFAULT_TOP_K, ge=1, le=40)
+
+
+@app.get("/aml/media/rules")
+def media_rules() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "corpus": media_engine.get_metadata(),
+    }
+
+
+@app.post("/aml/media/screen")
+def media_screen(req: MediaScreenReq = Body(...)) -> Dict[str, Any]:
+    results = media_engine.screen_batch(
+        req.names,
+        jurisdiction=req.jurisdiction,
+        similarity_floor=req.similarity_floor,
+        half_life_days=req.half_life_days,
+        top_k=req.top_k,
+    )
+    grade_counts: Dict[str, int] = {}
+    for r in results:
+        grade_counts[r["grade"]] = grade_counts.get(r["grade"], 0) + 1
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "corpus": media_engine.get_metadata(),
+        "queried": len(req.names),
+        "screened": len(results),
+        "matched": sum(1 for r in results if r["hit_count"] > 0),
+        "by_grade": grade_counts,
+        "results": results,
+    }
+
+
+@app.get("/aml/media/articles")
+def media_articles(
+    category: Optional[str] = None,
+    tier: Optional[int] = Query(default=None, ge=1, le=3),
+    q: Optional[str] = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Dict[str, Any]:
+    rows = media_engine.list_articles(category=category, tier=tier, q=q, limit=limit)
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "count": len(rows),
+        "filters": {"category": category, "tier": tier, "q": q, "limit": limit},
+        "articles": rows,
+    }
+
+
+@app.get("/aml/media/articles/{article_id}")
+def media_article(article_id: str) -> Dict[str, Any]:
+    article = media_engine.get_article(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return {"ok": True, "engine": ENGINE_VERSION, "article": article}
 
 
 # ---------------------------------------------------------------------------

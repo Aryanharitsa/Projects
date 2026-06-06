@@ -42,6 +42,14 @@ const FEATURES = [
     cta: "Screen names",
   },
   {
+    href: "/media",
+    title: "Adverse Media OSINT",
+    eyebrow: "Tier-2 EDD",
+    body: "Sanctions catches the closed list. Adverse media catches the open world — a curated corpus of negative-news coverage scored by category severity × source tier × exponential recency × fuzzy name match, with the exact articles that fired surfaced as evidence.",
+    accent: "from-violet-500/30 via-rose-400/15 to-transparent",
+    cta: "Screen entities",
+  },
+  {
     href: "/kyc",
     title: "KYC Pipeline",
     eyebrow: "Identity",
@@ -60,11 +68,11 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { label: "Pattern detectors", value: "8" },
+  { label: "Pattern detectors", value: "9" },
   { label: "Drift axes", value: "10" },
   { label: "Laundering typologies", value: "6" },
   { label: "Watchlist entries", value: "30" },
-  { label: "Workflow states", value: "5" },
+  { label: "Adverse-media corpus", value: "40" },
   { label: "External ML deps", value: "0" },
 ];
 
