@@ -5,15 +5,107 @@ frontier models in parallel, score them with an LLM‑as‑judge (or a **panel o
 judges**), **vote on them yourself**, version your prompts, keep **every run**
 in a queryable, comparable history, see the **quality/cost frontier** across
 your whole spend in Insights, define **Eval Suites** to catch regressions
-before users do, and — new this round — build **Rubrics**: first‑class,
-anchor‑driven, versioned judge sheets you can save, share, test, and reuse
-across every other surface.
+before users do, build **Rubrics** (first‑class, anchor‑driven, versioned
+judge sheets) — and, new this round, **Optimize** any prompt automatically
+against those rubrics: type a base prompt, supply a handful of test cases,
+and watch it evolve across generations into a measurably better one.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Rubrics Studio (anchor‑driven, versioned judge sheets)
+## 🆕 What's new — Optimizer Studio (automated prompt evolution)
+
+> Round‑10. Every other surface in the playground *evaluates* prompts (Arena
+> fans them out, Suites batches them across cases, Rubrics judges them); none
+> of them **improves** them. Optimizer closes that loop.
+
+Hit **Optimizer** in the sidebar. An *optimization* is a tracked attempt to
+improve one base prompt against a small set of test cases. Each generation:
+
+1. **Mutates** the current elite prompts (top‑scoring survivors) using a
+   configurable pool of strategies (`add_role`, `step_by_step`,
+   `add_constraints`, `few_shot`, `structure_sections`, `safety_check`,
+   `negative_constraints`, `anchor_guidance`, `grounding`, `simplify`,
+   `one_shot_inverse`).
+2. **Runs** every new variant against every test case via your chosen
+   candidate model.
+3. **Scores** each response with your chosen Rubrics rubric (full anchor +
+   per‑dim rationale judging — same engine the Rubrics tab uses).
+4. **Promotes** the highest‑scoring variant as the new champion.
+
+You see the lineage live: a generational tree where every node is a variant,
+hue‑coded by its 0–100 composite, connected to its parent by a gradient
+edge that picks up the child's score. Click any node for the full diff —
+the prompt, the per‑case responses, the per‑dim rationales, the cost.
+
+### Two scoring modes
+
+- **Dry‑run** (default) — heuristic scoring (keyword overlap with expected
+  output + length sanity + structural cues) so the whole loop runs *without
+  any API keys* and you can explore strategies for free. Generations finish
+  in milliseconds.
+- **Live** — real candidate model produces responses; real judge model
+  scores them against your saved rubric. Pay‑as‑you‑go, stepped
+  generation‑by‑generation so you can stop if you don't like where it's
+  going. (`/run` requires `{ confirm_live: true }` for live mode — the API
+  refuses to spend money in one shot.)
+
+### Seed → in 10 seconds
+
+Hit **Seed demo** to drop in a "Customer email triage" optimization with:
+
+- A deliberately weak base prompt (`"Reply to this customer support email.
+  Be helpful and friendly."`).
+- Three representative test cases (duplicate charge, app crash, cancellation
+  request).
+- A 5‑mutation strategy pool, population 5, target 3 generations.
+- Dry‑run mode so it runs instantly.
+
+Click **Run all remaining** and the base prompt evolves from a baseline
+composite of ~86 to a champion variant of ~97 (+11 pts), explored across
+16 variants — *with no API keys*.
+
+### API surface
+
+| route | what it does |
+|---|---|
+| `GET  /api/optimize/mutations` | catalog of mutation strategies with labels + blurbs |
+| `POST /api/optimize/preview`   | dry‑render every mutation against a base prompt — drives the Setup‑tab live preview |
+| `GET  /api/optimize`           | list optimizations (filter by `q` / `status`) |
+| `POST /api/optimize`           | create an optimization (`{ name, base_prompt, test_cases, rubric_id?, judge_provider?, judge_model?, candidate_provider?, candidate_model?, strategy?, target_generations?, dryrun? }`) |
+| `POST /api/optimize/seed`      | idempotently create the demo optimization |
+| `GET  /api/optimize/stats`     | rollup banner: n_optimizations, n_variants, biggest_lift, top_mutations |
+| `GET  /api/optimize/:id`       | full optimization (variants + generations + champion) |
+| `DELETE /api/optimize/:id`     | delete + cascade |
+| `POST /api/optimize/:id/advance` | run **one** generation (the stepped path) |
+| `POST /api/optimize/:id/run`   | consume all remaining generations (dry‑run by default; pass `{confirm_live:true}` for live) |
+| `POST /api/optimize/:id/promote/:vid` | mark a variant as champion |
+
+### What's it built on
+
+The optimizer engine (`src/optimizer.py`) is pure stdlib + reuse of the
+existing rubric judging engine. The mutation registry is deterministic — same
+prompt + same kind → same output, every time, so a re‑run of the same
+optimization is reproducible. The schema lives in the same SQLite DB as
+`rubrics`, `history`, `prompts`, and `suites` (three new tables:
+`optimizations`, `opt_variants`, `opt_generations`), so a single backup
+captures everything.
+
+The frontend (`components/OptimizerStudio.jsx`) is a glass‑dark hero with a
+five‑tile stats strip, a left rail of optimizations (per‑row score ring +
+lift chip + status pill), and a tabbed main pane: **Lineage** (the
+generational tree with click‑to‑inspect detail card showing per‑case
+responses, ranges, and a Promote‑to‑champion CTA), **Leaderboard** (every
+variant ranked by composite with mutation chips + per‑dim ranges), and
+**Setup** (the full configuration the optimization was created with).
+The new‑optimization wizard renders **every** mutation against your base
+prompt before you commit so you can see exactly what each strategy would
+do.
+
+---
+
+## What's new in Round‑9 — Rubrics Studio (anchor‑driven, versioned judge sheets)
 
 > Round‑9. Every surface in the playground that scores something has been
 > using the same generic "score this 1‑5" rubric since day one. That works
