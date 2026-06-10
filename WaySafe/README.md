@@ -72,6 +72,26 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   Ships with a curated **15-stay Goa preset list** (hotels, resorts,
   hostels, homestays), takes custom lat/lon rows, and exports as JSON
   (`waysafe.staysafe.v1`) and markdown for WhatsApp/email.
+- **🆕 Refuge — "Get Me to Safety" engine** — the missing *egress* layer
+  that answers the only question that matters when something feels wrong
+  *right now*: **where do I go in the next five minutes?** The previous
+  SOS tab was a placeholder — flip a flag, show the three closest help
+  POIs sorted by raw great-circle distance. That ranking is wrong in the
+  moments it matters. Refuge ranks every help POI inside the scan radius
+  by a deterministic composite **Refuge Score** — *proximity 35% · path
+  safety 25% · trust tier 20% · open-now 15% · corridor crowd 5%* — and
+  surfaces a bearing-compass hero ("Head **SSW** · police in **178 m**"),
+  per-tier arrival scripts (*"walk to triage and tell them you don't feel
+  safe"* for hospitals; *"ring the night-bell at the gate"* for fire
+  stations), a 5-step **corridor heat-strip** showing path safety along
+  the great-circle line to each option (dashed outline = waypoint inside
+  a geofenced risk zone), and a country-specific **emergency-card**
+  quick-dial (India 100/101/102/1091/1363 · EU 112 · US/CA 911). A
+  one-tap **Quiet Beacon** writes a broadcast row keyed to the top refuge
+  and produces a ready-to-send SMS payload with a walking Google-Maps
+  deeplink — designed for the threat model where a visible panic button
+  makes things worse. Pure-stdlib + reuses `safety.point_risk`, so Refuge
+  agrees with the safest-A\* router on which corridors are good.
 - **Sentinel — Live Cluster Intel** — DBSCAN over haversine groups raw
   incidents into discrete hotspots; each cluster is graded
   Critical / Emerging / Steady / Cooling by **velocity** (recent rate ÷
@@ -298,6 +318,139 @@ The render stack includes:
 Engine in `stays.py` (≈580 LOC, pure-stdlib + reuse of `safety` and
 `forecast`). UI render in `theme.render_staysafe`. Preset data in
 `data/stays.csv` (15 Goa stays).
+
+---
+
+## 🆘 Refuge — "Get Me to Safety" engine (Day 46)
+
+Every other WaySafe surface is a *planning* surface. Refuge is the
+*egress* surface — the one that fires when a tourist's plan has already
+broken. The pre-existing **SOS** tab in the app was a placeholder: it
+flipped a `sos_active` flag and listed the three closest help POIs by raw
+great-circle distance. That ranking is *wrong* in the only moments it
+matters:
+
+- A hospital 400 m away through an unlit, geofenced corridor is **worse**
+  than a 24/7 store 600 m away on a busy main road.
+- A fire station that's gated at midnight is **worse** than a police
+  chowki 200 m further that's actually staffed.
+- A hotel front desk is a refuge **only** if it's 24/7-attended.
+- Trust tiers exist: police > hospital > embassy > fire > tourist help
+  desk > 24/7 retail > hotel front desk > 24/7 petrol pump.
+
+Refuge replaces the broken ranking with a deterministic composite **0–100
+Refuge Score**:
+
+```
+refuge = 100 · ( 0.35 · proximity
+               + 0.25 · path_safety
+               + 0.20 · trust_tier
+               + 0.15 · open_confidence
+               + 0.05 · crowd_proxy )
+```
+
+| Factor | What it measures | Why it matters |
+|---|---|---|
+| `proximity` | linear: 1.0 at 0 km → 0.0 at `max_radius_km` | The cheapest fix first — closer is always better, all else equal |
+| `path_safety` | mean of `1 − safety.point_risk` across **5 evenly-spaced waypoints** on the great-circle line from you to the candidate | Reuses the exact physics the safest-A\* router uses, so Refuge agrees with the route planner on which corridors are good |
+| `trust_tier` | institutional weight, police 1.00 → 24/7 petrol 0.50 | A police station is intrinsically a stronger refuge than a 24/7 store even at the same distance |
+| `open_confidence` | 1.0 for 24/7 tiers (police, hospital ER, fire, 24/7 store, 24/7 petrol). Tourist help-desks & clinics degrade to 0.25 outside `open_window`; hotel front desks hold 0.85 at night | Refuges you can't enter aren't refuges |
+| `crowd_proxy` | 1.0 if any non-help POI sits within 0.5 km of the corridor midpoint, else 0.0 | A rough proxy for *populated, well-lit main road* vs *dark lane* |
+
+### Tiers
+
+| Key | Weight | 24/7? | Arrival script |
+|---|---:|---:|---|
+| `police` | **1.00** | ✓ | "Walk in. Ask for the duty officer. Show this screen for your location & beacon ID." |
+| `embassy` | 0.95 | ✗ (09–18) | "Show passport at the security booth. After-hours: ring the consular night line." |
+| `hospital` | 0.92 | ✓ | "Walk to Emergency / Casualty. Tell triage you don't feel safe — they will hold you in waiting." |
+| `fire` | 0.85 | ✓ | "Ring the night-bell at the gate. Crews are bunked on-site — someone always answers." |
+| `tourist_help_desk` | 0.78 | ✗ (08–21) | "Hand over your passport copy. They have direct tourist-police hotlines." |
+| `clinic` | 0.62 | ✗ (08–22) | "Reception desk. Most clinics will let you wait inside until conditions change." |
+| `allnight_store` | 0.62 | ✓ | "Walk in, buy something cheap, sit by the counter. Ask the cashier to call a cab." |
+| `hotel` | 0.55 | ✓ (front desk) | "Tell the night manager you need sanctuary. Show a booking on your phone if you have one." |
+| `petrol_24h` | 0.50 | ✓ | "Walk to the attendant booth. Ask to wait while you call someone." |
+
+### Refuge bands
+
+```
+refuge 72..100  →  Strong refuge   (#10B981)
+refuge 55..72   →  Viable refuge   (#FBBF24)
+refuge 35..55   →  Last resort     (#F59E0B)
+refuge  0..35   →  Not a refuge    (#EF4444)
+```
+
+### What the Refuge tab surfaces
+
+- **Bearing-compass hero** — a 168 px conic ring whose stroke colour
+  encodes the top refuge's band and a centred arrow rotated to the
+  initial great-circle bearing from you to the top refuge ("↑ SSW · 178°
+  · 98/100"). Headline reads as a one-liner you can act on without
+  reading the rest of the page: *"Head SSW · police station in 178 m
+  (2 min on foot)."*
+- **Local-spot pill** in the hero — your *current location's* safety
+  score on the right edge of the card. If your spot is **Danger** or
+  **High Risk**, the advisory line escalates to *"You're standing in a
+  high-risk zone (score 46/100) — move now."*
+- **Podium of up to 8 options**, each card stamped with:
+  - Tier icon + label, name, refuge score, band chip, score bar.
+  - Three mini-stats: distance (m), walk-time (min @ 5 km/h), heading
+    (cardinal label like "ENE").
+  - **5-step corridor heat-strip** — one bar per waypoint, hue-coded
+    from `1 − point_risk`, with a *dashed red outline* on any waypoint
+    that falls inside a geofenced risk zone. This is the rare UI element
+    that lets a user *see* whether the path from here to there cuts
+    through a bad area.
+  - Per-tier **arrival script** (one line, italic) so the user knows
+    what to do the moment they walk in.
+  - Up to 3 notes: *"corridor clips 1 risk-zone waypoint"*, *"quiet
+    corridor — no other POIs near midpoint; walk briskly"*, *"clinic
+    normally closes by 22:00 — expect a locked main door, ring the
+    night-bell or call before walking up"*, etc.
+- **Heat-mapped factor matrix** — options as columns, factors as rows,
+  every cell hue-coded by goodness so the trade-off is visible at a
+  glance (the closest option that has the worst path? the bright cell
+  tells you). Per-row weight chip surfaces the composite weights.
+- **Country emergency card** — pre-localised quick-dial. Selection is
+  by lat/lon: India (6–37° N, 68–98° E) → 100 / 101 / 102 / 1091 / 1363
+  / 108 with a note that 112 works as the unified emergency number EU
+  → 112. US/Canada → 911 + poison control + 988. Fallback → 112/911.
+  Renders even in the fallback case (no POI in radius) — phone numbers
+  always work.
+- **Quiet Beacon** — a ready-to-copy SMS payload string and a **walking
+  Google Maps deeplink** to the top refuge. A second button writes a
+  broadcast row keyed to the top refuge into `data/broadcasts.csv` (or
+  the offline outbox), reusing the existing Companion broadcast
+  contract so trusted contacts get a ping with the refuge target.
+  Designed for the threat model where a *visible* panic button makes
+  things worse — no audio, no flashing.
+
+### Fallback (no POI in radius)
+
+If `find_refuge` returns zero candidates, the engine still:
+
+1. Renders the user's own safety score and a single-line advisory
+   ("No registered help POI within scan radius. Use the emergency card
+   below. Move toward main-road traffic until you find lit, populated
+   space.")
+2. Renders the country emergency card — phone numbers don't depend on
+   POI density.
+
+### Data additions
+
+`data/poi.csv` now ships 32 POIs spanning every Refuge tier — hospitals,
+clinics, police stations & chowkis, fire stations & outposts, tourist
+help desks, 24/7 supermarkets and 24/7 petrol pumps — across Panaji,
+Calangute, Candolim, Anjuna, Vagator, Mapusa and Margao. This is what
+makes the tier-diversity in the ranking visible: the top-5 at Calangute
+on a Saturday night reads *police → fire → 24/7 store → 24/7 petrol →
+(closed) tourist office*, not five hospitals in different directions.
+
+Engine in `refuge.py` (≈540 LOC, pure-stdlib + reuse of `safety.point_risk`
+and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
+hour-aware open-confidence by un-checking *"Use current hour"* and
+sliding to 23:00 — the tourist help-desk and clinic drop out of the
+podium.
 
 ---
 

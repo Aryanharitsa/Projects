@@ -13,17 +13,89 @@ months of pay-band discipline, rolls every role up into a
 **Command Center** so a recruiter running ten reqs sees the whole portfolio
 on one screen, **calibrates the panel** itself, surfacing which
 interviewers are lenient or severe, how reliably the panel agrees, and
-whether removing that bias changes who you'd hire — and now closes the
-loop *back to the top of the funnel* with **Channel Studio**, the missing
-sourcing-intelligence layer that scores every channel on quality,
-conversion, cost, and speed so a recruiter knows where to spend their
-next hour of outreach. All from a dark, fast, single-page workspace.
+whether removing that bias changes who you'd hire, closes the loop *back
+to the top of the funnel* with **Channel Studio**, the sourcing-intelligence
+layer that scores every channel on quality, conversion, cost, and speed
+— and now **forecasts the funnel itself** with **Forecast Studio**, a
+Monte-Carlo simulator that answers the one question every hiring manager
+opens with: *will I have a hire by the start date?* All from a dark, fast,
+single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Forecast Studio (Day 47)
+
+Every other Credicrew surface is descriptive: who's in the funnel, who
+scored what, who's offering what comp, which channel is paying off. None
+of them answer the question that every hiring manager opens a 1-on-1
+with — *"will I have a hire by start_date?"* **Forecast Studio**
+(`/roles/:id/forecast`) is the missing predictive layer.
+
+- **Monte-Carlo pipeline simulator** — every candidate currently in the
+  funnel is walked forward, trial by trial, through Outreach → Screening
+  → Interview → Offer → Accept. Each transition has a Bernoulli outcome
+  (the conversion slider) and a LogNormal-distributed duration (the days
+  slider, σ = 0.45 — moderate variance, calibrated so a 5-day median puts
+  ~10% of trials past 9 days). A trial that produces at least one
+  accepted offer records an earliest-hire date = `accept_ts + notice_period`.
+  3,000 trials run on every render; numbers are stable because the RNG is
+  seeded by an FNV-1a hash of the funnel shape.
+- **P(hire-by-target) hero** — a conic-gradient ring stamps the headline
+  number; the band hue retints (emerald ≥ 75%, amber ≥ 40%, orange ≥ 15%,
+  rose otherwise) so the recruiter sees the verdict before reading any
+  text. A right-side strip carries any-hire probability, median hire date,
+  and expected hires per trial.
+- **P10 / P50 / P90 fan chart** — earliest-hire-date distribution
+  rendered as a gradient bar spanning P10 → P90 with a white P50 dot, a
+  vertical emerald **target** marker, and a vertical white **today**
+  marker so the user can eyeball whether the median lands before or after
+  the start date. Three percentile cards below render the actual dates in
+  human format.
+- **Funnel with expected advancers + dropout cliff** — each stage card
+  shows `here` (current count), `expected` (mean reach across trials),
+  and `→ hires` (mean # who reach hire from this stage). The
+  **bottleneck** — the stage whose `expected reach × (1 − conversion)`
+  is highest, i.e. where the most absolute candidates die — gets a rose
+  ring and a "cliff" badge so the recruiter knows which stage to fix.
+- **What-if levers** — each stage has a conversion slider (0 → 1) and a
+  velocity slider (1 → 30 days), plus a global notice-period slider, plus
+  an "inject candidates" stepper on the upstream stages (`new`,
+  `outreach`). The Monte-Carlo re-runs on every change; a closed-form
+  quick estimate is shown alongside as a sanity check.
+- **Sensitivity tornado** — for every stage, the engine reruns the MC at
+  conversion ± 15pp and velocity ± 30%, plus an "add 5 candidates" lever
+  on the upstream stages. Levers are ranked by total swing in
+  P(hire-by-target) and drawn as a centred tornado (rose left, emerald
+  right) so the biggest lever lives at the top. This is the
+  question-behind-the-question — "if I had one hour, where would I spend
+  it?" — answered numerically.
+- **Action recommendations** — the engine writes a 4-bullet action list
+  from the actual numbers: a band-keyed headline ("Strong shape — 78% to
+  close by Aug 15. Focus on keeping the top of the funnel warm." / "At
+  risk — only 22%, push the target out or escalate sourcing."), a
+  bottleneck callout ("The Interview stage is your dropout cliff —
+  tighten the bar earlier or coach the panel to convert more of them."),
+  the biggest-lever swing ("Biggest lever: Outreach conversion — pushing
+  it favourably moves P(hire-by-target) by +18 points."), and the P10 /
+  P50 / P90 dates.
+- **Backend mirror** — `POST /forecast/run` takes `{ funnel, targetDate,
+  now?, trials?, seed?, assumptions? }` and returns the same payload the
+  TS engine produces — same RNG (mulberry32), same LogNormal sampler,
+  same MC walk, **byte-identical probabilityByTarget and percentile dates
+  for the same seed** so an agentic client and the on-screen recruiter
+  never disagree about the verdict. `GET /forecast/defaults` returns the
+  baseline conversion + velocity table so a CLI client can render a
+  what-if sandbox without hard-coding industry priors.
+- **Theme** — per-stage hue tokens (`sky / indigo / violet / amber /
+  emerald` for `new / outreach / screening / interview / offer`) reused
+  across the funnel cards, the lever sliders, and the sensitivity rows so
+  the eye tracks one stage end-to-end at a glance.
 
 ---
 
@@ -747,6 +819,35 @@ Re-render the Markdown sourcing brief from a cached summary. Takes
 `{ summary, title? }`, returns `{ markdown }`. Useful when an agentic
 client already has the analysis cached and just wants the prose.
 
+### `POST /forecast/run`
+Monte-Carlo pipeline forecast. Accepts
+`{ funnel: { new, outreach, screening, interview, offer }, targetDate,
+now?, trials?, seed?, assumptions?: { conversion?, velocity?,
+noticePeriodDays?, durationSigma? } }`. Returns
+`{ probabilityByTarget, hireDate: { p10, p50, p90, anyHireProbability },
+expectedHires, funnel: [{ key, here, expectedAdvancers, expectedHires }],
+bottleneck, sensitivity: [{ lever, label, baseline, upliftPlus,
+upliftMinus, delta }], recommendations, assumptions, trials, targetDate,
+now }`. Same RNG + sampler as the in-browser engine, so the same `seed`
++ `funnel` + `targetDate` produces byte-identical numbers wherever it
+runs.
+
+```bash
+curl -X POST http://127.0.0.1:8000/forecast/run \
+  -H 'content-type: application/json' \
+  -d '{
+    "funnel": {"new": 5, "outreach": 3, "screening": 2, "interview": 1, "offer": 1},
+    "targetDate": "2026-08-15",
+    "trials": 3000
+  }'
+```
+
+### `GET /forecast/defaults`
+Returns the baseline assumption table — `conversion`, `velocity`,
+`noticePeriodDays`, `durationSigma`, and the canonical `progression`
+order — so a CLI / agentic client can render a what-if sandbox without
+hard-coding industry priors.
+
 ### Endpoint map
 
 | Method | Path                          | Purpose                                                 |
@@ -774,6 +875,8 @@ client already has the analysis cached and just wants the prose.
 | POST   | `/calibration/summary`        | panel bias + reliability + de-biased ranking            |
 | POST   | `/sources/summary`            | per-channel ROI rollup (Channel Studio)                 |
 | POST   | `/sources/brief`              | Markdown sourcing brief from a cached summary           |
+| POST   | `/forecast/run`               | Monte-Carlo pipeline forecast (Forecast Studio)         |
+| GET    | `/forecast/defaults`          | baseline conversion + velocity priors                   |
 
 ---
 

@@ -1134,6 +1134,278 @@ def inject_theme() -> None:
             letter-spacing:.04em; color:#AAB2C5; margin-top:2px;
             text-transform:none;
         }}
+
+        /* -------------------------------------------------- Refuge */
+        .ws-ref-hero {{
+            background: linear-gradient(135deg, var(--glow, rgba(239,68,68,0.20)) 0%, {CARD} 60%);
+            border: 1px solid var(--hue, #EF4444);
+            border-left-width: 4px;
+            border-radius: 18px;
+            padding: 22px 26px;
+            display: grid;
+            grid-template-columns: 168px 1fr auto;
+            gap: 26px;
+            align-items: center;
+            margin-bottom: 18px;
+            box-shadow: 0 12px 28px var(--glow, rgba(239,68,68,0.2));
+        }}
+        .ws-ref-hero-body {{ min-width: 0; }}
+        .ws-ref-pill {{
+            display:inline-block; padding:3px 12px; border-radius:999px;
+            font-size:.66rem; font-weight:800; letter-spacing:.12em;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.06);
+            color: var(--hue, #EF4444);
+            border: 1px solid var(--hue, #EF4444);
+            margin-bottom:.55rem;
+        }}
+        .ws-ref-hero-title {{
+            font-size: 1.45rem; font-weight: 800; line-height: 1.15;
+            letter-spacing: -0.02em; color: #F2F4FA; margin-bottom: 4px;
+        }}
+        .ws-ref-hero-detail {{ font-size:.92rem; color:#C9D0E0; line-height:1.45; }}
+        .ws-ref-hero-meta {{
+            display:flex; flex-wrap:wrap; gap:8px; margin-top:.9rem;
+            font-size:.72rem; color:{MUTED};
+        }}
+        .ws-ref-chip {{
+            padding:3px 10px; border-radius:999px; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+        }}
+        .ws-ref-chip.warn {{
+            color: var(--hue, #EF4444);
+            border-color: var(--hue, #EF4444);
+            background: rgba(239,68,68,0.08);
+        }}
+        .ws-ref-compass {{
+            width: 168px; height: 168px; border-radius: 50%;
+            background: conic-gradient(var(--hue, #EF4444) calc(var(--pct, 100) * 1%), rgba(255,255,255,0.07) 0);
+            display:flex; align-items:center; justify-content:center;
+            position: relative; flex-shrink: 0;
+        }}
+        .ws-ref-compass::after {{
+            content:""; position:absolute; inset:10px;
+            background: {CARD}; border-radius: 50%;
+        }}
+        .ws-ref-compass-inner {{
+            position:relative; z-index:1; text-align:center;
+        }}
+        .ws-ref-compass-arrow {{
+            font-size: 2.7rem; line-height:1;
+            transform: rotate(var(--bearing, 0deg));
+            display:inline-block; transform-origin: 50% 55%;
+            color: var(--hue, #EF4444);
+            text-shadow: 0 2px 6px var(--glow, rgba(239,68,68,0.4));
+        }}
+        .ws-ref-compass-label {{
+            display:block; font-size:.95rem; font-weight:800;
+            letter-spacing:.18em; color: var(--hue, #EF4444); margin-top:6px;
+        }}
+        .ws-ref-compass-sub {{
+            display:block; font-size:.62rem; color:{MUTED}; margin-top:3px;
+            letter-spacing:.08em;
+        }}
+        .ws-ref-here {{
+            text-align:right; padding-left: 12px;
+            border-left: 1px solid rgba(255,255,255,0.08);
+        }}
+        .ws-ref-here-val {{
+            font-size: 1.85rem; font-weight: 800; line-height:1;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-ref-here-lbl {{
+            font-size: .58rem; letter-spacing:.16em; text-transform: uppercase;
+            color:{MUTED}; margin-top:4px; font-weight: 700;
+        }}
+
+        /* Podium grid */
+        .ws-ref-podium {{
+            display:grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+            gap: 10px; margin: 8px 0 16px;
+        }}
+        .ws-ref-card {{
+            background: {CARD};
+            border: 1px solid rgba(255,255,255,0.07);
+            border-left: 4px solid var(--hue, #EF4444);
+            border-radius: 14px;
+            padding: 14px 16px;
+        }}
+        .ws-ref-card.is-top {{
+            background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, {CARD} 60%);
+            border-color: var(--hue, #EF4444);
+            box-shadow: 0 8px 20px var(--glow, rgba(239,68,68,0.18));
+        }}
+        .ws-ref-card-top {{
+            display:flex; align-items:center; justify-content:space-between;
+            margin-bottom: 8px;
+        }}
+        .ws-ref-rank {{
+            font-size:.7rem; font-weight:800; color:#E6E9F2;
+            background: rgba(255,255,255,0.06); border-radius:999px;
+            padding: 3px 10px; letter-spacing:.06em;
+        }}
+        .ws-ref-rank.r1 {{ background: rgba(255,191,60,0.2); color:#FFD66B; }}
+        .ws-ref-band {{
+            font-size:.65rem; font-weight:800; letter-spacing:.10em;
+            text-transform: uppercase;
+            padding: 3px 9px; border-radius:999px;
+        }}
+        .ws-ref-tier {{
+            font-size:.7rem; color:#AAB2C5; display:flex; align-items:center; gap:6px;
+            margin-bottom: 6px;
+        }}
+        .ws-ref-card-name {{
+            font-size:1.02rem; font-weight:800; color:#F2F4FA;
+            line-height:1.2; margin-bottom: 6px;
+        }}
+        .ws-ref-card-score {{
+            display:flex; align-items:baseline; gap:6px; margin: 4px 0 2px;
+        }}
+        .ws-ref-card-score b {{ font-size:2rem; font-weight:800; line-height:1; }}
+        .ws-ref-card-score span {{ font-size:.7rem; color:{MUTED}; }}
+        .ws-ref-bar-track {{
+            background: rgba(255,255,255,0.05); height:5px; border-radius:999px;
+            overflow:hidden; margin: 6px 0 10px;
+        }}
+        .ws-ref-bar-fill {{ height:100%; border-radius:999px; }}
+        .ws-ref-mini {{
+            display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;
+            margin-top:6px;
+        }}
+        .ws-ref-mini-cell {{
+            background: rgba(255,255,255,0.03); border-radius:8px;
+            padding:6px 4px; text-align:center;
+        }}
+        .ws-ref-mini-val {{
+            font-size:.92rem; font-weight:800; color:#E6E9F2;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-ref-mini-lbl {{
+            font-size:.55rem; color:{MUTED}; letter-spacing:.08em;
+            text-transform: uppercase; margin-top:2px;
+        }}
+        .ws-ref-script {{
+            margin-top: 10px;
+            padding: 9px 11px;
+            background: rgba(255,255,255,0.03);
+            border-left: 2px solid var(--hue, #EF4444);
+            border-radius: 6px;
+            font-size: .76rem; color: #D2D7E5; line-height: 1.4;
+        }}
+        .ws-ref-notes {{
+            margin-top:8px; font-size:.72rem; color:#AAB2C5; line-height:1.4;
+        }}
+        .ws-ref-notes li {{ margin-left: 16px; }}
+
+        /* Matrix (heat row) */
+        .ws-ref-matrix {{ display:grid; gap:5px; margin-top:10px; }}
+        .ws-ref-mcorner {{
+            font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:{MUTED};
+            font-weight:700; display:flex; align-items:flex-end; padding:0 4px 6px;
+        }}
+        .ws-ref-mhead {{
+            text-align:center; font-size:.74rem; font-weight:800; color:#E6E9F2;
+            padding:6px 4px; border-bottom:2px solid rgba(255,255,255,0.08);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }}
+        .ws-ref-mhead.is-top {{
+            color: var(--hue, {PRIMARY}); border-bottom-color: var(--hue, {PRIMARY});
+        }}
+        .ws-ref-mlabel {{
+            font-size:.78rem; color:#AAB2C5; font-weight:600;
+            display:flex; align-items:center; padding:0 4px;
+        }}
+        .ws-ref-mlabel-w {{
+            font-size:.58rem; color:{MUTED}; margin-left:6px;
+            background: rgba(255,255,255,0.04); padding:1px 6px; border-radius:999px;
+        }}
+        .ws-ref-cell {{
+            text-align:center; border-radius:8px; padding:8px 4px;
+            font-weight:800; font-size:.84rem; font-variant-numeric:tabular-nums;
+            line-height:1.2;
+        }}
+        .ws-ref-cell.head-row {{ font-size:1.05rem; }}
+
+        /* Corridor strip — visualises path_safety along the 5 waypoints */
+        .ws-ref-corridor {{
+            display:flex; gap:3px; margin-top: 8px;
+        }}
+        .ws-ref-corridor-step {{
+            flex: 1; height: 10px; border-radius:3px;
+            background: var(--step-hue, #444);
+            opacity:.92;
+        }}
+        .ws-ref-corridor-step.fenced {{
+            outline: 1.5px dashed rgba(239,68,68,0.85); outline-offset:-1px;
+        }}
+
+        /* Emergency card */
+        .ws-ref-emergency {{
+            background: linear-gradient(135deg, rgba(239,68,68,0.06) 0%, {CARD} 70%);
+            border: 1px solid rgba(239,68,68,0.32);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin-top: 14px;
+        }}
+        .ws-ref-emergency-head {{
+            display:flex; align-items:center; gap:10px; margin-bottom:10px;
+        }}
+        .ws-ref-emergency-flag {{ font-size: 1.55rem; }}
+        .ws-ref-emergency-title {{
+            font-size: 1rem; font-weight: 800; color:#F2F4FA;
+            letter-spacing:-0.01em;
+        }}
+        .ws-ref-emergency-grid {{
+            display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap:8px;
+        }}
+        .ws-ref-emergency-cell {{
+            background: rgba(0,0,0,0.18);
+            border: 1px solid rgba(239,68,68,0.18);
+            border-radius:10px;
+            padding: 10px 12px;
+        }}
+        .ws-ref-emergency-num {{
+            font-size: 1.4rem; font-weight: 800; color: #FF6A6A;
+            font-variant-numeric: tabular-nums; letter-spacing: .01em;
+        }}
+        .ws-ref-emergency-lbl {{
+            font-size: .62rem; letter-spacing:.12em; text-transform: uppercase;
+            color:{MUTED}; font-weight:700; margin-top: 4px;
+        }}
+        .ws-ref-emergency-note {{
+            font-size:.72rem; color:#AAB2C5; margin-top: 10px;
+        }}
+
+        /* Beacon block */
+        .ws-ref-beacon {{
+            background: rgba(255,191,60,0.06);
+            border: 1px dashed rgba(255,191,60,0.45);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-top: 12px;
+        }}
+        .ws-ref-beacon-title {{
+            font-size:.66rem; font-weight:800; letter-spacing:.15em;
+            text-transform: uppercase; color:#FFD66B; margin-bottom:6px;
+        }}
+        .ws-ref-beacon-body {{
+            font-family: 'JetBrains Mono','SF Mono', ui-monospace, monospace;
+            font-size:.74rem; color:#E6E9F2; line-height:1.45;
+            white-space: pre-wrap; word-break: break-word;
+        }}
+
+        /* Fallback / empty */
+        .ws-ref-empty {{
+            background: {CARD};
+            border: 1px dashed rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 22px 24px;
+            color:#AAB2C5; font-size:.88rem; line-height:1.45;
+        }}
+        .ws-ref-empty-title {{
+            font-size:1.05rem; font-weight:800; color:#F2F4FA;
+            margin-bottom: 6px; letter-spacing:-0.01em;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2989,6 +3261,272 @@ def render_staysafe_empty(hint: str = "Pick at least two stays above, then run t
         f"""
         <div class="ws-sent-empty">
           <div class="ws-sent-empty-title">No stay comparison yet</div>
+          <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================== Refuge
+
+
+_REF_BAND_HUE = {
+    "Strong refuge": "#10B981",
+    "Viable refuge": "#FBBF24",
+    "Last resort":   "#F59E0B",
+    "Not a refuge":  "#EF4444",
+}
+
+
+def _ref_corridor_strip_html(samples) -> str:
+    if not samples:
+        return ""
+    steps = []
+    for s in samples:
+        # 1 − risk to get goodness, then map to red→amber→green.
+        hue = _goodness_hue(1.0 - float(s.risk))
+        cls = "ws-ref-corridor-step"
+        if getattr(s, "in_geofence", False):
+            cls += " fenced"
+        steps.append(
+            f'<div class="{cls}" style="--step-hue:{hue};" '
+            f'title="risk {s.risk:.2f}{(" · in risk zone" if s.in_geofence else "")}"></div>'
+        )
+    return f'<div class="ws-ref-corridor">{"".join(steps)}</div>'
+
+
+def _ref_card_html(opt) -> str:
+    band_hue = _REF_BAND_HUE.get(opt.band, opt.band_color)
+    bar_hue = _goodness_hue(opt.refuge_score / 100.0)
+    top_cls = " is-top" if opt.is_top else ""
+    rank_cls = "r1" if opt.rank == 1 else ""
+    notes_html = ""
+    if opt.notes:
+        notes_html = (
+            "<div class='ws-ref-notes'><ul>"
+            + "".join(f"<li>{_esc(n)}</li>" for n in opt.notes[:3])
+            + "</ul></div>"
+        )
+    return f"""
+    <div class="ws-ref-card{top_cls}" style="--hue:{band_hue}; --glow:{_hex_to_rgba(band_hue, 0.18)};">
+      <div class="ws-ref-card-top">
+        <span class="ws-ref-rank {rank_cls}">#{opt.rank}</span>
+        <span class="ws-ref-band" style="color:{band_hue}; background:{_hex_to_rgba(band_hue, 0.18)};">
+          {_esc(opt.band)}
+        </span>
+      </div>
+      <div class="ws-ref-tier">{opt.tier_icon} {_esc(opt.tier_label)}</div>
+      <div class="ws-ref-card-name">{_esc(opt.poi_name)}</div>
+      <div class="ws-ref-card-score">
+        <b style="color:{bar_hue}">{opt.refuge_score}</b><span>/ 100 refuge</span>
+      </div>
+      <div class="ws-ref-bar-track">
+        <div class="ws-ref-bar-fill" style="width:{opt.refuge_score}%; background:{bar_hue};"></div>
+      </div>
+      <div class="ws-ref-mini">
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.distance_km*1000:.0f}m</div>
+          <div class="ws-ref-mini-lbl">distance</div>
+        </div>
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.eta_min:.0f}m</div>
+          <div class="ws-ref-mini-lbl">walk</div>
+        </div>
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.bearing_label}</div>
+          <div class="ws-ref-mini-lbl">heading</div>
+        </div>
+      </div>
+      {_ref_corridor_strip_html(opt.path_samples)}
+      <div class="ws-ref-script">→ {_esc(opt.arrival_script)}</div>
+      {notes_html}
+    </div>
+    """
+
+
+def render_refuge(result) -> None:
+    """Render the full Refuge result: bearing-compass hero, podium, matrix,
+    emergency card and quiet-beacon payload."""
+    options = result.options
+    here_hue = band_color(result.here_band)
+
+    if not options:
+        # Fallback: still render the local safety score + emergency card.
+        st.markdown(
+            f"""
+            <div class="ws-ref-empty">
+              <div class="ws-ref-empty-title">No registered refuge within {result.radius_km:g} km</div>
+              <div>{_esc(result.advisory_line)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _render_emergency_card(result.emergency_card)
+        return
+
+    top = options[0]
+    hue = _REF_BAND_HUE.get(top.band, top.band_color)
+    glow = _hex_to_rgba(hue, 0.24)
+
+    fence_chip = ""
+    if top.geofence_crossings >= 1:
+        fence_chip = (
+            f'<span class="ws-ref-chip warn">'
+            f'corridor clips {top.geofence_crossings} risk waypoint'
+            f'{"s" if top.geofence_crossings != 1 else ""}'
+            f'</span>'
+        )
+
+    here_chip_hue = here_hue
+    here_chip = (
+        f'<span class="ws-ref-chip" style="border-color:{here_chip_hue}; color:{here_chip_hue};">'
+        f'you · {_esc(result.here_band)} {result.here_score}'
+        f'</span>'
+    )
+
+    st.markdown(
+        f"""
+        <div class="ws-ref-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-ref-compass" style="--hue:{hue}; --pct:{top.refuge_score}; --glow:{glow};">
+            <div class="ws-ref-compass-inner">
+              <div class="ws-ref-compass-arrow" style="--bearing:{top.bearing_deg}deg;">↑</div>
+              <span class="ws-ref-compass-label">{_esc(top.bearing_label)}</span>
+              <span class="ws-ref-compass-sub">{top.bearing_deg}° · {top.refuge_score}/100</span>
+            </div>
+          </div>
+          <div class="ws-ref-hero-body">
+            <span class="ws-ref-pill">Refuge · {_esc(top.band)}</span>
+            <div class="ws-ref-hero-title">{_rec_to_html(result.headline)}</div>
+            <div class="ws-ref-hero-detail">{_rec_to_html(result.advisory_line)}</div>
+            <div class="ws-ref-hero-meta">
+              {here_chip}
+              <span class="ws-ref-chip">scan {result.radius_km:g} km</span>
+              <span class="ws-ref-chip">{len(options)} options ranked</span>
+              <span class="ws-ref-chip">{result.now:%H:%M}</span>
+              {fence_chip}
+            </div>
+          </div>
+          <div class="ws-ref-here">
+            <div class="ws-ref-here-val" style="color:{here_hue}">{result.here_score}</div>
+            <div class="ws-ref-here-lbl">your spot</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Podium of all options
+    cards = [_ref_card_html(o) for o in options]
+    st.markdown(
+        f'<div class="ws-ref-podium">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Heat matrix — destinations as columns, factors as rows
+    n = len(options)
+    cols = f"1.45fr repeat({n}, minmax(0,1fr))"
+    parts = [f'<div class="ws-ref-matrix" style="grid-template-columns:{cols};">']
+    parts.append('<div class="ws-ref-mcorner">Factor ↓ / Option →</div>')
+    for o in options:
+        wc = " is-top" if o.is_top else ""
+        band_hue = _REF_BAND_HUE.get(o.band, o.band_color)
+        # Trim long POI names for the matrix header.
+        display_name = o.poi_name if len(o.poi_name) < 28 else o.poi_name[:25] + "…"
+        parts.append(
+            f'<div class="ws-ref-mhead{wc}" style="--hue:{band_hue};" '
+            f'title="{_esc(o.poi_name)}">{_esc(display_name)}</div>'
+        )
+
+    # Headline refuge-score row
+    parts.append('<div class="ws-ref-mlabel"><strong>Refuge score</strong></div>')
+    for o in options:
+        g = o.refuge_score / 100.0
+        ch = _goodness_hue(g)
+        parts.append(
+            f'<div class="ws-ref-cell head-row" '
+            f'style="background:{_hex_to_rgba(ch, 0.18)}; color:{ch};">'
+            f'{o.refuge_score}</div>'
+        )
+
+    # Per-factor rows with weight chip
+    from refuge import WEIGHTS as _REF_WEIGHTS  # avoid cycles for theme-only callers
+    weight_lookup = {
+        "proximity": _REF_WEIGHTS["proximity"],
+        "path":      _REF_WEIGHTS["path"],
+        "trust":     _REF_WEIGHTS["trust"],
+        "open":      _REF_WEIGHTS["open"],
+        "crowd":     _REF_WEIGHTS["crowd"],
+    }
+    for key, label in result.factor_order:
+        w_pct = int(round(weight_lookup.get(key, 0.0) * 100))
+        parts.append(
+            f'<div class="ws-ref-mlabel">{_esc(label)}'
+            f'<span class="ws-ref-mlabel-w">{w_pct}%</span></div>'
+        )
+        for o in options:
+            f = next((ff for ff in o.factors if ff.key == key), None)
+            if f is None:
+                parts.append('<div class="ws-ref-cell">—</div>')
+                continue
+            ch = _goodness_hue(f.goodness)
+            parts.append(
+                f'<div class="ws-ref-cell" '
+                f'style="background:{_hex_to_rgba(ch, 0.15)}; color:{ch};">'
+                f'{_esc(f.display)}</div>'
+            )
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+    st.caption(
+        "Greener = safer on that factor. Composite weights shown next to each row; corridor strip "
+        "below each card shows path-safety across 5 sampled waypoints (dashed outline = inside a risk zone)."
+    )
+
+    # Emergency card + beacon
+    _render_emergency_card(result.emergency_card)
+    if result.quiet_beacon is not None:
+        st.markdown(
+            f"""
+            <div class="ws-ref-beacon">
+              <div class="ws-ref-beacon-title">📡 Quiet Beacon · ready to send</div>
+              <div class="ws-ref-beacon-body">{_esc(result.quiet_beacon.payload_text)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _render_emergency_card(card) -> None:
+    cells = "".join(
+        f"""
+        <div class="ws-ref-emergency-cell">
+          <div class="ws-ref-emergency-num">{_esc(num)}</div>
+          <div class="ws-ref-emergency-lbl">{_esc(lbl)}</div>
+        </div>
+        """
+        for lbl, num in card.numbers
+    )
+    note_html = f'<div class="ws-ref-emergency-note">{_esc(card.note)}</div>' if card.note else ""
+    st.markdown(
+        f"""
+        <div class="ws-ref-emergency">
+          <div class="ws-ref-emergency-head">
+            <span class="ws-ref-emergency-flag">{card.flag_emoji}</span>
+            <span class="ws-ref-emergency-title">Emergency · {_esc(card.country)}</span>
+          </div>
+          <div class="ws-ref-emergency-grid">{cells}</div>
+          {note_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_refuge_empty(hint: str = "Press **Find Refuge** above to scan for safe-haven options around you.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-ref-empty">
+          <div class="ws-ref-empty-title">Refuge engine idle</div>
           <div>{_esc(hint)}</div>
         </div>
         """,

@@ -30,6 +30,7 @@ from theme import (
     render_advisory_brief, render_advisory_empty,
     render_compass, render_compass_empty,
     render_staysafe, render_staysafe_empty,
+    render_refuge, render_refuge_empty,
 )
 import companion as cp
 import itinerary as itn
@@ -37,6 +38,7 @@ import sentinel as sn
 import advisory as adv
 import compass as cmp
 import stays as sts
+import refuge as rfg
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -328,7 +330,7 @@ if role == "Tourist App":
 
     tab_labels = [
         "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
-        "Advisory", "Compass", "StaySafe", "Sentinel",
+        "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge",
         "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
@@ -1654,8 +1656,113 @@ if role == "Tourist App":
                         f"({cl.status}, ×{cl.velocity:.2f}) — **{d_edge:g} km** from its edge."
                     )
 
-    # ---------------- Report Hazard
+    # ---------------- Refuge (Get Me to Safety)
     with tabs[9]:
+        st.subheader("Refuge — Get Me to Safety")
+        st.caption(
+            "Ranks help POIs around you by a composite **Refuge Score** — "
+            "proximity 35% · path safety 25% · trust tier 20% · open-now 15% · "
+            "corridor crowd 5%. Not just the *nearest* help; the *best* refuge to reach right now."
+        )
+
+        rcol1, rcol2, rcol3 = st.columns([2, 1, 1])
+        with rcol1:
+            ref_radius = st.slider(
+                "Scan radius (km)", min_value=1.0, max_value=8.0, value=4.0, step=0.5,
+                key="refuge_radius",
+                help="Refuges further than this are ignored. 4 km ≈ 50 min walk worst-case.",
+            )
+        with rcol2:
+            ref_results = st.number_input(
+                "Show top", min_value=1, max_value=8, value=5, step=1, key="refuge_max",
+            )
+        with rcol3:
+            ref_now_override = st.checkbox(
+                "Use current hour", value=True, key="refuge_use_now",
+                help="Uncheck to test the 'after-dark' scoring with a custom hour.",
+            )
+            if not ref_now_override:
+                ref_hour = st.slider("Hour (0-23)", 0, 23, 23, key="refuge_hour")
+
+        ref_now = datetime.utcnow()
+        if not ref_now_override:
+            ref_now = ref_now.replace(hour=int(ref_hour), minute=0)
+
+        scan = st.button(
+            "🆘  Find Refuge Now", type="primary", use_container_width=True, key="refuge_scan",
+        )
+
+        if "refuge_result" not in st.session_state:
+            st.session_state.refuge_result = None
+
+        if scan:
+            st.session_state.refuge_result = rfg.find_refuge(
+                st.session_state.current_loc["lat"],
+                st.session_state.current_loc["lon"],
+                pois=poi_df,
+                incidents=inc_df,
+                geofences=geofences,
+                now=ref_now,
+                max_radius_km=float(ref_radius),
+                max_results=int(ref_results),
+                user=st.session_state.user,
+            )
+
+        result = st.session_state.refuge_result
+        if result is None:
+            render_refuge_empty()
+        else:
+            render_refuge(result)
+            if result.options:
+                top = result.options[0]
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.link_button(
+                        f"🧭  Navigate to {top.poi_name}  ·  {top.distance_km*1000:.0f} m {top.bearing_label}",
+                        top.nav_url, use_container_width=True,
+                    )
+                with col_b:
+                    if st.button(
+                        "📡  Activate Quiet Beacon",
+                        use_container_width=True, key="refuge_beacon_btn",
+                    ):
+                        row = {
+                            "id": str(uuid.uuid4()),
+                            "incident_id": f"refuge-{uuid.uuid4().hex[:8]}",
+                            "lat": result.here_lat,
+                            "lon": result.here_lon,
+                            "radius_km": round(top.distance_km, 3),
+                            "created_at": result.now.isoformat(),
+                        }
+                        if st.session_state.offline:
+                            st.session_state.outbox.append({"type": "broadcast", "row": row})
+                            st.info("Beacon queued offline. Sync once you have signal.")
+                        else:
+                            try:
+                                b = load_csv("broadcasts.csv")
+                                b = pd.concat([b, pd.DataFrame([row])], ignore_index=True)
+                                save_csv(b, "broadcasts.csv")
+                                st.success(
+                                    "Beacon active — trusted-contact ping logged. "
+                                    "Stay on this screen while you walk."
+                                )
+                            except Exception as e:
+                                st.warning(f"Beacon log failed locally: {e}")
+                with st.expander("Why this ranking?"):
+                    st.markdown(
+                        "* **Proximity** is linear — 0 m → 1.0, scan-radius → 0.0.\n"
+                        "* **Path safety** averages `1 − point_risk` across 5 evenly-spaced "
+                        "waypoints between you and the refuge — that's the same `safety.point_risk` "
+                        "the route planner uses, so Refuge agrees with the safest A* path.\n"
+                        "* **Trust tier** is institutional weight — a police station is "
+                        "intrinsically a stronger refuge than a 24/7 store even at the same distance.\n"
+                        "* **Open now** degrades non-24/7 tiers (clinics, tourism desks) outside hours.\n"
+                        "* **Corridor crowd** rewards routes whose midpoint sits near another POI — "
+                        "a rough proxy for *populated, well-lit main road* vs *dark lane*.\n"
+                    )
+
+    # ---------------- Report Hazard
+    with tabs[10]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -1688,7 +1795,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[10]:
+    with tabs[11]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -1707,7 +1814,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[11]:
+    with tabs[12]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -1734,7 +1841,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[12]:
+    with tabs[13]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip

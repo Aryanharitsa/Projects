@@ -41,6 +41,7 @@ const DETECTOR_LABELS: Record<WeightKey, string> = {
   velocity_spike: "Velocity Spike",
   round_trip: "Round-Trip Cycle",
   sanctions_hit: "Sanctions Hit",
+  adverse_media: "Adverse Media",
   fan_in: "Fan-in",
   fan_out: "Fan-out",
   high_risk_geo: "High-Risk Geo",
@@ -52,6 +53,7 @@ const DETECTOR_ORDER: WeightKey[] = [
   "velocity_spike",
   "round_trip",
   "sanctions_hit",
+  "adverse_media",
   "fan_in",
   "fan_out",
   "high_risk_geo",
@@ -406,7 +408,7 @@ export default function AMLPage() {
           )}
           {resp && (
             <div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 <Tile label="Accounts" value={resp.summary.total_accounts} />
                 <Tile label="Transactions" value={resp.summary.total_transactions} />
                 <Tile
@@ -420,6 +422,11 @@ export default function AMLPage() {
                   label="Sanctions"
                   value={resp.summary.sanctions_alerted ?? 0}
                   warn={(resp.summary.sanctions_alerted ?? 0) > 0}
+                />
+                <Tile
+                  label="Adverse media"
+                  value={resp.summary.media_alerted ?? 0}
+                  warn={(resp.summary.media_alerted ?? 0) > 0}
                 />
               </div>
 
@@ -463,6 +470,18 @@ export default function AMLPage() {
                                 sanctions
                               </span>
                             )}
+                            {a.adverse_media &&
+                              (a.adverse_media.grade === "material" ||
+                                a.adverse_media.grade === "severe") && (
+                                <a
+                                  href="/media"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={`Adverse-media composite ${a.adverse_media.composite.toFixed(0)} (${a.adverse_media.grade})`}
+                                  className="rounded-md border border-violet-400/40 bg-violet-500/10 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-violet-300 hover:bg-violet-500/15"
+                                >
+                                  media · {a.adverse_media.composite.toFixed(0)}
+                                </a>
+                              )}
                             <span>{a.band}</span>
                           </span>
                           <span className="text-[14px] font-semibold tabular-nums">

@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/validation", label: "Validation" },
   { href: "/cases", label: "Cases", pill: "cases" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/media", label: "Adverse Media" },
   { href: "/kyc", label: "KYC Pipeline" },
   { href: "/attestations", label: "Attestations" },
 ];
