@@ -14,6 +14,7 @@ type Props = {
   tensionsBadge?: number;
   onOpenEcho?: () => void;
   echoBadge?: number;
+  onOpenAtlas?: () => void;
 };
 
 export function Header({
@@ -28,6 +29,7 @@ export function Header({
   tensionsBadge,
   onOpenEcho,
   echoBadge,
+  onOpenAtlas,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -117,6 +119,17 @@ export function Header({
                   {echoBadge > 99 ? "99+" : echoBadge}
                 </span>
               )}
+            </button>
+          )}
+          {onOpenAtlas && (
+            <button
+              onClick={onOpenAtlas}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-lime/15 to-synapse-violet/15 ring-1 ring-synapse-lime/40 hover:ring-synapse-lime/70 px-3 py-1 font-mono text-[11px] text-synapse-lime hover:text-ink-100 transition"
+              aria-label="open atlas"
+              title="Executive map of every cluster — cohesion × activity quadrant + recommendations"
+            >
+              <span aria-hidden>⌖</span>
+              atlas
             </button>
           )}
           {onOpenBrief && (

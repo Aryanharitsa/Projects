@@ -515,3 +515,44 @@ class EchoSkipEntry(BaseModel):
     b_id: int
     reason: str
     created_at: str
+
+
+# ----------------------------------------------------------------- atlas
+
+
+class AtlasClusterOut(BaseModel):
+    id: int
+    name: str
+    color: str
+    size: int
+    terms: list[str]
+    cohesion: float
+    internal_density: float
+    activity: float
+    growth_velocity: int
+    last_touched_days: int | None = None
+    newest_age_days: int
+    mean_age_days: float
+    bridge_count: int
+    has_synapses: bool
+    quadrant: Literal["stronghold", "frontier", "vault", "drift"]
+
+
+class AtlasRecommendationOut(BaseModel):
+    cluster_id: int
+    cluster_name: str
+    cluster_color: str
+    kind: Literal["synthesize", "split", "revisit", "dissolve", "bridge"]
+    priority: float
+    headline: str
+    detail: str
+
+
+class AtlasReportOut(BaseModel):
+    window_days: int
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    clusters: list[AtlasClusterOut]
+    recommendations: list[AtlasRecommendationOut]
+    summary: dict

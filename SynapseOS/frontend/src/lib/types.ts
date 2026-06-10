@@ -465,3 +465,60 @@ export type EchoSkipEntry = {
   reason: string;
   created_at: string;
 };
+
+// ----------------------------------------------------------------- atlas
+
+export type AtlasQuadrant = "stronghold" | "frontier" | "vault" | "drift";
+
+export type AtlasRecommendationKind =
+  | "synthesize"
+  | "split"
+  | "revisit"
+  | "dissolve"
+  | "bridge";
+
+export type AtlasCluster = {
+  id: number;
+  name: string;
+  color: string;
+  size: number;
+  terms: string[];
+  cohesion: number;
+  internal_density: number;
+  activity: number;
+  growth_velocity: number;
+  last_touched_days: number | null;
+  newest_age_days: number;
+  mean_age_days: number;
+  bridge_count: number;
+  has_synapses: boolean;
+  quadrant: AtlasQuadrant;
+};
+
+export type AtlasRecommendation = {
+  cluster_id: number;
+  cluster_name: string;
+  cluster_color: string;
+  kind: AtlasRecommendationKind;
+  priority: number;
+  headline: string;
+  detail: string;
+};
+
+export type AtlasReport = {
+  window_days: number;
+  generated_at: string;
+  total_notes: number;
+  total_clusters: number;
+  clusters: AtlasCluster[];
+  recommendations: AtlasRecommendation[];
+  summary: {
+    stronghold_count?: number;
+    frontier_count?: number;
+    vault_count?: number;
+    drift_count?: number;
+    mean_cohesion?: number;
+    growth_velocity?: number;
+    bridge_potential?: number;
+  };
+};

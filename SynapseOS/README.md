@@ -68,6 +68,25 @@ threshold live, and watch your topical clusters discover themselves.
   disagreement between topics). The header badge tells you how many
   unresolved contradictions your second brain is currently carrying.
   Pure stdlib · deterministic · portable Markdown export.
+- **Atlas — a cartographer's view of your second brain.**
+  Every other surface looks at one cluster, one pair, one note. Atlas
+  zooms out and reads the whole map. It plots every cluster on a
+  **cohesion × activity** quadrant chart and classifies each into one of
+  four shapes: **Strongholds** (high cohesion + high activity — your
+  bread-and-butter), **Frontiers** (still forming, actively growing — the
+  topics where you're currently thinking hardest), **Vaults** (tight but
+  cooling — solid clusters that haven't been touched in a while), and
+  **Drift** (stale and unfocused — refactor candidates). Each cluster
+  ships with its size, internal density, growth velocity over a
+  configurable window (7/30/90/180d), days-since-touched, and a count of
+  **bridge candidates** — notes elsewhere with cosine ≥ 0.16 to this
+  cluster's centroid that the synapse graph hasn't drawn yet. A
+  prioritized **recommendations** panel translates those signals into
+  one-click moves: "*Synthesize X while it's hot*", "*Y may be two
+  topics*", "*Z hasn't been touched in 31d*", "*3 potential bridges into
+  W*". Click a bubble to inspect a cluster; click ✦ to jump straight into
+  Synthesis; click ⊙ to isolate it on the canvas. Pure stdlib,
+  deterministic, exportable to portable Markdown.
 - **Echoes — collapse the duplicates your second brain quietly accrued.**
   Every other SynapseOS surface treats similarity as a virtue. Echoes
   flips the sign. Pairs above a tunable cosine `τ` (default 0.72) form
@@ -158,7 +177,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo modals │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas modals │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -720,6 +739,10 @@ Incremental moves for future rotation days:
 - [x] **Synthesis** — auto-written, cited topic briefings per cluster
       (synthesis prose · key claims · open threads · cross-cluster
       bridges · cohesion score · portable Markdown export) *(shipped)*
+- [x] **Atlas** — executive cartography over every cluster: cohesion ×
+      activity quadrant chart (Strongholds · Frontiers · Vaults · Drift),
+      per-cluster metrics, prioritized recommendations, portable Markdown
+      export *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

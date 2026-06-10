@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Atlas } from "@/components/Atlas";
 import { ChatPanel } from "@/components/ChatPanel";
 import { DailyBrief } from "@/components/DailyBrief";
 import { Distill } from "@/components/Distill";
@@ -50,6 +51,7 @@ export default function Page() {
   const [tensionsCount, setTensionsCount] = useState<number | null>(null);
   const [echoOpen, setEchoOpen] = useState(false);
   const [echoCount, setEchoCount] = useState<number | null>(null);
+  const [atlasOpen, setAtlasOpen] = useState(false);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -272,6 +274,7 @@ export default function Page() {
         tensionsBadge={tensionsCount ?? undefined}
         onOpenEcho={() => setEchoOpen(true)}
         echoBadge={echoCount ?? undefined}
+        onOpenAtlas={() => setAtlasOpen(true)}
       />
 
       <DailyBrief
@@ -351,6 +354,16 @@ export default function Page() {
         }}
         onMutated={() => {
           refreshGraph();
+        }}
+      />
+
+      <Atlas
+        open={atlasOpen}
+        onClose={() => setAtlasOpen(false)}
+        onIsolateCluster={(id) => setIsolated(id)}
+        onSynthesizeCluster={(id) => {
+          setAtlasOpen(false);
+          setSynthClusterId(id);
         }}
       />
 

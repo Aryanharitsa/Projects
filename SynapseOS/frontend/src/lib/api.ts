@@ -1,4 +1,5 @@
 import type {
+  AtlasReport,
   AtomCommit,
   AtomizeCommitResponse,
   AtomizeMode,
@@ -257,5 +258,23 @@ export const api = {
     if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
     const qs = q.toString();
     return `${BASE}/echo/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  atlas: (opts?: { threshold?: number; topK?: number; windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return j<AtlasReport>(`/atlas${qs ? `?${qs}` : ""}`);
+  },
+
+  atlasExportUrl: (opts?: { windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return `${BASE}/atlas/export.md${qs ? `?${qs}` : ""}`;
   },
 };

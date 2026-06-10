@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import atlas as atlas_engine
 from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
@@ -885,4 +886,46 @@ def echo_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="echoes.md"'},
+    )
+
+
+# ----------------------------------------------------------------- atlas
+
+
+@app.get("/atlas", response_model=schemas.AtlasReportOut)
+def atlas(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(atlas_engine.DEFAULT_WINDOW_DAYS, ge=1, le=365),
+) -> dict:
+    """Executive cartography of every cluster + prioritized recommendations.
+
+    Each cluster lands in one of four quadrants by ``cohesion × activity``
+    and ships with size, internal density, growth velocity over the
+    window, days-since-touch, and a count of "bridge candidates" the
+    synapse graph hasn't drawn. Recommendations are sorted by priority so
+    the most actionable items surface first.
+    """
+    r = atlas_engine.compute_atlas(
+        threshold=threshold, top_k=top_k, window_days=window_days
+    )
+    return atlas_engine.serialize(r)
+
+
+@app.get("/atlas/export.md")
+def atlas_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(atlas_engine.DEFAULT_WINDOW_DAYS, ge=1, le=365),
+) -> Response:
+    """Portable Markdown brief — quadrant counts, per-cluster lines,
+    recommendations — paste-into-anywhere stand-alone."""
+    r = atlas_engine.compute_atlas(
+        threshold=threshold, top_k=top_k, window_days=window_days
+    )
+    md = atlas_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="atlas.md"'},
     )
