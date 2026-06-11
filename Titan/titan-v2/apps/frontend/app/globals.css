@@ -959,3 +959,14 @@ body::before {
   color: rgba(255, 255, 255, 0.45);
   font-size: 12.5px;
 }
+
+/* ---------------------------------------------------------------------------
+   Customer Risk Profile (round-10, day-50)
+   --------------------------------------------------------------------------- */
+.ws-crp-hero {
+  background:
+    radial-gradient(700px 280px at 92% -10%, rgba(110, 91, 255, 0.20), transparent 60%),
+    radial-gradient(580px 230px at -8% 110%, rgba(251, 146, 60, 0.16), transparent 65%),
+    radial-gradient(360px 160px at 50% 0%, rgba(45, 225, 194, 0.10), transparent 70%),
+    linear-gradient(135deg, rgba(110, 91, 255, 0.06) 0%, rgba(45, 225, 194, 0.04) 100%);
+}

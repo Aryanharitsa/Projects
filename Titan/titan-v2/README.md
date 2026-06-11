@@ -74,6 +74,77 @@ here's the freeze-and-investigate paragraph".
 > function of `(transactions, labels, weights)` — admissible as model
 > evidence.
 
+> **Day-50 — Customer Risk Profile.** Every other surface in this repo
+> measures *one* axis. Compliance teams are required by FATF Rec. 10
+> (CDD / risk-based approach), EU 6AMLD, and BSA/FFIEC to maintain a
+> **composite, customer-level** risk rating that drives KYC refresh
+> cadence, product gating, and the regulator-facing book summary. That
+> is the layer day-50 ships. The new `apps/ai-aml/profile.py` engine
+> (~1000 LOC, pure-stdlib, deterministic) folds the six risk surfaces —
+> AML transaction risk, sanctions exposure, adverse media, typology
+> assignment, behavioural drift, network exposure — into one composite
+> 0..100 per customer:
+>
+> ```
+> composite = clip(
+>     0.28·transaction_intensity      (from /aml/score · max(account.risk_score)/100)
+>   + 0.22·sanctions_intensity        (max similarity scaled across the hit floor)
+>   + 0.16·media_intensity            (composite from /aml/media/screen · /100)
+>   + 0.12·typology_intensity         (top match confidence × severity multiplier)
+>   + 0.12·drift_intensity            (overall drift from /aml/drift)
+>   + 0.10·network_lift               ((network_risk − solo_risk) / 40, capped)
+>   + geo_modifier                    (+5 if domicile ∈ FATF grey/black)
+>   + pep_modifier                    (+8 if politically exposed)
+>   + product_modifier                (+4 per high-risk product line, capped +12)
+> , 0, 100)
+> ```
+>
+> Modifiers cap at +20 total so no single bump can dominate. Buckets are
+> FATF-aligned with refresh cadences baked in: `low <30 → 720d ·
+> medium 30..59 → 365d · high 60..79 → 180d · critical ≥80 → 90d`.
+> The refresh status is now-relative: `current · due_soon (within 30d) ·
+> overdue`. Each profile carries an auto-generated executive narrative
+> (dominant signal, modifier rationale, bucket-appropriate action), the
+> per-surface evidence trail (top accounts · best alias · headline
+> article · playbook code · onset date · network lift), and a
+> SQLite-backed append-only **profile history** that captures every
+> refresh, override, and clear-override with actor + before/after
+> composite + bucket.
+>
+> The **analyst override** is the audit-grade part regulators inspect
+> first: a senior analyst can pin a customer to a specific bucket with a
+> justification (4..600 chars). The override is logged immutably; the
+> *engine* composite is preserved alongside the *surfaced* override so
+> reviewers see both numbers. Clearing the override emits a separate
+> event on the same trail. Expired overrides (when the analyst sets an
+> expiry ISO) lapse automatically on next refresh.
+>
+> Bundled 12-customer **demo book** (`apps/ai-aml/data/customers.json`)
+> spans all four buckets — overlapping deliberately with the sanctions +
+> adverse-media corpora so a single click lights the demo end-to-end
+> (Trident Exports, Aurelia Shell, Crescent Maritime, Pyongyang Horizon,
+> Volkov-Baranov). The `/profile` console mounts a portfolio rail with
+> bucket + refresh chips + search, a customer-detail view (composite
+> ring with engine-composite hint when an override is active, 6-axis
+> `FactorWheel` polar fingerprint, per-surface evidence cards, an
+> append-only history sparkline with bucket-band guides and override
+> halos, an analyst-override dialog), and a portfolio-overview tab with
+> bucket-share + refresh-state + domicile + top-of-book panels. Pure
+> function of `(customer, evidence)` for the composite; the SQLite store
+> is the only mutable surface and lives at
+> `apps/ai-aml/data/profiles.sqlite3` (gitignored, per-deployment, WAL).
+>
+> **Endpoints:**
+> `GET  /aml/profile/rules` — weights, buckets, refresh cadence, modifier knobs;
+> `GET  /aml/profile/sample` — bundled customer book;
+> `POST /aml/profile/seed` — persist the bundled book (idempotent unless `force=true`);
+> `POST /aml/profile/compute` — one-shot composite from caller-supplied evidence (or transactions);
+> `POST /aml/profile/refresh` — compute + persist + history entry;
+> `GET  /aml/profile/portfolio` — filter by bucket / refresh / domicile / q + portfolio stats;
+> `GET  /aml/profile/{customer_id}` — persisted profile + last 64 history rows;
+> `POST /aml/profile/{customer_id}/override` — analyst override with required justification;
+> `POST /aml/profile/{customer_id}/clear_override` — revert override (still logged).
+
 > **Day-45 — Adverse Media OSINT.** Sanctions screening answers a
 > *binary* question against a *closed* watchlist. Real EDD asks the
 > open-world question that compliance teams use to escalate KYC
@@ -156,6 +227,15 @@ here's the freeze-and-investigate paragraph".
 
 | Stage | Endpoint | Notes |
 |---|---|---|
+| **Customer profile rules** | `GET  /aml/profile/rules` | Auditor view of CRP weights, buckets, refresh cadence, modifier knobs |
+| **Customer book sample** | `GET  /aml/profile/sample` | Bundled 12-customer demo book spanning every bucket |
+| **Seed sample book** | `POST /aml/profile/seed` | Persist the bundled book into SQLite (idempotent; `force=true` re-seeds) |
+| **Compute profile** | `POST /aml/profile/compute` | One-shot composite from caller-supplied evidence (or transactions) |
+| **Refresh profile** | `POST /aml/profile/refresh` | Compute + persist + history entry |
+| **Portfolio listing** | `GET  /aml/profile/portfolio` | Filter by bucket / refresh / domicile / q + portfolio stats |
+| **Get profile** | `GET  /aml/profile/{customer_id}` | Persisted profile + last 64 history rows |
+| **Set override** | `POST /aml/profile/{customer_id}/override` | Analyst override with justification (audit-trailed) |
+| **Clear override** | `POST /aml/profile/{customer_id}/clear_override` | Revert override (logged separately) |
 | KYC ingest | `POST /kyc/verify` | PDF → SHA-256 → IPFS pin (Kubo) → on-chain attest |
 | Attestation lookup | `GET  /attest/{docHash}` | Reads `AttestationRegistry.attestations[hash]` |
 | Recent attestations | `GET  /attestations/recent` | Replays `Attested` events for the explorer feed |
@@ -843,7 +923,8 @@ defensible to a regulator the same way a rule-based alert is.
 
 | Route | Purpose |
 |---|---|
-| `/` | Hero + 4-step pipeline + six feature cards + flow diagram |
+| `/` | Hero + 4-step pipeline + nine feature cards + flow diagram |
+| `/profile` | **(new — day-50)** Customer Risk Profile console: portfolio rail with bucket + refresh + search filters; customer detail with composite ring (engine-composite hint when overridden), 6-axis `FactorWheel` polar fingerprint, per-surface evidence cards, append-only history sparkline with bucket-band guides + override halos, and an analyst-override dialog; portfolio overview tab with bucket-share + refresh-state + domicile + top-of-book panels |
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
 | `/network` | Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
 | `/drift` | **(new — day-40)** Behavioral-drift console: verdict-tinted hero ring with plain-English narrative + recommended action, 10-axis polar fingerprint (baseline ring on the outer rim, drift dents inward), baseline-vs-current window cards, ranked per-dimension breakdown with score × weight × contribution bars, baseline-vs-current hour-of-day and day-of-week distribution overlays, rolling-KS change-point timeline with onset pulse, and counterparty contribution table flagging new entrants and sudden-activity spikes. Portfolio mode adds a 6-tile summary banner + a ranked left rail that swaps the active report on click |
@@ -958,6 +1039,11 @@ apps/
                          HHI · log-ratio) · 5-band verdict · rolling-KS change-point ·
                          per-counterparty contribution · auto-narrative · bundled
                          three-account demo (stable + mild + sleeper-burst)
+    profile.py          Customer Risk Profile — 6-surface composite engine
+                         (transaction · sanctions · media · typology · drift · network)
+                         · FATF-aligned buckets + refresh cadence
+                         · analyst-override + append-only history audit
+                         · SQLite-backed portfolio + bundled 12-customer demo book
     cases.py            SQLite-backed case store + workflow engine + SLA
                          + typology_code/typology_confidence mirror columns
                          + typology_assigned timeline events
@@ -990,6 +1076,12 @@ apps/
     components/DriftRadar.tsx       10-axis polar fingerprint (baseline rim, drift dents inward)
     components/DistributionOverlay.tsx baseline-vs-current normalised-histogram pair
     components/DriftTimeline.tsx    rolling-KS curve with onset pulse + threshold guide
+    app/profile/page.tsx           Customer Risk Profile console — portfolio rail +
+                                    customer detail + override dialog + portfolio overview
+    components/ProfileRing.tsx      conic-gradient composite ring with engine-composite hint
+    components/FactorWheel.tsx      6-axis polar fingerprint — weight rim + intensity polygon
+    components/RefreshTimeline.tsx  KYC anchor → today → next-due rail tinted by refresh state
+    components/HistoryStrip.tsx     composite sparkline with bucket-band guides + override halos
 blockchain/
   contracts/        AttestationRegistry.sol
   scripts/          deploy.ts
@@ -1031,4 +1123,20 @@ datasets/           sample inputs
   distribution-distance statistics, complementary to the rule engine~~
   (✅ shipped, day-40 — `drift.py` + `/drift` console: 10-axis
   fingerprint, 5-band verdict, rolling-KS change-point onset,
-  per-counterparty contribution, portfolio ranking).
+  per-counterparty contribution, portfolio ranking);
+  ~~adverse-media OSINT — the tier-2 EDD layer that sits above the
+  closed-watchlist sanctions screener and answers the open-world
+  question: *what is the world saying about this entity?*~~
+  (✅ shipped, day-45 — `media.py` + `/media` console: 40-article
+  corpus across 11 categories × 3 source tiers, similarity ×
+  severity × tier × recency composite, `adverse_media` detector
+  wired into the risk engine);
+  ~~customer-level composite risk rating — the FATF Recommendation-10
+  composite that fuses every TITAN surface (AML, sanctions, adverse
+  media, typology, drift, network) into one number per customer
+  with a regulator-aligned bucket, FATF-aligned KYC refresh
+  cadence, and analyst-override audit trail~~
+  (✅ shipped, day-50 — `profile.py` + `/profile` console:
+  6-surface deterministic composite, 4-band buckets with refresh
+  cadence baked in, append-only history, analyst-override dialog
+  with audit-grade justification, portfolio overview).
