@@ -78,12 +78,13 @@ import cases as case_store
 import drift as drift_engine
 import media as media_engine
 import network as network_engine
+import profile as profile_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.8.0"
+ENGINE_VERSION = "titan-aml/1.9.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -828,3 +829,171 @@ def cases_network_clearing(
     panel["case_id"] = case_id
     panel["source"] = "client-supplied"
     return panel
+
+
+# ---------------------------------------------------------------------------
+# Customer Risk Profile (round-10, day-50)
+# ---------------------------------------------------------------------------
+
+
+class ProfileComputeReq(BaseModel):
+    customer: Dict[str, Any]
+    evidence: Optional[Dict[str, Any]] = None
+    transactions: Optional[List[Tx]] = Field(
+        default=None,
+        description=(
+            "Optional. When present, the engine runs the AML score + drift + "
+            "network pipelines and builds the evidence blob automatically "
+            "before composing the profile."
+        ),
+    )
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class ProfileRefreshReq(ProfileComputeReq):
+    refreshed_by: Optional[str] = "TITAN-ANALYST"
+    note: Optional[str] = None
+
+
+class ProfileOverrideReq(BaseModel):
+    locked_bucket: str = Field(..., description="One of low | medium | high | critical")
+    justification: str = Field(..., min_length=4, max_length=600)
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    expires_iso: Optional[str] = None
+
+
+class ProfileClearOverrideReq(BaseModel):
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    note: Optional[str] = None
+
+
+@app.get("/aml/profile/rules")
+def profile_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **profile_engine.get_rules()}
+
+
+@app.get("/aml/profile/sample")
+def profile_sample() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **profile_engine.get_sample()}
+
+
+@app.post("/aml/profile/seed")
+def profile_seed(force: bool = False) -> Dict[str, Any]:
+    return profile_engine.seed_sample(force=force)
+
+
+@app.post("/aml/profile/compute")
+def profile_compute(req: ProfileComputeReq = Body(...)) -> Dict[str, Any]:
+    if not isinstance(req.customer, dict) or not req.customer.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer.customer_id is required")
+    evidence = req.evidence or {}
+    if req.transactions:
+        threshold = (
+            req.sanctions_threshold
+            if req.sanctions_threshold is not None
+            else risk_engine.SANCTIONS_HIT_THRESHOLD
+        )
+        rows = [t.model_dump() for t in req.transactions]
+        built = profile_engine.build_evidence(
+            req.customer, rows, sanctions_threshold=threshold,
+        )
+        for k, v in built.items():
+            evidence.setdefault(k, v)
+    try:
+        out = profile_engine.compute_profile(
+            req.customer, evidence=evidence, weights_override=req.weights,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    out["ok"] = True
+    return out
+
+
+@app.post("/aml/profile/refresh")
+def profile_refresh(req: ProfileRefreshReq = Body(...)) -> Dict[str, Any]:
+    if not isinstance(req.customer, dict) or not req.customer.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer.customer_id is required")
+    evidence = req.evidence or {}
+    if req.transactions:
+        threshold = (
+            req.sanctions_threshold
+            if req.sanctions_threshold is not None
+            else risk_engine.SANCTIONS_HIT_THRESHOLD
+        )
+        rows = [t.model_dump() for t in req.transactions]
+        built = profile_engine.build_evidence(
+            req.customer, rows, sanctions_threshold=threshold,
+        )
+        for k, v in built.items():
+            evidence.setdefault(k, v)
+    try:
+        out = profile_engine.upsert_profile(
+            req.customer,
+            evidence=evidence,
+            weights_override=req.weights,
+            refreshed_by=req.refreshed_by or "TITAN-ANALYST",
+            note=req.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "profile": out}
+
+
+@app.get("/aml/profile/portfolio")
+def profile_portfolio(
+    bucket: Optional[str] = None,
+    refresh_label: Optional[str] = None,
+    domicile: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    listed = profile_engine.list_profiles(
+        bucket=bucket, refresh_label=refresh_label,
+        domicile=domicile, q=q, limit=limit, offset=offset,
+    )
+    stats = profile_engine.portfolio_stats()
+    return {"ok": True, "engine": ENGINE_VERSION, **listed, "stats": stats}
+
+
+@app.get("/aml/profile/{customer_id}")
+def profile_get(customer_id: str) -> Dict[str, Any]:
+    out = profile_engine.get_profile(customer_id)
+    if not out:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "profile": out}
+
+
+@app.post("/aml/profile/{customer_id}/override")
+def profile_override(customer_id: str, req: ProfileOverrideReq = Body(...)) -> Dict[str, Any]:
+    try:
+        out = profile_engine.set_override(
+            customer_id,
+            locked_bucket=req.locked_bucket,
+            justification=req.justification,
+            actor=req.actor,
+            expires_iso=req.expires_iso,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="customer not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "profile": out}
+
+
+@app.post("/aml/profile/{customer_id}/clear_override")
+def profile_clear_override(customer_id: str, req: ProfileClearOverrideReq = Body(...)) -> Dict[str, Any]:
+    try:
+        out = profile_engine.clear_override(customer_id, actor=req.actor, note=req.note)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "profile": out}
+
+
+@app.delete("/aml/profile/{customer_id}")
+def profile_delete(customer_id: str) -> Dict[str, Any]:
+    deleted = profile_engine.delete_profile(customer_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "deleted": True, "customer_id": customer_id}

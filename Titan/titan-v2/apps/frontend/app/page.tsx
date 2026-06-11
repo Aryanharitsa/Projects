@@ -26,6 +26,14 @@ const FEATURES = [
     cta: "Run drift",
   },
   {
+    href: "/profile",
+    title: "Customer Risk Profile",
+    eyebrow: "RBA · CDD",
+    body: "The FATF Recommendation-10 composite. Every TITAN surface — transactions, sanctions, adverse media, typology, drift, network — folded into one number per customer, the regulator-aligned bucket, an FATF-aligned KYC refresh schedule, and an analyst-override audit trail.",
+    accent: "from-violet-500/30 via-amber-400/15 to-transparent",
+    cta: "Open profile",
+  },
+  {
     href: "/cases",
     title: "Case Workflow",
     eyebrow: "Triage",
@@ -69,10 +77,10 @@ const FEATURES = [
 
 const STATS = [
   { label: "Pattern detectors", value: "9" },
+  { label: "Risk surfaces", value: "6" },
   { label: "Drift axes", value: "10" },
   { label: "Laundering typologies", value: "6" },
   { label: "Watchlist entries", value: "30" },
-  { label: "Adverse-media corpus", value: "40" },
   { label: "External ML deps", value: "0" },
 ];
 

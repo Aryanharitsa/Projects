@@ -1310,3 +1310,292 @@ export async function getMediaArticle(id: string): Promise<{
   const r = await fetch(`${API_BASE}/aml/media/articles/${id}`, { cache: "no-store" });
   return jsonOrThrow(r);
 }
+
+// ---------------------------------------------------------------------------
+// Customer Risk Profile (round-10, day-50)
+// ---------------------------------------------------------------------------
+
+export type ProfileBucket = "low" | "medium" | "high" | "critical";
+export type ProfileRefreshLabel = "current" | "due_soon" | "overdue" | "unscheduled";
+export type ProfileSurfaceKey =
+  | "transaction"
+  | "sanctions"
+  | "media"
+  | "typology"
+  | "drift"
+  | "network";
+
+export type ProfileCustomer = {
+  customer_id: string;
+  display_name?: string;
+  customer_type?: "individual" | "entity";
+  domicile?: string | null;
+  pep?: boolean;
+  products?: string[];
+  accounts?: string[];
+  kyc_anchor?: string | null;
+};
+
+export type ProfileFactor = {
+  key: ProfileSurfaceKey;
+  label: string;
+  accent: string;
+  weight: number;
+  intensity: number;
+  points: number;
+  detail: string;
+  evidence: Record<string, any>;
+};
+
+export type ProfileModifier = {
+  key: "geo" | "pep" | "product" | string;
+  label: string;
+  points: number;
+  detail: string;
+};
+
+export type ProfileRefresh = {
+  label: ProfileRefreshLabel;
+  days_to_due: number | null;
+  tone: "teal" | "amber" | "rose" | "muted";
+};
+
+export type ProfileOverride = {
+  locked_bucket: ProfileBucket;
+  justification: string;
+  actor: string;
+  set_at: string;
+  expires_iso?: string | null;
+};
+
+export type ProfileHistoryEntry = {
+  id: number;
+  composite: number;
+  engine_composite: number;
+  bucket: ProfileBucket;
+  refresh_kind: "refresh" | "override" | "clear_override" | "seed";
+  override: ProfileOverride | null;
+  actor: string | null;
+  note: string | null;
+  refreshed_at: string;
+};
+
+export type Profile = {
+  engine: string;
+  rules_version: string;
+  computed_at: string;
+  customer: ProfileCustomer;
+  composite: number;
+  bucket: ProfileBucket;
+  bucket_accent: string;
+  bucket_blurb: string;
+  recommended_action: string;
+  engine_composite: number;
+  engine_bucket: ProfileBucket;
+  factors: ProfileFactor[];
+  modifiers: ProfileModifier[];
+  modifier_total: number;
+  weights: Record<ProfileSurfaceKey, number>;
+  kyc_anchor: string | null;
+  kyc_due: string | null;
+  refresh: ProfileRefresh;
+  narrative: string;
+  override: ProfileOverride | null;
+  evidence?: Record<string, any>;
+  history?: ProfileHistoryEntry[];
+};
+
+export type ProfileSurfaceMeta = {
+  key: ProfileSurfaceKey;
+  label: string;
+  accent: string;
+  source: string;
+  icon: string;
+  weight: number;
+};
+
+export type ProfileBucketMeta = {
+  accent: string;
+  blurb: string;
+  action: string;
+};
+
+export type ProfileRules = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  weights: Record<ProfileSurfaceKey, number>;
+  surface_order: ProfileSurfaceKey[];
+  surfaces: ProfileSurfaceMeta[];
+  buckets: { label: ProfileBucket; min: number; max: number }[];
+  bucket_meta: Record<ProfileBucket, ProfileBucketMeta>;
+  refresh_days: Record<ProfileBucket, number>;
+  due_soon_days: number;
+  modifiers: {
+    geo_modifier: number;
+    pep_modifier: number;
+    high_risk_product_modifier: number;
+    modifier_cap: number;
+    high_risk_geos: string[];
+    high_risk_products: string[];
+  };
+  typology_severity_multipliers: Record<string, number>;
+};
+
+export type ProfilePortfolioStats = {
+  total: number;
+  by_bucket: Record<ProfileBucket, number>;
+  by_refresh: Record<ProfileRefreshLabel, number>;
+  by_domicile: Record<string, number>;
+  average_composite: number;
+  highest_composite: number;
+  due_within_30d: number;
+  overdue_count: number;
+};
+
+export type ProfilePortfolio = {
+  ok: boolean;
+  engine: string;
+  total: number;
+  count: number;
+  limit: number;
+  offset: number;
+  profiles: Profile[];
+  stats: ProfilePortfolioStats;
+};
+
+export type ProfileSample = {
+  ok: boolean;
+  engine: string;
+  $schema?: string;
+  name: string;
+  version: string;
+  published: string;
+  description: string;
+  customers: { customer: ProfileCustomer; evidence?: Record<string, any> }[];
+};
+
+export async function getProfileRules(): Promise<ProfileRules> {
+  const r = await fetch(`${API_BASE}/aml/profile/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getProfileSample(): Promise<ProfileSample> {
+  const r = await fetch(`${API_BASE}/aml/profile/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function seedProfiles(force = false): Promise<{
+  ok: boolean;
+  created: number;
+  refreshed: number;
+  skipped: number;
+  total_in_sample: number;
+}> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/seed?force=${force}`,
+    { method: "POST", cache: "no-store" },
+  );
+  return jsonOrThrow(r);
+}
+
+export async function getProfile(customer_id: string): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(`${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function listProfiles(
+  opts: {
+    bucket?: ProfileBucket;
+    refresh_label?: ProfileRefreshLabel;
+    domicile?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<ProfilePortfolio> {
+  const qs = new URLSearchParams();
+  if (opts.bucket) qs.set("bucket", opts.bucket);
+  if (opts.refresh_label) qs.set("refresh_label", opts.refresh_label);
+  if (opts.domicile) qs.set("domicile", opts.domicile);
+  if (opts.q) qs.set("q", opts.q);
+  if (typeof opts.limit === "number") qs.set("limit", String(opts.limit));
+  if (typeof opts.offset === "number") qs.set("offset", String(opts.offset));
+  const r = await fetch(`${API_BASE}/aml/profile/portfolio?${qs.toString()}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function computeProfile(
+  customer: ProfileCustomer,
+  evidence?: Record<string, any>,
+  opts: { transactions?: Tx[]; weights?: Partial<Record<ProfileSurfaceKey, number>> } = {},
+): Promise<Profile & { ok: boolean }> {
+  const body: Record<string, any> = { customer };
+  if (evidence) body.evidence = evidence;
+  if (opts.transactions) body.transactions = opts.transactions;
+  if (opts.weights) body.weights = opts.weights;
+  const r = await fetch(`${API_BASE}/aml/profile/compute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function refreshProfile(
+  customer: ProfileCustomer,
+  evidence?: Record<string, any>,
+  opts: {
+    transactions?: Tx[];
+    weights?: Partial<Record<ProfileSurfaceKey, number>>;
+    refreshed_by?: string;
+    note?: string;
+  } = {},
+): Promise<{ ok: boolean; profile: Profile }> {
+  const body: Record<string, any> = { customer };
+  if (evidence) body.evidence = evidence;
+  if (opts.transactions) body.transactions = opts.transactions;
+  if (opts.weights) body.weights = opts.weights;
+  if (opts.refreshed_by) body.refreshed_by = opts.refreshed_by;
+  if (opts.note) body.note = opts.note;
+  const r = await fetch(`${API_BASE}/aml/profile/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function setProfileOverride(
+  customer_id: string,
+  body: { locked_bucket: ProfileBucket; justification: string; actor?: string; expires_iso?: string },
+): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}/override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow(r);
+}
+
+export async function clearProfileOverride(
+  customer_id: string,
+  body: { actor?: string; note?: string } = {},
+): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}/clear_override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow(r);
+}
