@@ -72,6 +72,35 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   Ships with a curated **15-stay Goa preset list** (hotels, resorts,
   hostels, homestays), takes custom lat/lon rows, and exports as JSON
   (`waysafe.staysafe.v1`) and markdown for WhatsApp/email.
+- **🆕 Tempo — Departure-Window Optimizer** — the *temporal* layer that
+  closes the loop on planning: **when** should you leave? Every other
+  surface answers *where* (Compass), *where to sleep* (StaySafe), *how to
+  get there* (Plan Route), or *where to flee* (Refuge). None answer the
+  most common real-world question: *"I want to be at the destination
+  between 17:00 and 19:00 — what's the optimal minute to leave?"*. Tempo
+  sweeps the joint **(arrival_minute × route_flavor)** grid (safest ·
+  balanced · fastest), runs the forecast-aware A\* once per cell, and
+  scores each candidate by **integrated risk along the actual corridor**:
+  `risk_km = mean(forecast_blended_risk along corridor) × distance_km`,
+  composite `= 100·exp(−κ·risk_km)` with κ=0.35 (risk_km 0.64→80 ·
+  1.23→65 · 1.98→50 · 3.0→35). The winner is the highest-composite
+  feasible cell (depart ≥ now); ties broken by lower risk-km, then higher
+  min-safety, then shorter ETA. **Comparisons** name three baselines —
+  *depart-now*, *earliest arrival*, *latest arrival* — and quote the
+  concrete Δrisk-km saved vs each. **UI**: a hero card with the chosen
+  depart-time as a big ring (composite-filled, hue by band, with the
+  *in 41 min* relative time below), a colour-coded **flavor × arrival
+  heatmap** marking the winner with a glow ring and dimming cells whose
+  depart-time is already in the past, a **comparison strip** of side-by-side
+  cards (winner card glows, baselines show *−2 pts*, *+0.07 risk-km* deltas),
+  a **rationale** block of plain-English bullets ("vs Latest arrival
+  (18:41→19:00): winner saves 0.07 risk-km along the 9.9 km corridor,
+  +2 pts on the composite"), a **runners-up** strip for the next-best two
+  cells within 6 pts, and a **pydeck map** overlay of the winning corridor
+  in green with runners-up faint. Exports as JSON (`waysafe.tempo.v1`)
+  and markdown. Pure-Python, reuses `forecast.HazardForecaster`,
+  `routing.plan_forecast_route`, and `safety.point_risk` — Tempo's
+  verdict always agrees with the safest-A\* path at the chosen depart.
 - **🆕 Refuge — "Get Me to Safety" engine** — the missing *egress* layer
   that answers the only question that matters when something feels wrong
   *right now*: **where do I go in the next five minutes?** The previous
@@ -451,6 +480,150 @@ and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
 hour-aware open-confidence by un-checking *"Use current hour"* and
 sliding to 23:00 — the tourist help-desk and clinic drop out of the
 podium.
+
+---
+
+## ⏱ Tempo — Departure-Window Optimizer (Day 51)
+
+Every other surface in WaySafe answers a *spatial* question — where to
+go, where to sleep, how to get there, where to flee. The most common
+real-world planning question is *temporal*:
+
+> "I want to be at the destination between 17:00 and 19:00 today —
+>  when should I leave, and which route flavor should I take?"
+
+The forecaster has `find_best_window` (pointwise sweep around one cell)
+and the router has `find_best_departure` (sweep one alpha around one
+depart-time). Neither models the corridor; neither sweeps route flavors;
+neither anchors the search to a *target arrival window* with feasibility
+constraints. Tempo is the optimisation + UX layer that does.
+
+### Physics
+
+For each `(arrival_t, alpha)` in the grid:
+
+```
+eta_alpha = baseline ETA for that alpha (probed once at window midpoint)
+depart_t  = arrival_t − eta_alpha
+route     = plan_forecast_route(origin, dest, forecaster, depart_t, alpha)
+risk_km   = mean(forecast_blended_risk along corridor) × distance_km
+composite = 100 × exp(−κ · risk_km)        # κ = 0.35
+band      = All-clear ≥80 · Caution 65 · Elevated 50 · High Risk 35 · Danger <35
+```
+
+`risk_km` is the integrated exposure the traveller *actually* absorbs on
+the corridor at that time — it folds in distance, hour-conditional
+forecast, geofences and live-incident proximity into one number. The
+exponential keeps the curve gentle for small differences (so a 0.1 risk-km
+gap doesn't flip the band) and steep for big ones.
+
+Calibration check:
+
+| `risk_km` | composite | band      |
+|----------:|----------:|:----------|
+| 0.00      | 100       | All-clear |
+| 0.64      |  80       | All-clear |
+| 1.23      |  65       | Caution   |
+| 1.98      |  50       | Elevated  |
+| 3.00      |  35       | High Risk |
+
+### Selection
+
+- **Winner** = highest composite among **feasible** cells (where
+  `depart_t ≥ now`). Ties broken by lower `risk_km`, then higher
+  `min_safety`, then shorter ETA.
+- **Runners-up** = next-best two distinct (arrival, flavor) cells within
+  6 pts of the winner.
+- **Infeasible** cells (depart in the past) are still scored and dimmed
+  in the grid with a diagonal-stripe pattern, with a count footnote
+  ("3/30 cells would require leaving in the past").
+
+### Comparisons — three baselines
+
+Every Tempo result names the winner *and* three baselines on the same
+flavor for an honest comparison:
+
+| Baseline | Definition |
+|---|---|
+| **Depart now** | Same-flavor cell whose `depart_t` is closest to `now` |
+| **Earliest arrival** | First arrival slot in the window |
+| **Latest arrival** | Last arrival slot in the window |
+
+Each carries `Δcomposite = winner − baseline` and `Δrisk_km = baseline −
+winner`. The rationale lines quote them directly:
+
+> *"vs Latest arrival (18:41→19:00, composite 88): winner saves 0.07
+>  risk-km along the 9.9 km corridor, +2 pts on the composite."*
+
+When a baseline coincides with the winner (e.g. depart-now happens to be
+optimal), it's flagged "≈ tie with winner".
+
+### Cross-flavor rationale
+
+If at the winner's arrival minute a *different* flavor would have scored
+within 4 pts, Tempo says so explicitly — that tells the user routing
+choice barely moves the needle here, and they can pick by preference. If
+the gap is wider, the rationale surfaces it: *"At 00:15, the **safest**
+flavor beats **fastest** by 6 pts (87 vs 81) — routing matters more than
+departure timing here."*
+
+### What the Tempo tab surfaces
+
+1. **Hero card** — winner depart-time as a big composite-filled ring
+   (hue by band), the relative `in 41 min`, the destination + arrival
+   time on the right, a flavor pill with glyph (🛡 safest · ⚖ balanced ·
+   🏁 fastest), and a meta strip with ETA, distance, risk-km, avg/min
+   safety, and any warm-stretch warning.
+2. **Heatmap grid** — rows = flavors, cols = arrival slots, each cell
+   coloured by its band hue at score-proportional alpha; **winner cell
+   ringed and starred**, infeasible cells dimmed with a 135° stripe
+   pattern. Sub-label inside each cell shows the implied depart-time.
+   A legend strip at the bottom maps colours to bands.
+3. **Comparison strip** — side-by-side cards for **Winner / Depart-now /
+   Earliest / Latest**. Winner card has a coloured glow; baselines show
+   `▼ −2 pts · +0.07 risk-km vs winner` deltas in band-coloured chips.
+4. **Rationale block** — bulleted plain-English explanations of why this
+   minute beats each baseline, with concrete numbers and a forecast
+   pocket call-out when relevant.
+5. **Runners-up** — next-best two cells within 6 pts as compact cards
+   (rank badge · times · composite · band · risk-km · distance).
+6. **Winner-corridor preview** — pydeck map with the winning route in
+   green and runners-up corridors faint grey, plus origin (blue) and
+   destination (orange) markers.
+7. **Exports** — JSON (`waysafe.tempo.v1` schema, includes the full grid
+   for reproducibility) and a markdown digest for WhatsApp / email /
+   Notion paste.
+
+### What it adds over existing surfaces
+
+| Existing | Question it answers | Gap Tempo fills |
+|---|---|---|
+| `Forecast.find_best_window` | Risk-vs-time at *one cell* | Doesn't model the corridor; doesn't sweep route flavors |
+| `routing.find_best_departure` | Sweep depart-times for *one* alpha | One flavor only; ranks by avg/min safety, not exposure; no arrival anchoring |
+| `Compass` | Which destination is safest right now | Spatial only — doesn't move in time |
+| `Plan Route` | Best corridor *given* a depart-time | The depart-time is an input, not optimised |
+
+Tempo is the **optimisation layer** that uses the existing engines as
+oracles. Zero new physics: it reuses `plan_forecast_route` (which itself
+reuses `safety.point_risk` and `HazardForecaster.risk_at`), so Tempo's
+verdict is always consistent with the safest-A\* corridor at the chosen
+depart-time.
+
+### Headline demo — Panaji → Calangute, arrive between 17:30–19:00
+
+On the bundled `incidents.csv` with the corridor seed, anchored at
+`now = Fri 16:30`:
+
+- Winner: depart **17:11** → arrive **17:30**, safest flavor, composite
+  **90/100 · All-clear**, risk-km **0.30** along a 9.9 km corridor.
+- Heatmap: **safest** and **balanced** rows hover at 88–90 across the
+  window; **fastest** row sits flat at 79 — *"routing matters more than
+  departure timing"* is a one-glance read.
+- Comparison: depart-now is identical to the winner (anchor is 36 min
+  before depart, the closest depart-slot in the window is 17:11 itself);
+  latest-arrival (18:41→19:00) scores 88, +2 pts behind the winner.
+- Rationale: *"Destination cell sits in a quiet forecast pocket at 17:30
+  (0.01) — that pocket is why this slot wins."*
 
 ---
 
