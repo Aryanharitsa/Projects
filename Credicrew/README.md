@@ -16,16 +16,117 @@ interviewers are lenient or severe, how reliably the panel agrees, and
 whether removing that bias changes who you'd hire, closes the loop *back
 to the top of the funnel* with **Channel Studio**, the sourcing-intelligence
 layer that scores every channel on quality, conversion, cost, and speed
-— and now **forecasts the funnel itself** with **Forecast Studio**, a
-Monte-Carlo simulator that answers the one question every hiring manager
-opens with: *will I have a hire by the start date?* All from a dark, fast,
-single-page workspace.
+— **forecasts the funnel itself** with **Forecast Studio**, a Monte-Carlo
+simulator that answers the one question every hiring manager opens with:
+*will I have a hire by the start date?*, and now **runs cadence on the
+per-candidate layer** with **Cadence Studio** — every candidate&apos;s stage
+age vs the stage SLA, who&apos;s about to fall off this week, and the
+exponential-hazard exit forecast over the next 7 days. All from a dark,
+fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Cadence Studio (Day 52)
+
+Forecast Studio (Day 47) is the **aggregate** answer: *will I hire by
+start_date?* — a Monte-Carlo over the funnel shape. It treats the pipeline
+as a population. What it *can&apos;t* answer is the question every recruiter
+opens Monday with:
+
+> Which candidates in my pipeline are about to fall off this week,
+> and what should I do about each one — today?
+
+**Cadence Studio** (`/cadence`) is the per-candidate companion. For every
+shortlist entry it computes:
+
+- **stage age** — days since the candidate entered their current stage
+  (read from a real `stageChangedAt` timestamp when present; otherwise
+  deterministically synthesised from the role+candidate+stage hash so the
+  surface lights up immediately with a realistic spread on first open).
+- **band** — `on_track ≤ 0.7×SLA`, `slowing ≤ SLA`, `at_risk ≤ 1.6×SLA`,
+  `stalled > 1.6×SLA`. SLAs are mirrored from the Forecast Studio velocity
+  priors (new 1d · outreach 3d · screening 5d · interview 7d · offer 5d),
+  so the two surfaces stay calibrated on the same physics.
+- **survive_7d** = `exp(-7 · ln 2 / median)` — a memoryless exponential
+  hazard giving the probability the candidate is still sitting in this
+  stage in a week. Summed across a stage that&apos;s the projected weekly
+  exit count.
+- **risk score** ∈ 0..100 = `0.6 · clip((age − sla)/median, 0, 1)
+  + 0.4 · clip(age/(4·median), 0, 1)` — the hot list&apos;s sort key.
+- a band-keyed plain-English **recommendation** string — what to do
+  today, written from the actual numbers.
+
+**Surface** — dark glass page at `/cadence`, sitting between Channels and
+Pipeline in the nav.
+
+- **Hero** — a conic-gradient health ring (0..100, re-tinted by band:
+  emerald ≥ 80, amber ≥ 60, orange ≥ 40, rose otherwise) flanked by four
+  metric tiles (Active · On track · At risk · Stalled), plus a right-rail
+  card showing projected exits over the next 7 days.
+- **Recommendations strip** — violet-tinted callout with band-keyed
+  bullet list ("**Bottleneck: Outreach** — 5 of 12 candidates past SLA
+  (median age 6d vs SLA 3d)" etc.).
+- **Stage swim lanes** — 5 cards (new · outreach · screening · interview
+  · offer), each showing count, median + p75 age, expected exits/7d,
+  stacked band bar with legend, and a *pulsing* rose ring on whichever
+  stage is the bottleneck (defined as stage with the largest
+  `at_risk + stalled` count where ≥ 25% of the stage is stuck).
+- **7-day exit forecast** — per-stage projection cards with the stage hue
+  and the implied attrition % for the week.
+- **Today&apos;s hot list** — top 8 candidates by risk score, ordered with
+  match-score ties, each rendered as a row with avatar, role link, stage
+  pill, age bar with SLA marker, risk chip, recommendation tagline, and a
+  ✓ Nudged button that resets the stage timer to *now* (persisted as a
+  `stageChangedAt` override in `localStorage`).
+- **By role grid** — health cards sorted ascending (worst first), each
+  with band breakdown, 4-tile band counts and a top-stalled list.
+- **Stage × age heatmap** — rows = stage, cols = age vs SLA buckets,
+  cells coloured by band hue at intensity-proportional alpha.
+- **All active candidates** — collapsible filtered list with
+  stage/band dropdowns.
+- **How cadence is computed** — collapsible explainer with the band rule,
+  survival formula, risk formula, and an SLA + median table.
+
+**Backend mirror** — `backend/app/services/cadence.py` is a byte-for-byte
+mirror of the TS engine (verified on a fixed 6-candidate fixture: same
+stage ages, same band distribution {0/3/2/1}, same health 75, same
+worstStage `offer`, same bottleneck on `outreach`, identical hot-list
+ordering [5, 3, 1]). `backend/app/routers/cadence.py` exposes:
+
+- `POST /cadence/summary` — full per-stage + per-role + hot-list +
+  recommendations payload (both `camelCase` and `snake_case` accepted via
+  Pydantic aliases). Pass `includeBrief: true` to get the markdown brief
+  inline.
+- `POST /cadence/brief` — re-render a markdown brief from a cached summary.
+- `GET /cadence/defaults` — SLA + median priors + band/survival/risk
+  formulas, so callers stay in sync without hard-coding numbers.
+
+Persistence touch: `ShortlistEntry.stageChangedAt?` was added to the
+local-storage role model, and `setStatus(...)` now stamps it on every
+transition so the engine reads real ages once the user starts moving
+candidates.
+
+API version bumped `0.11.0 → 0.12.0`.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/cadence/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "candidates": [
+      {"candidateId": 1, "candidateName": "Ananya", "roleId": "r1",
+       "roleName": "FE", "stage": "outreach", "stageAgeDays": 4.4},
+      {"candidateId": 2, "candidateName": "Aarav",  "roleId": "r1",
+       "roleName": "FE", "stage": "offer",     "stageAgeDays": 9.0}
+    ],
+    "includeBrief": true
+  }' | jq '.healthScore, .worstStage, .hotList[0].recommendation'
+```
 
 ---
 
@@ -848,6 +949,43 @@ Returns the baseline assumption table — `conversion`, `velocity`,
 order — so a CLI / agentic client can render a what-if sandbox without
 hard-coding industry priors.
 
+### `POST /cadence/summary`
+Per-candidate stage-aging + SLA engine (Cadence Studio). Accepts
+`{ candidates: [{ candidateId, candidateName, roleId, roleName, stage,
+stageAgeDays?, pipelineAgeDays?, matchScore?, location? }], horizonDays?,
+now?, includeBrief? }`. When `stageAgeDays` is omitted the engine
+synthesises a deterministic age from the `(roleId, candidateId, stage)`
+hash, matching the in-browser engine. Returns `{ totalActive,
+onTrackCount, atRiskCount, stalledCount, healthScore, expectedExits7d,
+worstStage, worstRoleId, byStage: [{ stage, count, ageMedian, ageP75,
+bands, expectedExits7d, bottleneck, health, slaDays, medianDays }],
+byRole: [...], hotList: [...], items: [...], recommendations,
+generatedAt }`. Both `camelCase` (TS-engine style) and `snake_case`
+(curl-style) payloads accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8000/cadence/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "candidates": [
+      {"candidateId": 1, "candidateName": "Ananya", "roleId": "r1",
+       "roleName": "FE", "stage": "outreach", "stageAgeDays": 4.4},
+      {"candidateId": 2, "candidateName": "Aarav",  "roleId": "r1",
+       "roleName": "FE", "stage": "offer",     "stageAgeDays": 9.0}
+    ],
+    "includeBrief": true
+  }'
+```
+
+### `POST /cadence/brief`
+Re-render the Markdown brief from a cached summary payload. Body:
+`{ summary, isoDate? }`. Returns `{ markdown }`.
+
+### `GET /cadence/defaults`
+Returns the per-stage SLA + median priors, band labels, horizon (default
+7 days), and the formulas (`bandRule`, `survival7d`, `risk`) so callers
+keep the calibration in sync without hard-coding numbers.
+
 ### Endpoint map
 
 | Method | Path                          | Purpose                                                 |
@@ -877,6 +1015,9 @@ hard-coding industry priors.
 | POST   | `/sources/brief`              | Markdown sourcing brief from a cached summary           |
 | POST   | `/forecast/run`               | Monte-Carlo pipeline forecast (Forecast Studio)         |
 | GET    | `/forecast/defaults`          | baseline conversion + velocity priors                   |
+| POST   | `/cadence/summary`            | per-candidate stage aging + SLA + hot list (Cadence)    |
+| POST   | `/cadence/brief`              | Markdown brief from a cached cadence summary            |
+| GET    | `/cadence/defaults`           | per-stage SLAs + medians + formulas                     |
 
 ---
 
@@ -896,7 +1037,9 @@ Credicrew/
 │       │   ├── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
 │       │   ├── portfolio.py        # POST /portfolio/summary
 │       │   ├── calibration.py      # POST /calibration/summary
-│       │   └── sources.py          # POST /sources/{summary,brief}
+│       │   ├── sources.py          # POST /sources/{summary,brief}
+│       │   ├── forecast.py         # POST /forecast/run · GET /forecast/defaults
+│       │   └── cadence.py          # POST /cadence/{summary,brief} · GET /cadence/defaults
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
@@ -906,13 +1049,16 @@ Credicrew/
 │           ├── peer_parity.py      # regression · z-scores · inversions · suggestions
 │           ├── portfolio.py        # portfolio rollup · funnel · comp forecast · health
 │           ├── calibration.py      # rater bias · consensus · ICC · de-biased ranking
-│           └── sources.py          # channel attribution · ROI rollup · recommendations
+│           ├── sources.py          # channel attribution · ROI rollup · recommendations
+│           ├── forecast.py         # mulberry32 RNG · MC pipeline simulator · sensitivity
+│           └── cadence.py          # stage-age engine · band rule · survival · risk score
 ├── frontend/
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx            # Discover (search + composition + roles)
 │       │   ├── hq/page.tsx         # Command Center (portfolio rollup)
-│       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence — NEW)
+│       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence)
+│       │   ├── cadence/page.tsx    # Cadence Studio (stage aging + SLA — NEW)
 │       │   ├── pipeline/page.tsx   # Quick-saves
 │       │   └── roles/
 │       │       ├── page.tsx        # Roles list
@@ -960,6 +1106,9 @@ Credicrew/
 │           ├── portfolio.ts        # portfolio rollup · funnel · comp forecast · health
 │           ├── calibration.ts      # rater bias · consensus · ICC · de-biased ranking (parity w/ backend)
 │           ├── panel_seed.ts       # deterministic biased-panel seed for a role
+│           ├── sources.ts          # channel ROI · funnel · brief (parity w/ backend)
+│           ├── forecast.ts         # mulberry32 RNG · MC pipeline simulator (parity w/ backend)
+│           ├── cadence.ts          # stage-age engine · band rule · survival (parity w/ backend)
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
 └── docs/
