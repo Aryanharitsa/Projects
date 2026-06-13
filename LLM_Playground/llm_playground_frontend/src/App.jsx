@@ -63,6 +63,7 @@ import PromptLibrary from './components/PromptLibrary';
 import InsightsPanel from './components/InsightsPanel';
 import EvalSuites from './components/EvalSuites';
 import RubricsStudio from './components/RubricsStudio';
+import OptimizerStudio from './components/OptimizerStudio';
 import './App.css';
 
 const App = () => {
@@ -1069,7 +1070,14 @@ const App = () => {
                       <RadioGroupItem value="rubrics" id="rubrics" />
                       <Label htmlFor="rubrics" className="cursor-pointer flex items-center gap-1">
                         <Scale className="w-3.5 h-3.5 text-violet-600" />
-                        Rubrics <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Rubrics
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="optimizer" id="optimizer" />
+                      <Label htmlFor="optimizer" className="cursor-pointer flex items-center gap-1">
+                        <Wand2 className="w-3.5 h-3.5 text-fuchsia-600" />
+                        Optimizer <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-violet-500 via-fuchsia-500 to-amber-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1336,7 +1344,11 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'rubrics' ? (
+          {selectedMode === 'optimizer' ? (
+            <div className="lg:col-span-3">
+              <OptimizerStudio />
+            </div>
+          ) : selectedMode === 'rubrics' ? (
             <div className="lg:col-span-3">
               <RubricsStudio />
             </div>

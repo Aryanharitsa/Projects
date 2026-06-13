@@ -31,3 +31,7 @@ __MACOSX/
 # AML case store (per-deployment SQLite)
 apps/ai-aml/data/cases.sqlite3
 apps/ai-aml/data/cases.sqlite3-*
+
+# Customer Risk Profile store (per-deployment SQLite)
+apps/ai-aml/data/profiles.sqlite3
+apps/ai-aml/data/profiles.sqlite3-*

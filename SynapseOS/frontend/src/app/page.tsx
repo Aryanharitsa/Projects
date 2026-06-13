@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Atlas } from "@/components/Atlas";
 import { ChatPanel } from "@/components/ChatPanel";
 import { DailyBrief } from "@/components/DailyBrief";
 import { Distill } from "@/components/Distill";
+import { Echo } from "@/components/Echo";
 import { Graph } from "@/components/Graph";
 import { Header } from "@/components/Header";
 import { Inspector } from "@/components/Inspector";
@@ -47,6 +49,9 @@ export default function Page() {
   const [synthClusterId, setSynthClusterId] = useState<number | null>(null);
   const [tensionsOpen, setTensionsOpen] = useState(false);
   const [tensionsCount, setTensionsCount] = useState<number | null>(null);
+  const [echoOpen, setEchoOpen] = useState(false);
+  const [echoCount, setEchoCount] = useState<number | null>(null);
+  const [atlasOpen, setAtlasOpen] = useState(false);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -126,6 +131,28 @@ export default function Page() {
       })
       .catch(() => {
         if (!cancelled) setTensionsCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph]);
+
+  // Same idea for echoes: header badge shows "N duplicate clusters" so
+  // the user knows there's PKM hygiene work waiting without having to
+  // open the modal.
+  useEffect(() => {
+    if (!graph || graph.nodes.length < 2) {
+      setEchoCount(0);
+      return;
+    }
+    let cancelled = false;
+    api
+      .echo({ limit: 20 })
+      .then((r) => {
+        if (!cancelled) setEchoCount(r.cluster_count);
+      })
+      .catch(() => {
+        if (!cancelled) setEchoCount(null);
       });
     return () => {
       cancelled = true;
@@ -245,6 +272,9 @@ export default function Page() {
         onOpenDistill={() => setDistillOpen(true)}
         onOpenTensions={() => setTensionsOpen(true)}
         tensionsBadge={tensionsCount ?? undefined}
+        onOpenEcho={() => setEchoOpen(true)}
+        echoBadge={echoCount ?? undefined}
+        onOpenAtlas={() => setAtlasOpen(true)}
       />
 
       <DailyBrief
@@ -312,6 +342,29 @@ export default function Page() {
           setIsolated(null);
         }}
         onReconcile={(draft) => setComposerDraft(draft)}
+      />
+
+      <Echo
+        open={echoOpen}
+        onClose={() => setEchoOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onMutated={() => {
+          refreshGraph();
+        }}
+      />
+
+      <Atlas
+        open={atlasOpen}
+        onClose={() => setAtlasOpen(false)}
+        onIsolateCluster={(id) => setIsolated(id)}
+        onSynthesizeCluster={(id) => {
+          setAtlasOpen(false);
+          setSynthClusterId(id);
+        }}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
