@@ -19,6 +19,7 @@ from src import insights as insights_lib
 from src import evals as evals_lib
 from src import rubrics as rubrics_lib
 from src import optimizer as optimizer_lib
+from src import adversary as adversary_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1424,6 +1425,109 @@ def optimize_promote(opt_id, variant_id):
     if opt is None:
         return jsonify({'success': False, 'error': 'optimization or variant not found'}), 404
     return jsonify({'success': True, 'optimization': opt})
+
+
+# ---------------------------------------------------------------------------
+# Adversary Lab — prompt robustness tester. Day-53.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/adversary/perturbations', methods=['GET'])
+def adversary_perturbations():
+    return jsonify({'success': True, 'perturbations': adversary_lib.perturbation_catalog()})
+
+
+@llm_bp.route('/adversary/preview', methods=['POST'])
+def adversary_preview():
+    """Dry-render every perturbation against a base prompt + optional sample
+    input. Drives the Setup-tab live preview without persisting anything."""
+    data = request.get_json() or {}
+    base_prompt = (data.get('base_prompt') or '').strip()
+    if not base_prompt:
+        return jsonify({'success': False, 'error': 'base_prompt is required'}), 400
+    sample_input = (data.get('sample_input') or '').strip()
+    kinds = data.get('kinds') if isinstance(data.get('kinds'), list) else None
+    out = adversary_lib.preview_perturbations(base_prompt, sample_input, kinds)
+    return jsonify({'success': True, 'previews': out})
+
+
+@llm_bp.route('/adversary', methods=['GET'])
+def adversary_list():
+    args = request.args
+    rows, total = adversary_lib.list_audits(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'audits': rows, 'total': total})
+
+
+@llm_bp.route('/adversary', methods=['POST'])
+def adversary_create():
+    data = request.get_json() or {}
+    try:
+        audit = adversary_lib.create_audit(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            base_prompt=(data.get('base_prompt') or '').strip(),
+            rubric_id=(data.get('rubric_id') or '').strip(),
+            rubric_revision=data.get('rubric_revision'),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            test_cases=data.get('test_cases') or [],
+            perturbations=data.get('perturbations'),
+            dryrun=bool(data.get('dryrun', False)),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'audit': audit}), 201
+
+
+@llm_bp.route('/adversary/seed', methods=['POST'])
+def adversary_seed():
+    audit = adversary_lib.seed_demo()
+    return jsonify({'success': True, 'audit': audit}), 201
+
+
+@llm_bp.route('/adversary/stats', methods=['GET'])
+def adversary_stats():
+    return jsonify({'success': True, 'stats': adversary_lib.stats()})
+
+
+@llm_bp.route('/adversary/<audit_id>', methods=['GET'])
+def adversary_get(audit_id):
+    audit = adversary_lib.get_audit(audit_id)
+    if not audit:
+        return jsonify({'success': False, 'error': 'audit not found'}), 404
+    return jsonify({'success': True, 'audit': audit})
+
+
+@llm_bp.route('/adversary/<audit_id>', methods=['DELETE'])
+def adversary_delete(audit_id):
+    if not adversary_lib.delete_audit(audit_id):
+        return jsonify({'success': False, 'error': 'audit not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/adversary/<audit_id>/run', methods=['POST'])
+def adversary_run(audit_id):
+    """Run the audit — clean baseline + every selected perturbation.
+
+    For live mode requires ``{confirm_live: true}`` so we don't accidentally
+    spend money. Dry-run mode runs instantly and needs no keys."""
+    data = request.get_json() or {}
+    try:
+        payload, status = adversary_lib.run_audit(
+            audit_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
 
 
 @llm_bp.route('/insights', methods=['GET'])
