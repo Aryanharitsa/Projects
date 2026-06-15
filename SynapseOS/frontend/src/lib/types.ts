@@ -390,3 +390,193 @@ export type NoteDraft = {
   body: string;
   tags: string[];
 };
+
+// ----------------------------------------------------------------- echo
+
+export type EchoMember = {
+  note_id: number;
+  title: string;
+  body: string;
+  tags: string[];
+  created_at: string;
+  body_len: number;
+  is_canonical: boolean;
+  centrality: number;
+};
+
+export type EchoPair = {
+  a_id: number;
+  b_id: number;
+  cosine: number;
+};
+
+export type EchoSentence = {
+  text: string;
+  note_ids: number[];
+  is_duplicate: boolean;
+  is_canonical_source: boolean;
+};
+
+export type EchoCluster = {
+  cluster_id: string;
+  size: number;
+  redundancy: number;
+  peak_cosine: number;
+  wasted_chars: number;
+  chars_total: number;
+  chars_unique: number;
+  canonical_id: number;
+  members: EchoMember[];
+  pairs: EchoPair[];
+  merged_title: string;
+  merged_body: string;
+  merged_tags: string[];
+  sentences: EchoSentence[];
+  overlap_ratio: number;
+};
+
+export type EchoReport = {
+  threshold: number;
+  total_notes: number;
+  candidate_pairs: number;
+  cluster_count: number;
+  skipped_pair_count: number;
+  clusters: EchoCluster[];
+  stats: {
+    notes?: number;
+    pairs_above_threshold?: number;
+    clusters?: number;
+    wasted_chars_total?: number;
+    biggest_redundancy?: number;
+  };
+};
+
+export type EchoMergeResult = {
+  merged_note_id: number;
+  merged_title: string;
+  deleted_ids: number[];
+  wasted_chars_recovered: number;
+  final_synapses: number;
+};
+
+export type EchoSkipEntry = {
+  a_id: number;
+  b_id: number;
+  reason: string;
+  created_at: string;
+};
+
+// ----------------------------------------------------------------- atlas
+
+export type AtlasQuadrant = "stronghold" | "frontier" | "vault" | "drift";
+
+export type AtlasRecommendationKind =
+  | "synthesize"
+  | "split"
+  | "revisit"
+  | "dissolve"
+  | "bridge";
+
+export type AtlasCluster = {
+  id: number;
+  name: string;
+  color: string;
+  size: number;
+  terms: string[];
+  cohesion: number;
+  internal_density: number;
+  activity: number;
+  growth_velocity: number;
+  last_touched_days: number | null;
+  newest_age_days: number;
+  mean_age_days: number;
+  bridge_count: number;
+  has_synapses: boolean;
+  quadrant: AtlasQuadrant;
+};
+
+export type AtlasRecommendation = {
+  cluster_id: number;
+  cluster_name: string;
+  cluster_color: string;
+  kind: AtlasRecommendationKind;
+  priority: number;
+  headline: string;
+  detail: string;
+};
+
+export type AtlasReport = {
+  window_days: number;
+  generated_at: string;
+  total_notes: number;
+  total_clusters: number;
+  clusters: AtlasCluster[];
+  recommendations: AtlasRecommendation[];
+  summary: {
+    stronghold_count?: number;
+    frontier_count?: number;
+    vault_count?: number;
+    drift_count?: number;
+    mean_cohesion?: number;
+    growth_velocity?: number;
+    bridge_potential?: number;
+  };
+};
+
+// ------------------------------------------------------------- chronicle
+
+export type ChronicleCategory = "calm" | "shifting" | "pivoting";
+
+export type ChronicleChapter = {
+  index: number;
+  date_start: string;
+  date_end: string;
+  span_days: number;
+  count: number;
+  terms: string[];
+  anchor_id: number;
+  anchor_title: string;
+  anchor_sentence: string;
+  member_ids: number[];
+  drift_in: number;
+};
+
+export type ChronicleCluster = {
+  cluster_id: number;
+  name: string;
+  color: string;
+  size: number;
+  chapter_count: number;
+  total_drift: number;
+  peak_drift: number;
+  pivot_index: number | null;
+  stability: number;
+  category: ChronicleCategory;
+  span_days: number;
+  cadence_days: number;
+  emerged_terms: string[];
+  faded_terms: string[];
+  headline: string;
+  chapters: ChronicleChapter[];
+};
+
+export type ChronicleReport = {
+  generated_at: string;
+  total_notes: number;
+  total_clusters: number;
+  eligible_clusters: number;
+  target_chapters: number;
+  min_cluster_notes: number;
+  min_span_days: number;
+  clusters: ChronicleCluster[];
+  summary: {
+    calm_count?: number;
+    shifting_count?: number;
+    pivoting_count?: number;
+    mean_drift?: number;
+    total_chapters?: number;
+    pivots_detected?: number;
+    most_pivoting?: string;
+    most_stable?: string;
+  };
+};

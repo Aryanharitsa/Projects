@@ -54,6 +54,7 @@ import {
   Gauge,
   FlaskConical,
   Scale,
+  Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -63,6 +64,8 @@ import PromptLibrary from './components/PromptLibrary';
 import InsightsPanel from './components/InsightsPanel';
 import EvalSuites from './components/EvalSuites';
 import RubricsStudio from './components/RubricsStudio';
+import OptimizerStudio from './components/OptimizerStudio';
+import AdversaryLab from './components/AdversaryLab';
 import './App.css';
 
 const App = () => {
@@ -1069,7 +1072,21 @@ const App = () => {
                       <RadioGroupItem value="rubrics" id="rubrics" />
                       <Label htmlFor="rubrics" className="cursor-pointer flex items-center gap-1">
                         <Scale className="w-3.5 h-3.5 text-violet-600" />
-                        Rubrics <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Rubrics
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="optimizer" id="optimizer" />
+                      <Label htmlFor="optimizer" className="cursor-pointer flex items-center gap-1">
+                        <Wand2 className="w-3.5 h-3.5 text-fuchsia-600" />
+                        Optimizer
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="adversary" id="adversary" />
+                      <Label htmlFor="adversary" className="cursor-pointer flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5 text-emerald-600" />
+                        Adversary <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-cyan-500 to-rose-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1336,7 +1353,15 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'rubrics' ? (
+          {selectedMode === 'adversary' ? (
+            <div className="lg:col-span-3">
+              <AdversaryLab />
+            </div>
+          ) : selectedMode === 'optimizer' ? (
+            <div className="lg:col-span-3">
+              <OptimizerStudio />
+            </div>
+          ) : selectedMode === 'rubrics' ? (
             <div className="lg:col-span-3">
               <RubricsStudio />
             </div>
