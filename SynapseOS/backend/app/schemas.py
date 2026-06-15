@@ -556,3 +556,51 @@ class AtlasReportOut(BaseModel):
     clusters: list[AtlasClusterOut]
     recommendations: list[AtlasRecommendationOut]
     summary: dict
+
+
+# ------------------------------------------------------------- chronicle
+
+
+class ChronicleChapterOut(BaseModel):
+    index: int
+    date_start: str
+    date_end: str
+    span_days: int
+    count: int
+    terms: list[str]
+    anchor_id: int
+    anchor_title: str
+    anchor_sentence: str
+    member_ids: list[int]
+    drift_in: float
+
+
+class ChronicleClusterOut(BaseModel):
+    cluster_id: int
+    name: str
+    color: str
+    size: int
+    chapter_count: int
+    total_drift: float
+    peak_drift: float
+    pivot_index: int | None = None
+    stability: float
+    category: Literal["calm", "shifting", "pivoting"]
+    span_days: int
+    cadence_days: float
+    emerged_terms: list[str]
+    faded_terms: list[str]
+    headline: str
+    chapters: list[ChronicleChapterOut]
+
+
+class ChronicleReportOut(BaseModel):
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    eligible_clusters: int
+    target_chapters: int
+    min_cluster_notes: int
+    min_span_days: float
+    clusters: list[ChronicleClusterOut]
+    summary: dict

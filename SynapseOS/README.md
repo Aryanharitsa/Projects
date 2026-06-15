@@ -87,6 +87,31 @@ threshold live, and watch your topical clusters discover themselves.
   W*". Click a bubble to inspect a cluster; click ✦ to jump straight into
   Synthesis; click ⊙ to isolate it on the canvas. Pure stdlib,
   deterministic, exportable to portable Markdown.
+- **Chronicle — watch your topics evolve.**
+  Every other surface in SynapseOS is a snapshot of *right now*. Chronicle
+  is the only one that asks *how has your thinking on this topic changed
+  over time?* For every eligible cluster (≥ 4 notes, non-zero time span),
+  it sorts members chronologically and carves them into **equal-time
+  chapters** (3–6 by default, configurable; thin chapters are merged
+  hierarchically into their smaller neighbor so the chapter count is
+  adaptive to your actual writing cadence). Per chapter you get the
+  **date range**, an **anchor note** (highest cosine to chapter centroid)
+  + its first sentence, and a chapter-aware **TF-IDF** ranking that names
+  each chapter by its own distinctive voice without being drowned by the
+  cluster-wide vocabulary. Inter-chapter **drift velocity** = `1 −
+  cosine(centroid_i, centroid_{i+1})` — angular distance in embedding
+  space; the **pivot** is the inter-chapter gap with the largest velocity
+  (the inflection moment). Cluster-level **total drift** = start-to-end
+  cosine distance; categorizes as **calm** (< 0.10), **shifting**
+  (0.10–0.25), or **pivoting** (≥ 0.25). The vocabulary delta panel
+  surfaces **emerged** terms (top in the last chapter that were rare or
+  absent at the start) and **faded** terms (the inverse) so the prose
+  movement is explicit, not vibes. A horizontal **drift bar** per cluster
+  reads the shape at a glance — chapter widths proportional to note count,
+  pivot chapter highlighted. One-click jumps into **Synthesis** (read the
+  whole cluster) or canvas isolation (see just this cluster's nodes), and
+  any anchor opens its source note. Pure stdlib, deterministic, exportable
+  to portable Markdown. Header badge counts pivoting clusters.
 - **Echoes — collapse the duplicates your second brain quietly accrued.**
   Every other SynapseOS surface treats similarity as a virtue. Echoes
   flips the sign. Pairs above a tunable cosine `τ` (default 0.72) form
@@ -177,7 +202,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas modals │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas · Chronicle modals │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -743,6 +768,11 @@ Incremental moves for future rotation days:
       activity quadrant chart (Strongholds · Frontiers · Vaults · Drift),
       per-cluster metrics, prioritized recommendations, portable Markdown
       export *(shipped)*
+- [x] **Chronicle** — temporal narrative of how each cluster evolved:
+      equal-time chapters with within-cluster TF-IDF chapter names,
+      per-chapter anchor + sentence, inter-chapter drift velocity, pivot
+      detection, emerged/faded vocabulary deltas, calm/shifting/pivoting
+      categorization, portable Markdown export *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

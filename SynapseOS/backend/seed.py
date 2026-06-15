@@ -184,13 +184,78 @@ SEED: list[tuple[str, str, list[str]]] = [
 ]
 
 
+# --- Synthetic staggered timestamps so the Chronicle surface has a real
+# story to tell on first run. Each note is placed on a deterministic
+# offset (days before "today" at seed time) — clusters share a temporal
+# arc (early/middle/late), and a couple of notes are deliberately moved
+# late so the Chronicle clearly shows vocabulary that emerged later.
+# Offset = days before now; lower numbers = more recent.
+_TIMELINE_OFFSETS: dict[str, int] = {
+    # ML / infra: ramp up across the window, with the late notes leaning
+    # on RAG / chunking — "the framing visibly changed" pivots.
+    "Embeddings as memory": 92,
+    "Hashing trick for features": 88,
+    "Vector databases are just indexes": 71,
+    "Retrieval-augmented generation": 24,
+    "Chunking strategies": 12,
+    # Product / PKM: early on "second inbox", middle "atomic notes",
+    # late "graph view as a UI".
+    "Second brain, not second inbox": 84,
+    "Zettelkasten in one sentence": 73,
+    "Against the folder": 59,
+    "Spaced repetition for ideas": 31,
+    "Graph view as a UI, not a toy": 9,
+    # Engineering craft: spread evenly.
+    "Boring technology wins": 80,
+    "The test pyramid is overrated": 64,
+    "SQLite is underrated": 45,
+    "Force-directed layouts": 18,
+    # Bridges + tensions written later as the project matured.
+    "Why this app exists": 39,
+    "Design debt compounds faster than tech debt": 21,
+    "Unit tests are underrated": 17,
+    "Why folders work": 28,
+    # Echoes deliberately written close to (but distinct from) their
+    # originals so Echo + Chronicle disagree usefully.
+    "Cosine similarity is the substrate": 6,
+    "SQLite is enough": 14,
+    "Atomic notes, one idea each": 4,
+}
+
+
+def _stagger_created_at() -> None:
+    """Backdate each note's ``created_at`` per ``_TIMELINE_OFFSETS``.
+
+    The bulk insert stamps everything with the same "now"; we rewrite
+    each row's timestamp to a synthetic offset so Chronicle has a real
+    temporal arc to chronicle. Notes not in the offset map get a stable
+    fallback (60d ago) so the demo never crashes on a new seed entry the
+    author forgot to wire into ``_TIMELINE_OFFSETS``.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from backend.app.store import _conn  # noqa: WPS437 — internal helper, intentional reuse.
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    with _conn() as con:
+        rows = con.execute("SELECT id, title FROM notes").fetchall()
+        for row in rows:
+            offset = _TIMELINE_OFFSETS.get(row["title"], 60)
+            stamp = (now - timedelta(days=offset)).isoformat()
+            con.execute(
+                "UPDATE notes SET created_at = ? WHERE id = ?",
+                (stamp, int(row["id"])),
+            )
+
+
 def main() -> None:
     store.init_db()
     if store.count() > 0:
         print(f"Seed skipped — {store.count()} notes already present.")
         return
     ids = store.bulk_add(SEED)
-    print(f"Seeded {len(ids)} notes.")
+    _stagger_created_at()
+    print(f"Seeded {len(ids)} notes (staggered across a ~90d synthetic window).")
 
 
 if __name__ == "__main__":

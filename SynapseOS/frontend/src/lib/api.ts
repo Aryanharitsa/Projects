@@ -1,6 +1,7 @@
 import type {
   AtlasReport,
   AtomCommit,
+  ChronicleReport,
   AtomizeCommitResponse,
   AtomizeMode,
   AtomizeResponse,
@@ -276,5 +277,41 @@ export const api = {
       q.set("window_days", String(opts.windowDays));
     const qs = q.toString();
     return `${BASE}/atlas/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  chronicle: (opts?: {
+    threshold?: number;
+    topK?: number;
+    maxChapters?: number;
+    minClusterNotes?: number;
+    minSpanDays?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.maxChapters !== undefined)
+      q.set("max_chapters", String(opts.maxChapters));
+    if (opts?.minClusterNotes !== undefined)
+      q.set("min_cluster_notes", String(opts.minClusterNotes));
+    if (opts?.minSpanDays !== undefined)
+      q.set("min_span_days", String(opts.minSpanDays));
+    const qs = q.toString();
+    return j<ChronicleReport>(`/chronicle${qs ? `?${qs}` : ""}`);
+  },
+
+  chronicleExportUrl: (opts?: {
+    maxChapters?: number;
+    minClusterNotes?: number;
+    minSpanDays?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.maxChapters !== undefined)
+      q.set("max_chapters", String(opts.maxChapters));
+    if (opts?.minClusterNotes !== undefined)
+      q.set("min_cluster_notes", String(opts.minClusterNotes));
+    if (opts?.minSpanDays !== undefined)
+      q.set("min_span_days", String(opts.minSpanDays));
+    const qs = q.toString();
+    return `${BASE}/chronicle/export.md${qs ? `?${qs}` : ""}`;
   },
 };

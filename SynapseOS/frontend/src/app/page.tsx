@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Atlas } from "@/components/Atlas";
 import { ChatPanel } from "@/components/ChatPanel";
+import { Chronicle } from "@/components/Chronicle";
 import { DailyBrief } from "@/components/DailyBrief";
 import { Distill } from "@/components/Distill";
 import { Echo } from "@/components/Echo";
@@ -52,6 +53,8 @@ export default function Page() {
   const [echoOpen, setEchoOpen] = useState(false);
   const [echoCount, setEchoCount] = useState<number | null>(null);
   const [atlasOpen, setAtlasOpen] = useState(false);
+  const [chronicleOpen, setChronicleOpen] = useState(false);
+  const [chronicleCount, setChronicleCount] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -153,6 +156,29 @@ export default function Page() {
       })
       .catch(() => {
         if (!cancelled) setEchoCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph]);
+
+  // Chronicle badge — count of pivoting clusters (the ones with a real
+  // story to tell). Cheap probe; the full modal lazy-loads its own data
+  // when opened.
+  useEffect(() => {
+    if (!graph || graph.nodes.length < 2) {
+      setChronicleCount(0);
+      return;
+    }
+    let cancelled = false;
+    api
+      .chronicle()
+      .then((r) => {
+        if (!cancelled)
+          setChronicleCount(r.summary.pivoting_count ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setChronicleCount(null);
       });
     return () => {
       cancelled = true;
@@ -275,6 +301,8 @@ export default function Page() {
         onOpenEcho={() => setEchoOpen(true)}
         echoBadge={echoCount ?? undefined}
         onOpenAtlas={() => setAtlasOpen(true)}
+        onOpenChronicle={() => setChronicleOpen(true)}
+        chronicleBadge={chronicleCount ?? undefined}
       />
 
       <DailyBrief
@@ -365,6 +393,21 @@ export default function Page() {
           setAtlasOpen(false);
           setSynthClusterId(id);
         }}
+      />
+
+      <Chronicle
+        open={chronicleOpen}
+        onClose={() => setChronicleOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onSynthesizeCluster={(id) => {
+          setChronicleOpen(false);
+          setSynthClusterId(id);
+        }}
+        onIsolateCluster={(id) => setIsolated(id)}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">

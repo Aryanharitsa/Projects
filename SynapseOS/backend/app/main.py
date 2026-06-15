@@ -30,6 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import atlas as atlas_engine
 from . import atomize as atomize_engine
 from . import chat as chat_engine
+from . import chronicle as chronicle_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
@@ -928,4 +929,64 @@ def atlas_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="atlas.md"'},
+    )
+
+
+# ------------------------------------------------------------- chronicle
+
+
+@app.get("/chronicle", response_model=schemas.ChronicleReportOut)
+def chronicle(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    max_chapters: int = Query(chronicle_engine.DEFAULT_MAX_CHAPTERS, ge=2, le=8),
+    min_cluster_notes: int = Query(
+        chronicle_engine.DEFAULT_MIN_CLUSTER_NOTES, ge=2, le=20
+    ),
+    min_span_days: float = Query(
+        chronicle_engine.DEFAULT_MIN_SPAN_DAYS, ge=0.0, le=365.0
+    ),
+) -> dict:
+    """Temporal narrative of every eligible cluster.
+
+    Each cluster is sliced into equal-duration chapters; we report the
+    drift velocity between consecutive chapters, the pivot moment, the
+    vocabulary that emerged or faded, an anchor note per chapter, and the
+    overall stability category (``calm`` / ``shifting`` / ``pivoting``).
+    """
+    r = chronicle_engine.compute_chronicle(
+        threshold=threshold,
+        top_k=top_k,
+        max_chapters=max_chapters,
+        min_cluster_notes=min_cluster_notes,
+        min_span_days=min_span_days,
+    )
+    return chronicle_engine.serialize(r)
+
+
+@app.get("/chronicle/export.md")
+def chronicle_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    max_chapters: int = Query(chronicle_engine.DEFAULT_MAX_CHAPTERS, ge=2, le=8),
+    min_cluster_notes: int = Query(
+        chronicle_engine.DEFAULT_MIN_CLUSTER_NOTES, ge=2, le=20
+    ),
+    min_span_days: float = Query(
+        chronicle_engine.DEFAULT_MIN_SPAN_DAYS, ge=0.0, le=365.0
+    ),
+) -> Response:
+    """Portable Markdown chronicle — one section per cluster, paste-anywhere."""
+    r = chronicle_engine.compute_chronicle(
+        threshold=threshold,
+        top_k=top_k,
+        max_chapters=max_chapters,
+        min_cluster_notes=min_cluster_notes,
+        min_span_days=min_span_days,
+    )
+    md = chronicle_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="chronicle.md"'},
     )

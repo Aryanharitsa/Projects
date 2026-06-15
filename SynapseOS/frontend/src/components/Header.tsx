@@ -15,6 +15,8 @@ type Props = {
   onOpenEcho?: () => void;
   echoBadge?: number;
   onOpenAtlas?: () => void;
+  onOpenChronicle?: () => void;
+  chronicleBadge?: number;
 };
 
 export function Header({
@@ -30,6 +32,8 @@ export function Header({
   onOpenEcho,
   echoBadge,
   onOpenAtlas,
+  onOpenChronicle,
+  chronicleBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -130,6 +134,22 @@ export function Header({
             >
               <span aria-hidden>⌖</span>
               atlas
+            </button>
+          )}
+          {onOpenChronicle && (
+            <button
+              onClick={onOpenChronicle}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-pink/20 to-synapse-violet/15 ring-1 ring-synapse-pink/40 hover:ring-synapse-pink/70 px-3 py-1 font-mono text-[11px] text-synapse-pink hover:text-ink-100 transition"
+              aria-label="open chronicle"
+              title="Watch each topic evolve over time — chapters, drift, pivots, emerged & faded terms"
+            >
+              <span aria-hidden>⟿</span>
+              chronicle
+              {chronicleBadge !== undefined && chronicleBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-pink/30 ring-1 ring-synapse-pink/60 text-[10px] text-ink-100 px-1">
+                  {chronicleBadge > 99 ? "99+" : chronicleBadge}
+                </span>
+              )}
             </button>
           )}
           {onOpenBrief && (

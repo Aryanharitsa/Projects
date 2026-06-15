@@ -522,3 +522,61 @@ export type AtlasReport = {
     bridge_potential?: number;
   };
 };
+
+// ------------------------------------------------------------- chronicle
+
+export type ChronicleCategory = "calm" | "shifting" | "pivoting";
+
+export type ChronicleChapter = {
+  index: number;
+  date_start: string;
+  date_end: string;
+  span_days: number;
+  count: number;
+  terms: string[];
+  anchor_id: number;
+  anchor_title: string;
+  anchor_sentence: string;
+  member_ids: number[];
+  drift_in: number;
+};
+
+export type ChronicleCluster = {
+  cluster_id: number;
+  name: string;
+  color: string;
+  size: number;
+  chapter_count: number;
+  total_drift: number;
+  peak_drift: number;
+  pivot_index: number | null;
+  stability: number;
+  category: ChronicleCategory;
+  span_days: number;
+  cadence_days: number;
+  emerged_terms: string[];
+  faded_terms: string[];
+  headline: string;
+  chapters: ChronicleChapter[];
+};
+
+export type ChronicleReport = {
+  generated_at: string;
+  total_notes: number;
+  total_clusters: number;
+  eligible_clusters: number;
+  target_chapters: number;
+  min_cluster_notes: number;
+  min_span_days: number;
+  clusters: ChronicleCluster[];
+  summary: {
+    calm_count?: number;
+    shifting_count?: number;
+    pivoting_count?: number;
+    mean_drift?: number;
+    total_chapters?: number;
+    pivots_detected?: number;
+    most_pivoting?: string;
+    most_stable?: string;
+  };
+};
