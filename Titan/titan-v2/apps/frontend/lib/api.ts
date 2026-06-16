@@ -94,6 +94,7 @@ export type AccountReport = {
   outbound_total: number;
   sanctions_hits: SanctionsHit[];
   typologies?: TypologyMatch[];
+  adverse_media?: AdverseMediaAccountReport | null;
 };
 
 export type WeightOverrides = Partial<Record<
@@ -101,6 +102,7 @@ export type WeightOverrides = Partial<Record<
   | "velocity_spike"
   | "round_trip"
   | "sanctions_hit"
+  | "adverse_media"
   | "fan_in"
   | "fan_out"
   | "high_risk_geo"
@@ -117,6 +119,7 @@ export type ScoreResponse = {
     total_accounts: number;
     alerted: number;
     sanctions_alerted?: number;
+    media_alerted?: number;
     highest_score: number;
     average_score: number;
   };
@@ -1097,6 +1100,668 @@ export async function runCaseNetworkClearing(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+// ---------------------------------------------------------------------------
+// Adverse-media OSINT (round-9, day-45)
+// ---------------------------------------------------------------------------
+
+export type MediaGrade = "clear" | "elevated" | "material" | "severe";
+
+export type MediaCategory = {
+  key: string;
+  label: string;
+  severity: number;
+  accent: string;
+};
+
+export type MediaTier = {
+  tier: number;
+  label: string;
+  weight: number;
+};
+
+export type MediaCorpus = {
+  version: string;
+  source?: string;
+  note?: string;
+  issued?: string;
+  size: number;
+  by_category: Record<string, number>;
+  by_tier: Record<string, number>;
+  by_year: Record<string, number>;
+  categories: MediaCategory[];
+  tiers: MediaTier[];
+  weights: {
+    token_set: number;
+    ngram: number;
+    contain: number;
+    ngram_n: number;
+  };
+  tuning: {
+    similarity_floor: number;
+    half_life_days: number;
+    top_k: number;
+    composite_k: number;
+  };
+  grades: { min: number; label: MediaGrade }[];
+};
+
+export type MediaArticleSummary = {
+  id: string;
+  headline: string;
+  snippet: string;
+  url: string;
+  source: string;
+  source_tier: number;
+  published: string;
+  category: string;
+  entities_mentioned: string[];
+};
+
+export type MediaArticleDetail = MediaArticleSummary & {
+  category_severity: number;
+  source_tier_weight: number;
+  category_accent: string;
+};
+
+export type MediaHit = {
+  article_id: string;
+  headline: string;
+  snippet: string;
+  url: string;
+  source: string;
+  source_tier: number;
+  source_tier_weight: number;
+  published: string;
+  category: string;
+  category_severity: number;
+  category_accent: string;
+  matched_mention: string;
+  similarity: number;
+  components: {
+    token_set: number;
+    ngram: number;
+    contain: number;
+    blended: number;
+  };
+  recency_decay: number;
+  age_days: number | null;
+  hit_strength: number;
+};
+
+export type MediaCategoryRollup = {
+  category: string;
+  label: string;
+  accent: string;
+  severity: number;
+  count: number;
+  strength: number;
+};
+
+export type MediaRecencyBucket = {
+  count: number;
+  strength: number;
+};
+
+export type MediaScreenResult = {
+  query: string;
+  normalized: string;
+  jurisdiction?: string | null;
+  similarity_floor: number;
+  half_life_days: number;
+  top_k: number;
+  composite: number;
+  grade: MediaGrade;
+  hit_count: number;
+  raw_strength: number;
+  hits: MediaHit[];
+  top_hits: MediaHit[];
+  categories: MediaCategoryRollup[];
+  recency: Record<"last_30d" | "last_90d" | "last_year" | "older", MediaRecencyBucket>;
+  tiers: Record<string, number>;
+  headline_hit: MediaHit | null;
+};
+
+export type MediaScreenResponse = {
+  ok: boolean;
+  engine: string;
+  corpus: MediaCorpus;
+  queried: number;
+  screened: number;
+  matched: number;
+  by_grade: Record<string, number>;
+  results: MediaScreenResult[];
+};
+
+export type AdverseMediaAccountReport = {
+  composite: number;
+  grade: MediaGrade;
+  hit_count: number;
+  names_screened: number;
+  per_name: {
+    name: string;
+    composite: number;
+    grade: MediaGrade;
+    hit_count: number;
+    headline_hit: MediaHit | null;
+  }[];
+  top_articles: (MediaHit & { queried_name?: string })[];
+};
+
+export async function getMediaRules(): Promise<{
+  ok: boolean;
+  engine: string;
+  corpus: MediaCorpus;
+}> {
+  const r = await fetch(`${API_BASE}/aml/media/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function screenMedia(
+  names: string[],
+  opts: {
+    jurisdiction?: string;
+    similarity_floor?: number;
+    half_life_days?: number;
+    top_k?: number;
+  } = {},
+): Promise<MediaScreenResponse> {
+  const body: any = { names };
+  if (opts.jurisdiction) body.jurisdiction = opts.jurisdiction;
+  if (typeof opts.similarity_floor === "number") body.similarity_floor = opts.similarity_floor;
+  if (typeof opts.half_life_days === "number") body.half_life_days = opts.half_life_days;
+  if (typeof opts.top_k === "number") body.top_k = opts.top_k;
+  const r = await fetch(`${API_BASE}/aml/media/screen`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function listMediaArticles(
+  opts: { category?: string; tier?: number; q?: string; limit?: number } = {},
+): Promise<{
+  ok: boolean;
+  engine: string;
+  count: number;
+  filters: { category: string | null; tier: number | null; q: string | null; limit: number };
+  articles: MediaArticleSummary[];
+}> {
+  const qs = new URLSearchParams();
+  if (opts.category) qs.set("category", opts.category);
+  if (typeof opts.tier === "number") qs.set("tier", String(opts.tier));
+  if (opts.q) qs.set("q", opts.q);
+  if (typeof opts.limit === "number") qs.set("limit", String(opts.limit));
+  const r = await fetch(`${API_BASE}/aml/media/articles?${qs.toString()}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function getMediaArticle(id: string): Promise<{
+  ok: boolean;
+  engine: string;
+  article: MediaArticleDetail;
+}> {
+  const r = await fetch(`${API_BASE}/aml/media/articles/${id}`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+// ---------------------------------------------------------------------------
+// Customer Risk Profile (round-10, day-50)
+// ---------------------------------------------------------------------------
+
+export type ProfileBucket = "low" | "medium" | "high" | "critical";
+export type ProfileRefreshLabel = "current" | "due_soon" | "overdue" | "unscheduled";
+export type ProfileSurfaceKey =
+  | "transaction"
+  | "sanctions"
+  | "media"
+  | "typology"
+  | "drift"
+  | "network";
+
+export type ProfileCustomer = {
+  customer_id: string;
+  display_name?: string;
+  customer_type?: "individual" | "entity";
+  domicile?: string | null;
+  pep?: boolean;
+  products?: string[];
+  accounts?: string[];
+  kyc_anchor?: string | null;
+};
+
+export type ProfileFactor = {
+  key: ProfileSurfaceKey;
+  label: string;
+  accent: string;
+  weight: number;
+  intensity: number;
+  points: number;
+  detail: string;
+  evidence: Record<string, any>;
+};
+
+export type ProfileModifier = {
+  key: "geo" | "pep" | "product" | string;
+  label: string;
+  points: number;
+  detail: string;
+};
+
+export type ProfileRefresh = {
+  label: ProfileRefreshLabel;
+  days_to_due: number | null;
+  tone: "teal" | "amber" | "rose" | "muted";
+};
+
+export type ProfileOverride = {
+  locked_bucket: ProfileBucket;
+  justification: string;
+  actor: string;
+  set_at: string;
+  expires_iso?: string | null;
+};
+
+export type ProfileHistoryEntry = {
+  id: number;
+  composite: number;
+  engine_composite: number;
+  bucket: ProfileBucket;
+  refresh_kind: "refresh" | "override" | "clear_override" | "seed";
+  override: ProfileOverride | null;
+  actor: string | null;
+  note: string | null;
+  refreshed_at: string;
+};
+
+export type Profile = {
+  engine: string;
+  rules_version: string;
+  computed_at: string;
+  customer: ProfileCustomer;
+  composite: number;
+  bucket: ProfileBucket;
+  bucket_accent: string;
+  bucket_blurb: string;
+  recommended_action: string;
+  engine_composite: number;
+  engine_bucket: ProfileBucket;
+  factors: ProfileFactor[];
+  modifiers: ProfileModifier[];
+  modifier_total: number;
+  weights: Record<ProfileSurfaceKey, number>;
+  kyc_anchor: string | null;
+  kyc_due: string | null;
+  refresh: ProfileRefresh;
+  narrative: string;
+  override: ProfileOverride | null;
+  evidence?: Record<string, any>;
+  history?: ProfileHistoryEntry[];
+};
+
+export type ProfileSurfaceMeta = {
+  key: ProfileSurfaceKey;
+  label: string;
+  accent: string;
+  source: string;
+  icon: string;
+  weight: number;
+};
+
+export type ProfileBucketMeta = {
+  accent: string;
+  blurb: string;
+  action: string;
+};
+
+export type ProfileRules = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  weights: Record<ProfileSurfaceKey, number>;
+  surface_order: ProfileSurfaceKey[];
+  surfaces: ProfileSurfaceMeta[];
+  buckets: { label: ProfileBucket; min: number; max: number }[];
+  bucket_meta: Record<ProfileBucket, ProfileBucketMeta>;
+  refresh_days: Record<ProfileBucket, number>;
+  due_soon_days: number;
+  modifiers: {
+    geo_modifier: number;
+    pep_modifier: number;
+    high_risk_product_modifier: number;
+    modifier_cap: number;
+    high_risk_geos: string[];
+    high_risk_products: string[];
+  };
+  typology_severity_multipliers: Record<string, number>;
+};
+
+export type ProfilePortfolioStats = {
+  total: number;
+  by_bucket: Record<ProfileBucket, number>;
+  by_refresh: Record<ProfileRefreshLabel, number>;
+  by_domicile: Record<string, number>;
+  average_composite: number;
+  highest_composite: number;
+  due_within_30d: number;
+  overdue_count: number;
+};
+
+export type ProfilePortfolio = {
+  ok: boolean;
+  engine: string;
+  total: number;
+  count: number;
+  limit: number;
+  offset: number;
+  profiles: Profile[];
+  stats: ProfilePortfolioStats;
+};
+
+export type ProfileSample = {
+  ok: boolean;
+  engine: string;
+  $schema?: string;
+  name: string;
+  version: string;
+  published: string;
+  description: string;
+  customers: { customer: ProfileCustomer; evidence?: Record<string, any> }[];
+};
+
+export async function getProfileRules(): Promise<ProfileRules> {
+  const r = await fetch(`${API_BASE}/aml/profile/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getProfileSample(): Promise<ProfileSample> {
+  const r = await fetch(`${API_BASE}/aml/profile/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function seedProfiles(force = false): Promise<{
+  ok: boolean;
+  created: number;
+  refreshed: number;
+  skipped: number;
+  total_in_sample: number;
+}> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/seed?force=${force}`,
+    { method: "POST", cache: "no-store" },
+  );
+  return jsonOrThrow(r);
+}
+
+export async function getProfile(customer_id: string): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(`${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function listProfiles(
+  opts: {
+    bucket?: ProfileBucket;
+    refresh_label?: ProfileRefreshLabel;
+    domicile?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<ProfilePortfolio> {
+  const qs = new URLSearchParams();
+  if (opts.bucket) qs.set("bucket", opts.bucket);
+  if (opts.refresh_label) qs.set("refresh_label", opts.refresh_label);
+  if (opts.domicile) qs.set("domicile", opts.domicile);
+  if (opts.q) qs.set("q", opts.q);
+  if (typeof opts.limit === "number") qs.set("limit", String(opts.limit));
+  if (typeof opts.offset === "number") qs.set("offset", String(opts.offset));
+  const r = await fetch(`${API_BASE}/aml/profile/portfolio?${qs.toString()}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function computeProfile(
+  customer: ProfileCustomer,
+  evidence?: Record<string, any>,
+  opts: { transactions?: Tx[]; weights?: Partial<Record<ProfileSurfaceKey, number>> } = {},
+): Promise<Profile & { ok: boolean }> {
+  const body: Record<string, any> = { customer };
+  if (evidence) body.evidence = evidence;
+  if (opts.transactions) body.transactions = opts.transactions;
+  if (opts.weights) body.weights = opts.weights;
+  const r = await fetch(`${API_BASE}/aml/profile/compute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function refreshProfile(
+  customer: ProfileCustomer,
+  evidence?: Record<string, any>,
+  opts: {
+    transactions?: Tx[];
+    weights?: Partial<Record<ProfileSurfaceKey, number>>;
+    refreshed_by?: string;
+    note?: string;
+  } = {},
+): Promise<{ ok: boolean; profile: Profile }> {
+  const body: Record<string, any> = { customer };
+  if (evidence) body.evidence = evidence;
+  if (opts.transactions) body.transactions = opts.transactions;
+  if (opts.weights) body.weights = opts.weights;
+  if (opts.refreshed_by) body.refreshed_by = opts.refreshed_by;
+  if (opts.note) body.note = opts.note;
+  const r = await fetch(`${API_BASE}/aml/profile/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function setProfileOverride(
+  customer_id: string,
+  body: { locked_bucket: ProfileBucket; justification: string; actor?: string; expires_iso?: string },
+): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}/override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow(r);
+}
+
+export async function clearProfileOverride(
+  customer_id: string,
+  body: { actor?: string; note?: string } = {},
+): Promise<{ ok: boolean; profile: Profile }> {
+  const r = await fetch(
+    `${API_BASE}/aml/profile/${encodeURIComponent(customer_id)}/clear_override`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow(r);
+}
+
+// ---------------------------------------------------------------------------
+// Peer Lens (round-12, day-55)
+// ---------------------------------------------------------------------------
+
+export type PeerBucket = "aligned" | "drifting" | "outlier" | "severe";
+export type PeerCohortLevel = "full" | "medium" | "loose" | "global";
+export type PeerDirection = "high" | "both";
+
+export type PeerMetricMeta = {
+  key: string;
+  label: string;
+  unit: "USD" | "%" | "txs" | "cps";
+  accent: string;
+  direction: PeerDirection;
+};
+
+export type PeerBucketMeta = {
+  accent: string;
+  blurb: string;
+  action: string;
+};
+
+export type PeerRules = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  lookback_days: number;
+  min_cohort_size: number;
+  size_bands: string[];
+  size_band_partition: string;
+  night_hours: { start: number; end: number };
+  metrics: PeerMetricMeta[];
+  buckets: { min: number; label: PeerBucket }[];
+  bucket_meta: Record<PeerBucket, PeerBucketMeta>;
+  scoring: {
+    per_max_z: number;
+    per_extreme: number;
+    extreme_z_floor: number;
+    max_score: number;
+    mad_k: number;
+    robust_first: string;
+  };
+  fallback_chain: string[];
+};
+
+export type PeerCustomerIn = {
+  customer_id: string;
+  display_name?: string;
+  industry?: string;
+  domicile?: string;
+  accounts?: string[];
+};
+
+export type PeerSample = {
+  ok: boolean;
+  engine: string;
+  $schema?: string;
+  name: string;
+  version: string;
+  published: string;
+  description: string;
+  customers: PeerCustomerIn[];
+  transactions: Tx[];
+};
+
+export type PeerMetricEval = {
+  key: string;
+  label: string;
+  accent: string;
+  unit: "USD" | "%" | "txs" | "cps";
+  value: number;
+  cohort_median: number;
+  cohort_mad: number;
+  cohort_p25: number;
+  cohort_p75: number;
+  cohort_min: number;
+  cohort_max: number;
+  z: number;
+  abs_z: number;
+  gated_z: number;
+  direction: PeerDirection;
+  basis: "mad" | "std" | "flat";
+  extreme: boolean;
+};
+
+export type PeerCustomerReport = {
+  customer_id: string;
+  display_name: string;
+  industry: string;
+  domicile: string;
+  size_band: string;
+  cohort_id: string;
+  cohort_level: PeerCohortLevel;
+  cohort_size: number;
+  outlier_score: number;
+  bucket: PeerBucket;
+  bucket_accent: string;
+  bucket_blurb: string;
+  recommended_action: string;
+  max_gated_z: number;
+  extreme_count: number;
+  metrics: PeerMetricEval[];
+  top_drivers: PeerMetricEval[];
+  headline: string;
+};
+
+export type PeerCohort = {
+  cohort_id: string;
+  level: PeerCohortLevel;
+  industry: string | null;
+  domicile: string | null;
+  size_band: string | null;
+  size: number;
+  member_ids: string[];
+  per_metric: Record<string, {
+    n: number; median: number; mad: number; mean: number; std: number;
+    min: number; max: number; p25: number; p75: number;
+  }>;
+};
+
+export type PeerPortfolio = {
+  customers: number;
+  cohorts: number;
+  outliers: number;
+  severe: number;
+  drifting: number;
+  aligned: number;
+  average_score: number;
+  by_cohort_level: Record<PeerCohortLevel, number>;
+  size_band_cuts: number[];
+};
+
+export type PeerAnalyzeResponse = {
+  ok: boolean;
+  engine: string;
+  rules_version: string;
+  lookback_days: number;
+  min_cohort_size: number;
+  portfolio: PeerPortfolio;
+  cohorts: PeerCohort[];
+  customers: PeerCustomerReport[];
+  by_bucket: Record<PeerBucket, number>;
+};
+
+export async function getPeerRules(): Promise<PeerRules> {
+  const r = await fetch(`${API_BASE}/aml/peer/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getPeerSample(): Promise<PeerSample> {
+  const r = await fetch(`${API_BASE}/aml/peer/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function analyzePeers(
+  customers: PeerCustomerIn[],
+  transactions: Tx[],
+): Promise<PeerAnalyzeResponse> {
+  const r = await fetch(`${API_BASE}/aml/peer/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customers, transactions }),
   });
   return jsonOrThrow(r);
 }

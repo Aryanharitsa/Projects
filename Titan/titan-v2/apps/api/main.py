@@ -263,6 +263,55 @@ async def aml_sanctions_list(limit: int = 50) -> Dict[str, Any]:
         return r.json()
 
 
+# ----- Adverse-media OSINT pass-through (round-9, day-45)
+
+
+@app.get("/aml/media/rules")
+async def aml_media_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/media/screen")
+async def aml_media_screen(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(f"{AML_SVC}/aml/media/screen", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/media/articles")
+async def aml_media_articles(
+    category: Optional[str] = None,
+    tier: Optional[int] = None,
+    q: Optional[str] = None,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"limit": limit}
+    if category:
+        params["category"] = category
+    if tier is not None:
+        params["tier"] = tier
+    if q:
+        params["q"] = q
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/articles", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/media/articles/{article_id}")
+async def aml_media_article(article_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/media/articles/{article_id}")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
 # ----- Typology library pass-through (round-6, day-30)
 
 
@@ -326,6 +375,111 @@ async def aml_drift_sample() -> Dict[str, Any]:
 async def aml_drift(payload: Dict[str, Any]) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{AML_SVC}/aml/drift", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+# ----- Customer Risk Profile pass-through (round-10, day-50)
+
+
+@app.get("/aml/profile/rules")
+async def aml_profile_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/profile/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/profile/sample")
+async def aml_profile_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/profile/sample")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/profile/seed")
+async def aml_profile_seed(force: bool = False) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/profile/seed", params={"force": force})
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/profile/compute")
+async def aml_profile_compute(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/profile/compute", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/profile/refresh")
+async def aml_profile_refresh(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/profile/refresh", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/profile/portfolio")
+async def aml_profile_portfolio(
+    bucket: Optional[str] = None,
+    refresh_label: Optional[str] = None,
+    domicile: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"limit": limit, "offset": offset}
+    if bucket:
+        params["bucket"] = bucket
+    if refresh_label:
+        params["refresh_label"] = refresh_label
+    if domicile:
+        params["domicile"] = domicile
+    if q:
+        params["q"] = q
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/profile/portfolio", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/profile/{customer_id}")
+async def aml_profile_get(customer_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/profile/{customer_id}")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/profile/{customer_id}/override")
+async def aml_profile_override(customer_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/profile/{customer_id}/override", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.post("/aml/profile/{customer_id}/clear_override")
+async def aml_profile_clear_override(customer_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(f"{AML_SVC}/aml/profile/{customer_id}/clear_override", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.delete("/aml/profile/{customer_id}")
+async def aml_profile_delete(customer_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.delete(f"{AML_SVC}/aml/profile/{customer_id}")
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()
@@ -509,6 +663,34 @@ async def aml_cases_network_clearing(case_id: str, payload: Dict[str, Any]) -> D
             f"{AML_SVC}/aml/cases/{case_id}/network/clearing",
             json=payload,
         )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+# ----- Peer Lens pass-through (round-12, day-55)
+
+
+@app.get("/aml/peer/rules")
+async def aml_peer_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/peer/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/peer/sample")
+async def aml_peer_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/peer/sample")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/peer/analyze")
+async def aml_peer_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(f"{AML_SVC}/aml/peer/analyze", json=payload)
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()

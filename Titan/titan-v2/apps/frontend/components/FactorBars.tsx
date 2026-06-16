@@ -5,6 +5,7 @@ const PRETTY: Record<string, string> = {
   velocity_spike: "Velocity Spike",
   round_trip: "Round-Trip Cycle",
   sanctions_hit: "Sanctions Hit",
+  adverse_media: "Adverse Media",
   fan_in: "Fan-in",
   fan_out: "Fan-out",
   high_risk_geo: "High-Risk Geo",

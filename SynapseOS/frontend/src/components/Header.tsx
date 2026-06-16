@@ -12,6 +12,11 @@ type Props = {
   onOpenDistill?: () => void;
   onOpenTensions?: () => void;
   tensionsBadge?: number;
+  onOpenEcho?: () => void;
+  echoBadge?: number;
+  onOpenAtlas?: () => void;
+  onOpenChronicle?: () => void;
+  chronicleBadge?: number;
 };
 
 export function Header({
@@ -24,6 +29,11 @@ export function Header({
   onOpenDistill,
   onOpenTensions,
   tensionsBadge,
+  onOpenEcho,
+  echoBadge,
+  onOpenAtlas,
+  onOpenChronicle,
+  chronicleBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -95,6 +105,49 @@ export function Header({
               {tensionsBadge !== undefined && tensionsBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-rose-500/30 ring-1 ring-rose-300/60 text-[10px] text-rose-100 px-1">
                   {tensionsBadge > 99 ? "99+" : tensionsBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenEcho && (
+            <button
+              onClick={onOpenEcho}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-cyan/20 to-synapse-amber/15 ring-1 ring-synapse-cyan/40 hover:ring-synapse-cyan/70 px-3 py-1 font-mono text-[11px] text-synapse-cyan hover:text-ink-100 transition"
+              aria-label="open echo"
+              title="Find and merge near-duplicate notes"
+            >
+              <span aria-hidden>⌬</span>
+              echoes
+              {echoBadge !== undefined && echoBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-cyan/30 ring-1 ring-synapse-cyan/60 text-[10px] text-ink-100 px-1">
+                  {echoBadge > 99 ? "99+" : echoBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenAtlas && (
+            <button
+              onClick={onOpenAtlas}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-lime/15 to-synapse-violet/15 ring-1 ring-synapse-lime/40 hover:ring-synapse-lime/70 px-3 py-1 font-mono text-[11px] text-synapse-lime hover:text-ink-100 transition"
+              aria-label="open atlas"
+              title="Executive map of every cluster — cohesion × activity quadrant + recommendations"
+            >
+              <span aria-hidden>⌖</span>
+              atlas
+            </button>
+          )}
+          {onOpenChronicle && (
+            <button
+              onClick={onOpenChronicle}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-pink/20 to-synapse-violet/15 ring-1 ring-synapse-pink/40 hover:ring-synapse-pink/70 px-3 py-1 font-mono text-[11px] text-synapse-pink hover:text-ink-100 transition"
+              aria-label="open chronicle"
+              title="Watch each topic evolve over time — chapters, drift, pivots, emerged & faded terms"
+            >
+              <span aria-hidden>⟿</span>
+              chronicle
+              {chronicleBadge !== undefined && chronicleBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-pink/30 ring-1 ring-synapse-pink/60 text-[10px] text-ink-100 px-1">
+                  {chronicleBadge > 99 ? "99+" : chronicleBadge}
                 </span>
               )}
             </button>
