@@ -1599,3 +1599,169 @@ export async function clearProfileOverride(
   );
   return jsonOrThrow(r);
 }
+
+// ---------------------------------------------------------------------------
+// Peer Lens (round-12, day-55)
+// ---------------------------------------------------------------------------
+
+export type PeerBucket = "aligned" | "drifting" | "outlier" | "severe";
+export type PeerCohortLevel = "full" | "medium" | "loose" | "global";
+export type PeerDirection = "high" | "both";
+
+export type PeerMetricMeta = {
+  key: string;
+  label: string;
+  unit: "USD" | "%" | "txs" | "cps";
+  accent: string;
+  direction: PeerDirection;
+};
+
+export type PeerBucketMeta = {
+  accent: string;
+  blurb: string;
+  action: string;
+};
+
+export type PeerRules = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  lookback_days: number;
+  min_cohort_size: number;
+  size_bands: string[];
+  size_band_partition: string;
+  night_hours: { start: number; end: number };
+  metrics: PeerMetricMeta[];
+  buckets: { min: number; label: PeerBucket }[];
+  bucket_meta: Record<PeerBucket, PeerBucketMeta>;
+  scoring: {
+    per_max_z: number;
+    per_extreme: number;
+    extreme_z_floor: number;
+    max_score: number;
+    mad_k: number;
+    robust_first: string;
+  };
+  fallback_chain: string[];
+};
+
+export type PeerCustomerIn = {
+  customer_id: string;
+  display_name?: string;
+  industry?: string;
+  domicile?: string;
+  accounts?: string[];
+};
+
+export type PeerSample = {
+  ok: boolean;
+  engine: string;
+  $schema?: string;
+  name: string;
+  version: string;
+  published: string;
+  description: string;
+  customers: PeerCustomerIn[];
+  transactions: Tx[];
+};
+
+export type PeerMetricEval = {
+  key: string;
+  label: string;
+  accent: string;
+  unit: "USD" | "%" | "txs" | "cps";
+  value: number;
+  cohort_median: number;
+  cohort_mad: number;
+  cohort_p25: number;
+  cohort_p75: number;
+  cohort_min: number;
+  cohort_max: number;
+  z: number;
+  abs_z: number;
+  gated_z: number;
+  direction: PeerDirection;
+  basis: "mad" | "std" | "flat";
+  extreme: boolean;
+};
+
+export type PeerCustomerReport = {
+  customer_id: string;
+  display_name: string;
+  industry: string;
+  domicile: string;
+  size_band: string;
+  cohort_id: string;
+  cohort_level: PeerCohortLevel;
+  cohort_size: number;
+  outlier_score: number;
+  bucket: PeerBucket;
+  bucket_accent: string;
+  bucket_blurb: string;
+  recommended_action: string;
+  max_gated_z: number;
+  extreme_count: number;
+  metrics: PeerMetricEval[];
+  top_drivers: PeerMetricEval[];
+  headline: string;
+};
+
+export type PeerCohort = {
+  cohort_id: string;
+  level: PeerCohortLevel;
+  industry: string | null;
+  domicile: string | null;
+  size_band: string | null;
+  size: number;
+  member_ids: string[];
+  per_metric: Record<string, {
+    n: number; median: number; mad: number; mean: number; std: number;
+    min: number; max: number; p25: number; p75: number;
+  }>;
+};
+
+export type PeerPortfolio = {
+  customers: number;
+  cohorts: number;
+  outliers: number;
+  severe: number;
+  drifting: number;
+  aligned: number;
+  average_score: number;
+  by_cohort_level: Record<PeerCohortLevel, number>;
+  size_band_cuts: number[];
+};
+
+export type PeerAnalyzeResponse = {
+  ok: boolean;
+  engine: string;
+  rules_version: string;
+  lookback_days: number;
+  min_cohort_size: number;
+  portfolio: PeerPortfolio;
+  cohorts: PeerCohort[];
+  customers: PeerCustomerReport[];
+  by_bucket: Record<PeerBucket, number>;
+};
+
+export async function getPeerRules(): Promise<PeerRules> {
+  const r = await fetch(`${API_BASE}/aml/peer/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getPeerSample(): Promise<PeerSample> {
+  const r = await fetch(`${API_BASE}/aml/peer/sample`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function analyzePeers(
+  customers: PeerCustomerIn[],
+  transactions: Tx[],
+): Promise<PeerAnalyzeResponse> {
+  const r = await fetch(`${API_BASE}/aml/peer/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customers, transactions }),
+  });
+  return jsonOrThrow(r);
+}

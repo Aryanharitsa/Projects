@@ -74,6 +74,96 @@ here's the freeze-and-investigate paragraph".
 > function of `(transactions, labels, weights)` — admissible as model
 > evidence.
 
+> **Day-55 — Peer Lens.** Every other engine in TITAN measures one
+> customer in isolation: `risk.py` fires deterministic rules per
+> account, `drift.py` catches *account-vs-self* change, `profile.py`
+> composites that customer's surfaces into one number, `network.py`
+> propagates risk across the graph — but every input is still a
+> *single-subject* signal. None of them ask the question regulators
+> specifically ask in every exam: **"is this customer behaving
+> differently from their *peers*?"** Peer-group benchmarking is
+> explicitly required by the FFIEC BSA/AML exam manual ("Risk
+> Identification Process"), MAS AML/CFT Notice 626 §8.1 ("customer
+> due diligence including comparison against the customer's peer
+> group"), and EU 6AMLD CDD guidance. A customer can sit safely
+> *inside* their own historical envelope (drift-stable) and still be a
+> textbook outlier vs their cohort.
+>
+> The new `apps/ai-aml/peer.py` engine (~620 LOC, pure-stdlib,
+> deterministic) closes that gap. For every customer in a portfolio it
+> extracts a **9-axis behavioral vector** from the last 30 days of
+> transactions (`tx_count_30d · tx_volume_30d · avg_tx_amount ·
+> p95_tx_amount · unique_counterparties · cross_border_pct · cash_pct ·
+> weekend_pct · night_pct`), groups customers into **cohorts with
+> hierarchical fallback** so every customer ends up in a peer group of
+> at least 5 — `(industry × domicile × size_band) → (industry ×
+> domicile) → (industry) → global` — and computes per-metric **robust
+> z-scores using MAD**:
+>
+> ```
+> z = 0.6745 · (x − median) / mad     if mad > 0
+> z = (x − mean) / std                fallback when mad collapses
+> z = 0                               flat cohort
+> ```
+>
+> The `0.6745` constant scales MAD to a consistent estimator of σ for
+> normally-distributed data, so `|z| ≥ 3` carries the same "3-sigma"
+> intuition as a parametric z-score but is *resistant to contamination*
+> by other outliers in the same cohort — the whole point of using a
+> robust statistic on a portfolio where you *expect* a handful of bad
+> actors. Each metric has a **directional gate** (`high-only` for
+> volume / cross-border / cash / weekend / night — only *abnormally
+> high* is suspicious; `both` for tx_count / unique_counterparties —
+> abnormally low can mean off-book activity) so a wealth client who is
+> simply tidy doesn't trip on a low cash share.
+>
+> Composite **outlier score** per customer:
+>
+> ```
+> outlier = min(100, 10·max(|gated z|) + 5·count(|z| > 3))
+> ```
+>
+> Saturating at 100 so one extreme axis (max_z=10 → 100) and broad
+> misalignment (5 of 9 axes beyond 3σ → 25 from the extreme bumps, plus
+> the max contribution) both reach the ceiling. Bands track the rest of
+> TITAN: `aligned <25 · drifting 25..49 · outlier 50..74 · severe ≥75`.
+> Every customer report carries the cohort it was scored against
+> (with the explicit *level* used — `full`/`medium`/`loose`/`global` —
+> so auditors can read "scored against industry|domicile (n=10)" off
+> the response), the top 3 contributing metrics, the cohort
+> distribution at that point (median, MAD, p25, p75, min, max), and a
+> one-sentence headline a compliance officer can paste into a case
+> note.
+>
+> Bundled **6-cohort demo portfolio** (`apps/ai-aml/data/peer_portfolio.json`)
+> — 54 customers spanning Singapore export/import, Indian retail,
+> Bahamian VASPs, Swiss wealth-mgmt, Dubai real estate, and German
+> manufacturing — with a *planted outlier* in each cohort (cash-heavy
+> exporter, structuring-pattern retail walk-in, high-volume VASP with
+> KP/RU cross-border share, low-count wealth client with 4 wires of
+> $4.7M each, cash-heavy real estate with single-counterparty
+> concentration). Every planted outlier lands at `severe` on first run.
+>
+> The `/peer` console renders the result in a two-panel layout: a
+> portfolio rail on the left with bucket + cohort chips, search, and
+> ranked customer rows (each showing the score, bucket pill, cohort
+> metadata, and the headline driver); a customer detail panel on the
+> right with the conic-gradient outlier ring, recommended action card,
+> top-3 driver tiles, and **per-metric peer-positioning bars** — every
+> metric drawn as a horizontal range with the cohort's full min..max
+> envelope, the IQR shaded in the metric's accent colour, the median
+> tick, and the customer's value rendered as a haloed marker that sits
+> exactly where they fall along the distribution. A collapsible engine
+> rules card at the bottom shows the cohort fallback chain, the score
+> composition, and the metric × direction list — every knob exposed for
+> audit. Pure function of `(customers, transactions)`; the analysis
+> re-runs in well under 100 ms on the 54-customer fixture.
+>
+> **Endpoints:**
+> `GET  /aml/peer/rules` — metric list, direction gates, cohort fallback chain, score composition;
+> `GET  /aml/peer/sample` — bundled six-cohort demo portfolio;
+> `POST /aml/peer/analyze` — `{customers, transactions}` → portfolio rollup + cohorts + per-customer reports with full peer-positioning evidence.
+
 > **Day-50 — Customer Risk Profile.** Every other surface in this repo
 > measures *one* axis. Compliance teams are required by FATF Rec. 10
 > (CDD / risk-based approach), EU 6AMLD, and BSA/FFIEC to maintain a
@@ -924,7 +1014,8 @@ defensible to a regulator the same way a rule-based alert is.
 | Route | Purpose |
 |---|---|
 | `/` | Hero + 4-step pipeline + nine feature cards + flow diagram |
-| `/profile` | **(new — day-50)** Customer Risk Profile console: portfolio rail with bucket + refresh + search filters; customer detail with composite ring (engine-composite hint when overridden), 6-axis `FactorWheel` polar fingerprint, per-surface evidence cards, append-only history sparkline with bucket-band guides + override halos, and an analyst-override dialog; portfolio overview tab with bucket-share + refresh-state + domicile + top-of-book panels |
+| `/peer` | **(new — day-55)** Peer Lens console: portfolio rail with bucket + cohort chips + search, ranked customer rows tagged with cohort metadata and the headline driver; right-panel customer detail with conic-gradient outlier ring, recommended-action card, top-3 driver tiles with z-scores, and **per-metric peer-positioning bars** — each metric drawn as a horizontal range with the cohort's min..max envelope, IQR shaded in the metric accent, median tick, and the customer's value rendered as a haloed marker exactly where they fall along the distribution. Collapsible engine-rules card at the bottom exposes the cohort fallback chain, score composition, and metric × direction list for audit |
+| `/profile` | **(day-50)** Customer Risk Profile console: portfolio rail with bucket + refresh + search filters; customer detail with composite ring (engine-composite hint when overridden), 6-axis `FactorWheel` polar fingerprint, per-surface evidence cards, append-only history sparkline with bucket-band guides + override halos, and an analyst-override dialog; portfolio overview tab with bucket-share + refresh-state + domicile + top-of-book panels |
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
 | `/network` | Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
 | `/drift` | **(new — day-40)** Behavioral-drift console: verdict-tinted hero ring with plain-English narrative + recommended action, 10-axis polar fingerprint (baseline ring on the outer rim, drift dents inward), baseline-vs-current window cards, ranked per-dimension breakdown with score × weight × contribution bars, baseline-vs-current hour-of-day and day-of-week distribution overlays, rolling-KS change-point timeline with onset pulse, and counterparty contribution table flagging new entrants and sudden-activity spikes. Portfolio mode adds a 6-tile summary banner + a ranked left rail that swaps the active report on click |
@@ -1044,6 +1135,17 @@ apps/
                          · FATF-aligned buckets + refresh cadence
                          · analyst-override + append-only history audit
                          · SQLite-backed portfolio + bundled 12-customer demo book
+    peer.py             Peer Lens — peer-group statistical anomaly engine
+                         (9 behavioural axes: tx_count · volume · avg · p95 ·
+                          unique_cps · cross_border · cash · weekend · night)
+                         · hierarchical cohort fallback (industry × domicile × size →
+                            industry × domicile → industry → global)
+                         · robust MAD z-scores (parametric std fallback)
+                         · directional gating (high-only vs both per metric)
+                         · saturating composite + 4-band verdict (aligned · drifting ·
+                            outlier · severe)
+                         · bundled 6-cohort, 54-customer demo portfolio with planted
+                            outliers in each cohort
     cases.py            SQLite-backed case store + workflow engine + SLA
                          + typology_code/typology_confidence mirror columns
                          + typology_assigned timeline events

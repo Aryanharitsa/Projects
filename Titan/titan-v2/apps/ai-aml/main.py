@@ -63,6 +63,13 @@ GET    /aml/drift/rules            weights + verdict bands + every tunable knob
 GET    /aml/drift/sample           three-account demo (stable + mild + sleeper-burst)
 POST   /aml/drift                  account-vs-self drift across 10 axes → verdict
                                    + driver ranking + change-point + per-cparty view
+
+Peer Lens — peer-group anomaly (round-12, day-55)
+-------------------------------------------------
+GET    /aml/peer/rules             metric list, direction gates, cohort fallback chain
+GET    /aml/peer/sample            bundled six-cohort demo portfolio
+POST   /aml/peer/analyze           customer-vs-cohort outlier scoring across 9 axes →
+                                   robust z-scores (MAD), top drivers, cohort context
 """
 
 from __future__ import annotations
@@ -78,13 +85,14 @@ import cases as case_store
 import drift as drift_engine
 import media as media_engine
 import network as network_engine
+import peer as peer_engine
 import profile as profile_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.9.0"
+ENGINE_VERSION = "titan-aml/1.10.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -997,3 +1005,40 @@ def profile_delete(customer_id: str) -> Dict[str, Any]:
     if not deleted:
         raise HTTPException(status_code=404, detail="customer not found")
     return {"ok": True, "deleted": True, "customer_id": customer_id}
+
+
+# ---------------------------------------------------------------------------
+# Peer Lens — peer-group anomaly studio (round-12, day-55)
+# ---------------------------------------------------------------------------
+
+
+class PeerCustomerIn(BaseModel):
+    customer_id: str = Field(..., min_length=1)
+    display_name: Optional[str] = None
+    industry: Optional[str] = "unknown"
+    domicile: Optional[str] = None
+    accounts: Optional[List[str]] = None
+
+
+class PeerAnalyzeReq(BaseModel):
+    customers: List[PeerCustomerIn] = Field(..., min_length=1)
+    transactions: List[Tx] = Field(default_factory=list)
+
+
+@app.get("/aml/peer/rules")
+def peer_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **peer_engine.get_rules()}
+
+
+@app.get("/aml/peer/sample")
+def peer_sample() -> Dict[str, Any]:
+    sample = peer_engine.get_sample()
+    return {"ok": True, "engine": ENGINE_VERSION, **sample}
+
+
+@app.post("/aml/peer/analyze")
+def peer_analyze(req: PeerAnalyzeReq = Body(...)) -> Dict[str, Any]:
+    customers = [c.model_dump() for c in req.customers]
+    transactions = [t.model_dump() for t in req.transactions]
+    out = peer_engine.analyze(customers, transactions)
+    return out

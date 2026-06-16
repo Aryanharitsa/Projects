@@ -13,6 +13,7 @@ export const metadata = {
 const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/", label: "Overview" },
   { href: "/profile", label: "Profile" },
+  { href: "/peer", label: "Peer Lens" },
   { href: "/aml", label: "AML Console" },
   { href: "/network", label: "Network" },
   { href: "/drift", label: "Drift" },

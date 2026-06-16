@@ -666,3 +666,31 @@ async def aml_cases_network_clearing(case_id: str, payload: Dict[str, Any]) -> D
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()
+
+
+# ----- Peer Lens pass-through (round-12, day-55)
+
+
+@app.get("/aml/peer/rules")
+async def aml_peer_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/peer/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/peer/sample")
+async def aml_peer_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/peer/sample")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/aml/peer/analyze")
+async def aml_peer_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(f"{AML_SVC}/aml/peer/analyze", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
