@@ -4133,3 +4133,580 @@ def render_tempo_empty(hint: str = "Set an arrival window and press **Optimize D
         """,
         unsafe_allow_html=True,
     )
+
+
+# ============================================================================
+# Pulse — Today's Outlook brief (Day 56)
+# ============================================================================
+
+_PULSE_MOOD_HUE: dict[str, str] = {
+    "Calm":     "#53E3A6",
+    "Watch":    "#F9C440",
+    "Active":   "#FF9F43",
+    "Critical": "#FF3D60",
+}
+
+_PULSE_BAND_HUE: dict[str, str] = {
+    "Safe":      "#53E3A6",
+    "Caution":   "#F9C440",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+    "Unknown":   "#8892A6",
+}
+
+_PULSE_CSS = """
+<style>
+.ws-pulse-hero {
+  position:relative;
+  border-radius:18px;
+  padding:18px 22px;
+  margin: 8px 0 14px;
+  background:
+    radial-gradient(140% 90% at -10% -40%, var(--glow) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%),
+    #161A23;
+  border: 1px solid rgba(255,255,255,0.08);
+  display:grid;
+  grid-template-columns: minmax(180px, 1fr) 3.4fr 1.3fr;
+  gap: 18px;
+  align-items:center;
+  overflow:hidden;
+}
+.ws-pulse-hero::after {
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(120deg, var(--glow) 0%, transparent 38%);
+  pointer-events:none; opacity:.55;
+}
+.ws-pulse-pulse {
+  width: 140px; height: 140px; border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px var(--glow);
+  flex-shrink:0;
+}
+.ws-pulse-pulse::after {
+  content:""; position:absolute; inset:14px; border-radius:50%;
+  background:#161A23; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.ws-pulse-pulse-inner {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.ws-pulse-pulse-mood {
+  font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+  color: var(--hue); font-weight:700;
+}
+.ws-pulse-pulse-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  font-size: 1.95rem; letter-spacing:-.04em;
+}
+.ws-pulse-pulse-sub { font-size:.78rem; color:#A4ADC2; }
+.ws-pulse-hero-body { position:relative; z-index:1; }
+.ws-pulse-kicker {
+  font-size:.72rem; letter-spacing:.22em; text-transform:uppercase;
+  color: var(--hue); font-weight:700; margin-bottom:6px;
+}
+.ws-pulse-headline { font-size:1.32rem; font-weight:800; letter-spacing:-.02em; line-height:1.25; }
+.ws-pulse-advisory { color:#C8D0E0; font-size:.95rem; margin-top:6px; }
+.ws-pulse-mover {
+  position:relative; z-index:1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius:14px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.ws-pulse-mover-kicker { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;}
+.ws-pulse-mover-label { font-weight:700; font-size:1.0rem; }
+.ws-pulse-mover-delta { font-weight:800; font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em; font-size:1.7rem; color: var(--mover-hue, #C8D0E0); }
+.ws-pulse-mover-foot { color:#A4ADC2; font-size:.78rem; }
+
+.ws-pulse-tiles {
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 4px 0 16px;
+}
+.ws-pulse-tile {
+  background: #161A23;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding: 12px 14px;
+  display:flex; flex-direction:column; gap:2px;
+  position:relative; overflow:hidden;
+}
+.ws-pulse-tile::after {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: var(--accent, #3DA9FC);
+}
+.ws-pulse-tile-kicker {
+  color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase;
+}
+.ws-pulse-tile-val { font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:1.32rem; letter-spacing:-.02em; }
+.ws-pulse-tile-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-pulse-ribbon-wrap {
+  background:#161A23; border-radius:14px; padding:14px;
+  border:1px solid rgba(255,255,255,0.06); margin-bottom:14px;
+}
+.ws-pulse-ribbon-title { font-weight:700; font-size:.94rem; margin-bottom:6px; }
+.ws-pulse-ribbon-sub { color:#8892A6; font-size:.78rem; margin-bottom:10px; }
+.ws-pulse-ribbon-grid {
+  display:grid; grid-template-columns: 100px repeat(24, 1fr); gap:3px;
+  align-items:end;
+}
+.ws-pulse-ribbon-label {
+  font-size:.78rem; color:#C8D0E0; padding-right:6px; text-align:right;
+  align-self:center; line-height:1.15;
+}
+.ws-pulse-ribbon-label small { display:block; color:#8892A6; font-size:.66rem; }
+.ws-pulse-cell {
+  height:38px; border-radius:5px; position:relative;
+  background: linear-gradient(180deg, transparent 0%, transparent var(--top), var(--fill) var(--top));
+  border:1px solid rgba(255,255,255,0.05);
+  overflow:hidden;
+}
+.ws-pulse-cell.past { opacity:.35; }
+.ws-pulse-cell.best { box-shadow: 0 0 0 1.5px #53E3A6, 0 0 12px rgba(83,227,166,0.45); }
+.ws-pulse-cell.worst { box-shadow: 0 0 0 1.5px #FF3D60; }
+.ws-pulse-cell.now-mark::after {
+  content:""; position:absolute; left:50%; top:0; bottom:0; width:2px;
+  background: rgba(61,169,252,0.8); box-shadow: 0 0 6px rgba(61,169,252,0.6);
+}
+.ws-pulse-hours {
+  display:grid; grid-template-columns: 100px repeat(24, 1fr); gap:3px;
+  color:#8892A6; font-size:.66rem; margin-top:6px;
+}
+.ws-pulse-hour { text-align:center; font-variant-numeric:tabular-nums; }
+.ws-pulse-hour.best { color:#53E3A6; font-weight:700; }
+.ws-pulse-hour.worst { color:#FF3D60; font-weight:700; }
+
+.ws-pulse-snap {
+  background: #161A23;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius:14px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns: 100px 1.6fr 1fr;
+  gap: 14px; align-items:center;
+  margin-bottom: 10px;
+  position:relative;
+}
+.ws-pulse-snap::before {
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px;
+  background: var(--accent, #8892A6); border-radius:0 4px 4px 0;
+}
+.ws-pulse-snap-ring {
+  width: 78px; height:78px; border-radius:50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.ws-pulse-snap-ring::after { content:""; position:absolute; inset:7px; border-radius:50%; background:#161A23; }
+.ws-pulse-snap-ring-val { position:relative; z-index:2; font-weight:800; font-variant-numeric:tabular-nums; font-size:1.25rem; }
+.ws-pulse-snap-title { display:flex; align-items:center; gap:6px; font-weight:700; font-size:1.02rem; letter-spacing:-.01em; }
+.ws-pulse-snap-kind { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-pulse-chip {
+  display:inline-block;
+  padding:3px 8px; border-radius:999px;
+  font-size:.72rem; font-weight:700;
+  background: rgba(255,255,255,0.06);
+  color:#E6EAF2;
+  margin: 4px 4px 0 0;
+}
+.ws-pulse-chip.warn { background: rgba(255,159,67,0.16); color:#FFB077; }
+.ws-pulse-chip.bad  { background: rgba(255,61,96,0.16);  color:#FF6F88; }
+.ws-pulse-chip.ok   { background: rgba(83,227,166,0.14); color:#62E9B2; }
+.ws-pulse-chip.delta-up   { background: rgba(83,227,166,0.16); color:#62E9B2; }
+.ws-pulse-chip.delta-down { background: rgba(255,61,96,0.18);  color:#FF6F88; }
+.ws-pulse-chip.delta-flat { background: rgba(255,255,255,0.06); color:#A4ADC2; }
+.ws-pulse-snap-changes { color:#C8D0E0; font-size:.86rem; margin-top:6px; }
+.ws-pulse-snap-changes b { color:#E6EAF2; }
+.ws-pulse-snap-mini {
+  display:grid; grid-template-columns: repeat(24, 1fr); gap:1px;
+  height:18px; border-radius:4px; overflow:hidden;
+}
+.ws-pulse-snap-mini > i { background: var(--c, rgba(255,255,255,0.05)); display:block; }
+.ws-pulse-snap-side {
+  display:flex; flex-direction:column; gap:6px;
+  font-size:.82rem; color:#C8D0E0;
+}
+.ws-pulse-snap-side b { color:#E6EAF2; }
+.ws-pulse-snap-side small { color:#8892A6; }
+
+.ws-pulse-section-title {
+  font-weight:800; font-size:.92rem; letter-spacing:.04em; text-transform:uppercase;
+  color:#8892A6; margin: 16px 0 6px;
+}
+.ws-pulse-list { list-style:none; padding-left:0; margin:0; }
+.ws-pulse-list li {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.4;
+  position:relative; padding-left:36px;
+}
+.ws-pulse-list li::before {
+  content: attr(data-i);
+  position:absolute; left:10px; top:10px;
+  width:20px; height:20px; border-radius:50%;
+  background: rgba(255,255,255,0.08);
+  font-size:.74rem; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  color:#C8D0E0;
+}
+.ws-pulse-list li b { color:#E6EAF2; }
+.ws-pulse-cluster-line {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  display:flex; align-items:center; gap:10px; font-size:.92rem;
+}
+.ws-pulse-cluster-dot { width:10px; height:10px; border-radius:50%; background: var(--hue); flex-shrink:0; }
+.ws-pulse-empty {
+  background: #161A23; border: 1px dashed rgba(255,255,255,0.10);
+  border-radius:16px; padding: 26px; text-align:center;
+  color:#A4ADC2;
+}
+.ws-pulse-empty-title { font-weight:800; color:#E6EAF2; font-size:1.05rem; margin-bottom:6px; }
+</style>
+"""
+
+
+def _pulse_curve_to_cells(curve, *, now_hour: int, best_window=None, worst_window=None) -> str:
+    """Render a 24-cell ribbon row for a single forecast curve.
+
+    `curve` is 24 floats in [0,1]. `best_window` and `worst_window` are
+    optional `(start, end_exclusive)` tuples — cells whose hour falls in the
+    range get a coloured outline (best=green glow, worst=red ring).
+    """
+    cells: list[str] = []
+    max_r = max(curve) if curve else 0.0
+    for h in range(24):
+        r = float(curve[h]) if h < len(curve) else 0.0
+        # Map risk → color and fill height (top % from where the colored
+        # band starts — small risk = mostly empty, high risk = tall bar).
+        top_pct = max(8.0, 100.0 - r * 100.0)
+        if r >= 0.66:
+            hue = "#FF3D60"
+        elif r >= 0.4:
+            hue = "#FF7F50"
+        elif r >= 0.2:
+            hue = "#F9C440"
+        else:
+            hue = "#53E3A6"
+        fill = _hex_to_rgba(hue, 0.42 + 0.45 * min(1.0, r))
+        classes = ["ws-pulse-cell"]
+        if h < now_hour:
+            classes.append("past")
+        if best_window is not None and _in_window(h, best_window):
+            classes.append("best")
+        if worst_window is not None and _in_window(h, worst_window):
+            classes.append("worst")
+        if h == now_hour:
+            classes.append("now-mark")
+        cls = " ".join(classes)
+        title = f"{h:02d}:00 · risk {r:.2f}"
+        cells.append(
+            f'<div class="{cls}" '
+            f'style="--top:{top_pct:.0f}%; --fill:{fill};" title="{title}"></div>'
+        )
+    return "".join(cells)
+
+
+def _pulse_curve_to_mini(curve) -> str:
+    """A compact 24-cell strip used inside per-snapshot cards."""
+    parts: list[str] = []
+    for h in range(24):
+        r = float(curve[h]) if h < len(curve) else 0.0
+        if r >= 0.66:
+            hue = "#FF3D60"
+        elif r >= 0.4:
+            hue = "#FF7F50"
+        elif r >= 0.2:
+            hue = "#F9C440"
+        else:
+            hue = "#53E3A6"
+        c = _hex_to_rgba(hue, 0.25 + 0.55 * min(1.0, r))
+        parts.append(f'<i style="--c:{c};"></i>')
+    return "".join(parts)
+
+
+def _in_window(hour: int, window) -> bool:
+    """Window is (start, end_exclusive) modulo 24."""
+    start, end = int(window[0]), int(window[1])
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def _delta_chip(delta: int) -> str:
+    if delta >= 5:
+        cls = "delta-up"; arrow = "▲"
+    elif delta <= -5:
+        cls = "delta-down"; arrow = "▼"
+    else:
+        cls = "delta-flat"; arrow = "→"
+    label = f"{arrow} {'+' if delta > 0 else ''}{delta} pts vs 24h ago"
+    return f'<span class="ws-pulse-chip {cls}">{label}</span>'
+
+
+def render_pulse(day) -> None:
+    """Render the full Pulse — Today's Outlook brief."""
+    st.markdown(_PULSE_CSS, unsafe_allow_html=True)
+
+    hue = _PULSE_MOOD_HUE.get(day.overall_mood, "#8892A6")
+    glow = _hex_to_rgba(hue, 0.20)
+
+    overall_score = int(round(
+        sum(s.score_now for s in day.snapshots) / max(1, len(day.snapshots))
+    )) if day.snapshots else 0
+
+    # ---------- hero ----------
+    if day.biggest_mover is not None and abs(day.biggest_mover.delta_score) >= 1:
+        bm = day.biggest_mover
+        mover_hue = _PULSE_BAND_HUE.get(bm.band_now, "#C8D0E0")
+        mover_block = f"""
+          <div class="ws-pulse-mover">
+            <div class="ws-pulse-mover-kicker">Biggest mover</div>
+            <div class="ws-pulse-mover-label">{bm.point.glyph} {_esc(bm.point.label)}</div>
+            <div class="ws-pulse-mover-delta" style="--mover-hue:{mover_hue};">
+              {bm.delta_arrow} {bm.delta_label}
+            </div>
+            <div class="ws-pulse-mover-foot">
+              {bm.band_24h_ago} → <b style="color:{mover_hue};">{bm.band_now}</b>
+              · score {bm.score_now}
+            </div>
+          </div>
+        """
+    elif day.snapshots:
+        # Calm day — show "no material change" tile in the mover slot.
+        mover_block = """
+          <div class="ws-pulse-mover">
+            <div class="ws-pulse-mover-kicker">Day-over-day</div>
+            <div class="ws-pulse-mover-label">No material change</div>
+            <div class="ws-pulse-mover-delta delta-flat" style="--mover-hue:#A4ADC2;">→ ±0</div>
+            <div class="ws-pulse-mover-foot">All watched points within ±5 pts of yesterday.</div>
+          </div>
+        """
+    else:
+        mover_block = ""
+
+    st.markdown(
+        f"""
+        <div class="ws-pulse-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-pulse-pulse" style="--hue:{hue}; --pct:{overall_score}; --glow:{glow};">
+            <div class="ws-pulse-pulse-inner">
+              <div class="ws-pulse-pulse-mood">{_esc(day.overall_mood)}</div>
+              <div class="ws-pulse-pulse-score">{overall_score}</div>
+              <div class="ws-pulse-pulse-sub">mean score · {_esc(day.overall_band)}</div>
+            </div>
+          </div>
+          <div class="ws-pulse-hero-body">
+            <div class="ws-pulse-kicker">Today's outlook · {_esc(day.now.strftime('%a %d %b · %H:%M'))}</div>
+            <div class="ws-pulse-headline">{_rec_to_html(day.headline)}</div>
+            <div class="ws-pulse-advisory">{_rec_to_html(day.advisory_line)}</div>
+          </div>
+          {mover_block}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------- tiles ----------
+    bw_s, bw_e = day.best_outdoor_window
+    ww_s, ww_e = day.worst_outdoor_window
+    overall_band_hue = _PULSE_BAND_HUE.get(day.overall_band, "#8892A6")
+
+    new_inc_total = day.n_incidents_24h_total
+    new_inc_hue = "#FF7F50" if new_inc_total >= 3 else ("#F9C440" if new_inc_total >= 1 else "#53E3A6")
+
+    stay = next((s for s in day.snapshots if s.point.kind == "stay"), None)
+    if stay is not None and stay.refuge_label:
+        refuge_tile_val = stay.refuge_band
+        refuge_tile_sub = f"{stay.refuge_label} · {stay.refuge_distance_km} km"
+        refuge_hue = _PULSE_BAND_HUE.get(stay.refuge_band, "#8892A6")
+    else:
+        refuge_tile_val = "—"
+        refuge_tile_sub = "no stay flagged"
+        refuge_hue = "#8892A6"
+
+    tiles_html = f"""
+    <div class="ws-pulse-tiles">
+      <div class="ws-pulse-tile" style="--accent:{overall_band_hue};">
+        <div class="ws-pulse-tile-kicker">Overall band</div>
+        <div class="ws-pulse-tile-val" style="color:{overall_band_hue};">{_esc(day.overall_band)}</div>
+        <div class="ws-pulse-tile-sub">{len(day.snapshots)} watched · worst-of</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:#53E3A6;">
+        <div class="ws-pulse-tile-kicker">Best outdoor window</div>
+        <div class="ws-pulse-tile-val">{bw_s:02d}:00–{bw_e:02d}:00</div>
+        <div class="ws-pulse-tile-sub">joint risk {day.best_outdoor_window_risk:.2f}</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:{new_inc_hue};">
+        <div class="ws-pulse-tile-kicker">New incidents (24h, 1 km)</div>
+        <div class="ws-pulse-tile-val" style="color:{new_inc_hue};">{new_inc_total}</div>
+        <div class="ws-pulse-tile-sub">across {len(day.snapshots)} watched point{'s' if len(day.snapshots) != 1 else ''}</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:{refuge_hue};">
+        <div class="ws-pulse-tile-kicker">Refuge readiness · stay</div>
+        <div class="ws-pulse-tile-val" style="color:{refuge_hue};">{_esc(refuge_tile_val)}</div>
+        <div class="ws-pulse-tile-sub">{_esc(refuge_tile_sub)}</div>
+      </div>
+    </div>
+    """
+    st.markdown(tiles_html, unsafe_allow_html=True)
+
+    # ---------- joint ribbon ----------
+    now_hour = int(day.now.hour)
+    joint_cells = _pulse_curve_to_cells(
+        day.joint_curve, now_hour=now_hour,
+        best_window=day.best_outdoor_window, worst_window=day.worst_outdoor_window,
+    )
+    hour_labels = []
+    for h in range(24):
+        cls = "ws-pulse-hour"
+        if _in_window(h, day.best_outdoor_window): cls += " best"
+        if _in_window(h, day.worst_outdoor_window): cls += " worst"
+        hour_labels.append(f'<div class="{cls}">{h:02d}</div>')
+
+    st.markdown(
+        f"""
+        <div class="ws-pulse-ribbon-wrap">
+          <div class="ws-pulse-ribbon-title">Joint risk ribbon · today, max over watched points</div>
+          <div class="ws-pulse-ribbon-sub">
+            green outline = best 3-h window · red outline = avoid · blue line = now ({now_hour:02d}:00)
+          </div>
+          <div class="ws-pulse-ribbon-grid">
+            <div class="ws-pulse-ribbon-label">Joint <small>max over watched</small></div>
+            {joint_cells}
+          </div>
+          <div class="ws-pulse-hours">
+            <div></div>
+            {''.join(hour_labels)}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------- per-snapshot cards ----------
+    st.markdown('<div class="ws-pulse-section-title">Watched points</div>', unsafe_allow_html=True)
+    for s in day.snapshots:
+        band_hue = _PULSE_BAND_HUE.get(s.band_now, "#8892A6")
+        delta_html = _delta_chip(s.delta_score)
+        chips: list[str] = [delta_html]
+        if s.new_incidents_24h:
+            cat = f" · {s.dominant_new_category}" if s.dominant_new_category else ""
+            chips.append(
+                f'<span class="ws-pulse-chip warn">{s.new_incidents_24h} new (1 km, 24h){_esc(cat)}</span>'
+            )
+        for c in s.intersecting_clusters[:2]:
+            cls = "bad" if c.is_escalating else ""
+            chips.append(
+                f'<span class="ws-pulse-chip {cls}">{_esc(c.label)} · {_esc(c.status_now)} '
+                f'×{c.velocity:.1f} · {c.distance_km:.1f} km</span>'
+            )
+        if s.band_changed:
+            chips.append(
+                f'<span class="ws-pulse-chip warn">band {_esc(s.band_24h_ago)} → {_esc(s.band_now)}</span>'
+            )
+        chip_html = "".join(chips)
+
+        changes_html = ""
+        if s.changes:
+            bullets = "".join(f"<div>· {_rec_to_html(c)}</div>" for c in s.changes)
+            changes_html = f'<div class="ws-pulse-snap-changes">{bullets}</div>'
+
+        side_lines = []
+        side_lines.append(
+            f'<div><small>best 3 h</small><br><b>'
+            f'{s.best_window[0]:02d}:00–{s.best_window[1]:02d}:00</b> · risk {s.best_window_risk:.2f}</div>'
+        )
+        if s.refuge_label:
+            side_lines.append(
+                f'<div><small>nearest refuge</small><br><b>{_esc(s.refuge_label)}</b>'
+                f' · {_esc(s.refuge_band)} · {s.refuge_distance_km} km</div>'
+            )
+        side_html = "".join(side_lines)
+
+        mini = _pulse_curve_to_mini(s.hour_curve_today)
+
+        st.markdown(
+            f"""
+            <div class="ws-pulse-snap" style="--accent:{band_hue};">
+              <div>
+                <div class="ws-pulse-snap-ring" style="--hue:{band_hue}; --pct:{s.score_now};">
+                  <div class="ws-pulse-snap-ring-val">{s.score_now}</div>
+                </div>
+              </div>
+              <div>
+                <div class="ws-pulse-snap-kind">{_esc(s.point.kind)}</div>
+                <div class="ws-pulse-snap-title">{s.point.glyph} {_esc(s.point.label)}
+                  · <span style="color:{band_hue};">{_esc(s.band_now)}</span></div>
+                <div>{chip_html}</div>
+                {changes_html}
+                <div style="margin-top:8px;">
+                  <small style="color:#8892A6;">today's 24-h curve</small>
+                  <div class="ws-pulse-snap-mini">{mini}</div>
+                </div>
+              </div>
+              <div class="ws-pulse-snap-side">{side_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---------- cluster intersections ----------
+    if day.sentinel_intersections:
+        st.markdown('<div class="ws-pulse-section-title">Sentinel intersections with your day</div>',
+                    unsafe_allow_html=True)
+        lines: list[str] = []
+        for c in day.sentinel_intersections:
+            hue = _cluster_status_hue(c.status_now)
+            badge = (
+                '<span class="ws-pulse-chip bad">escalating</span>'
+                if c.is_escalating else ""
+            )
+            lines.append(
+                f'<div class="ws-pulse-cluster-line">'
+                f'<span class="ws-pulse-cluster-dot" style="--hue:{hue};"></span>'
+                f'<div><b>{_esc(c.label)}</b> · {_esc(c.status_now)} ×{c.velocity:.1f}'
+                f' · {c.recent_count} recent · edge {c.distance_km:.2f} km</div>'
+                f'<div style="margin-left:auto;">{badge}</div>'
+                f'</div>'
+            )
+        st.markdown("".join(lines), unsafe_allow_html=True)
+
+    # ---------- change log ----------
+    if day.change_log:
+        st.markdown('<div class="ws-pulse-section-title">What changed since yesterday</div>',
+                    unsafe_allow_html=True)
+        items = "".join(
+            f'<li data-i="{i+1}">{_rec_to_html(line)}</li>'
+            for i, line in enumerate(day.change_log)
+        )
+        st.markdown(f'<ul class="ws-pulse-list">{items}</ul>', unsafe_allow_html=True)
+
+    # ---------- plan of day ----------
+    if day.actions:
+        st.markdown('<div class="ws-pulse-section-title">Plan of day</div>', unsafe_allow_html=True)
+        items = "".join(
+            f'<li data-i="{i+1}">{_rec_to_html(a)}</li>'
+            for i, a in enumerate(day.actions)
+        )
+        st.markdown(f'<ul class="ws-pulse-list">{items}</ul>', unsafe_allow_html=True)
+
+
+def render_pulse_empty(hint: str = "Pick your stay and 1–3 destinations, then press **Compose Pulse**.") -> None:
+    st.markdown(_PULSE_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-pulse-empty">
+          <div class="ws-pulse-empty-title">Pulse idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">Pulse is a composer — it re-runs Safety,
+          Forecast, Sentinel and Refuge for each watched point at <em>now</em>
+          and at <em>now − 24 h</em>, then ranks the deltas into a single
+          morning brief. Pure-Python, zero new deps.</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
