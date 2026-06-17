@@ -72,6 +72,36 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   Ships with a curated **15-stay Goa preset list** (hotels, resorts,
   hostels, homestays), takes custom lat/lon rows, and exports as JSON
   (`waysafe.staysafe.v1`) and markdown for WhatsApp/email.
+- **🆕 Pulse — Today's Outlook** — the *morning-brief* surface that
+  answers the question no other tab does: *"what's actually different in
+  my day vs yesterday, and what should I do about it before lunch?"*
+  Pulse treats your day as a portfolio of **watched points** — typically
+  your stay plus 1–3 planned destinations — and re-runs every WaySafe
+  engine for each point at **`now`** *and* at **`now − 24 h`**:
+  `safety.compute_safety` (signed Δscore + band shift), `forecast.risk_curve`
+  for today + the prior-day DOW (so a calm yesterday → restless today
+  swing pops out), `sentinel.cluster_incidents` (which clusters intersect
+  the day's plan within 1.5 km, escalating-first), and `refuge.find_refuge`
+  (is the closest help POI still in a Strong / Viable band?). It then
+  composes a single one-page brief: a **mood ring** (Calm / Watch /
+  Active / Critical, picked from worst-band + cluster pressure + ≥2
+  watched points slipping ≥10 pts), a **biggest-mover card** (signed
+  Δscore on the point that swung most), a **24-hour joint risk ribbon**
+  (`joint(h) = max_p curve_p(h)`) with the best 3-h **outdoor window**
+  outlined in green and the worst outlined in red, **per-watched-point
+  cards** (ring + delta chip + cluster pings + mini-curve + best-window /
+  nearest-refuge side panel), a **Sentinel intersections** list, a
+  ranked **"what changed since yesterday"** change log, and a prioritised
+  **plan-of-day** checklist that references Tempo and the Map tab by name
+  when those are the right follow-ups. Pulse is *pure composition* — it
+  adds zero new physics; every number comes from an engine that already
+  shipped. The *new* thing it brings to WaySafe is the **temporal-delta
+  lens**: every other surface up to Day 55 was forward-looking; Pulse is
+  the first surface that asks "what's different now than 24 hours ago",
+  which is the signal that makes a daily brief actually worth opening.
+  Exports as JSON (`waysafe.pulse.v1`) and markdown for the WhatsApp /
+  email family-update loop. Lives at `tabs[0]` because this is what the
+  traveller opens first thing in the morning. Pure-Python, zero new deps.
 - **🆕 Tempo — Departure-Window Optimizer** — the *temporal* layer that
   closes the loop on planning: **when** should you leave? Every other
   surface answers *where* (Compass), *where to sleep* (StaySafe), *how to
@@ -480,6 +510,104 @@ and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
 hour-aware open-confidence by un-checking *"Use current hour"* and
 sliding to 23:00 — the tourist help-desk and clinic drop out of the
 podium.
+
+---
+
+## 💓 Pulse — Today's Outlook (Day 56)
+
+Every WaySafe surface up to Day 55 is a *forward-looking* planner —
+Compass picks *where* to go, StaySafe picks *where to sleep*, Plan Route
+picks *how* to get there, Tempo picks *when* to leave, Refuge picks
+*where to flee*. None of them answer the question a traveller asks the
+*moment they wake up*:
+
+> "What's different in my day than it was 24 hours ago, and what
+>  should I do about it before lunch?"
+
+Pulse is that surface. It treats your day as a small portfolio of
+**watched points** — typically your stay plus 1–3 planned destinations —
+and re-runs every WaySafe engine for each point at **`now`** *and* at
+**`now − 24 h`**, then ranks the resulting deltas into a single one-page
+brief. Pulse adds **zero new physics**; every number on the screen comes
+from an engine that already shipped. The *new* thing it brings is the
+**temporal-delta lens** — the change-since-yesterday signal that makes a
+daily brief actually worth opening.
+
+### What gets re-run per watched point
+
+| Engine | What Pulse asks it twice | New signal |
+|---|---|---|
+| `safety.compute_safety` | score at `now` (full incident set) **and** at `now − 24 h` (filter out incidents created after the cutoff) | signed Δscore + band-shift flag |
+| `forecast.HazardForecaster.risk_curve` | 24-h curve for **today's** DOW + 24-h curve for **yesterday's** DOW | curve diff (mini ribbon per point) |
+| `sentinel.cluster_incidents` | the cluster set is computed once globally — Pulse picks the ones whose halo edge sits within **1.5 km** of the watched point | per-point cluster pings, escalating-first |
+| `refuge.find_refuge` | top option band & distance for the stay | "refuge readiness" tile |
+
+### How the day-level summary is built
+
+```
+joint_curve[h]            = max_p forecast.risk(p, today, h)
+best_outdoor_window       = argmin over h of mean(joint_curve[h : h+3])
+worst_outdoor_window      = argmax over h of mean(joint_curve[h : h+3])
+overall_band              = worst band across watched-point bands
+overall_mood              = Critical / Active / Watch / Calm
+                            (rules below — first match wins)
+```
+
+**Mood rules** (first match wins, so the worst signal sets the tone):
+
+- **Critical** — any watched point Danger, or any intersecting cluster Critical.
+- **Active**   — any watched point High Risk, or any cluster Emerging, or
+  ≥ 2 watched points slipped ≥ 10 pts in 24 h.
+- **Watch**    — any Caution band, or any point dropped ≥ 5 pts.
+- **Calm**     — otherwise.
+
+**Biggest mover** is the watched point that maximises a *signal* score:
+`|Δscore| · 1.0  +  new_incidents_24h · 4.0  +  Σ_escalating-clusters (6 + 2·(velocity−1))  +  6·band-shift  +  4·(refuge band ∈ {High Risk, Danger})`.
+
+### What you see
+
+- A **hero card** — left ring shows the mean watched-point score, mood
+  pill, mood-tinted glow. Headline is one sentence ("Critical morning ·
+  Baga beach down 21 pts · best window 03:00–06:00"). Right card calls
+  out the biggest mover with signed Δscore and a band arrow
+  (Caution → High Risk).
+- A **four-tile strip**: overall band · best 3-h outdoor window · total
+  new incidents within 1 km in the last 24 h · refuge readiness at the
+  stay (band + nearest POI + distance).
+- A **24-hour joint risk ribbon** — one row of 24 cells coloured by
+  `joint_curve(h)`, with the best window outlined in green, the worst
+  outlined in red, and a blue line marking the current hour. Past
+  hours dim to 35% opacity.
+- A **per-watched-point card** — score ring, kind chip (stay /
+  destination / custom), band, Δ-chip ("▼ −21 pts vs 24h ago"), cluster
+  pings (escalating ones go red), a band-shift chip when the band moved,
+  a plain-English changes block, a compact today-curve mini-ribbon, and
+  a side panel with the point's own best 3-h window and nearest refuge.
+- A **Sentinel intersections** list — de-duped across watched points,
+  closest-first within each escalation tier, escalating-first overall.
+- A ranked **"what changed since yesterday"** list — every per-snapshot
+  change line sorted by signal magnitude so the biggest-mover's lines
+  float to the top.
+- A prioritised **plan-of-day** checklist that references *Tempo* and
+  *Map* by name when those are the right follow-ups
+  ("Re-plan any leg through Cluster #1 — pick a corridor ≥ 1.5 km away
+  and prefer the Tempo winner over a now-departure.").
+- **Exports** — JSON (`waysafe.pulse.v1`) and markdown for the WhatsApp
+  / email family-update loop.
+
+### Why this matters
+
+A planner suite that only ever computes "what is" leaves the traveller
+to track "what changed" in their head. Pulse closes that loop. On a calm
+day it says so in one line and lets the user move on; on a day where a
+Sentinel cluster has crossed Critical velocity overnight, it surfaces
+the exact watched-point that touches it, names the cluster, quotes the
+edge distance, and tells the user which other WaySafe tab to open next.
+This is the surface a traveller opens *first* — which is why it now lives
+at `tabs[0]`.
+
+Pure-Python, zero new deps. Pulse is the first WaySafe surface that
+*has no engine of its own* — it's a composer. That's the point.
 
 ---
 
