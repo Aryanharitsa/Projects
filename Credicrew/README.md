@@ -32,6 +32,74 @@ they're generated.
 
 ---
 
+## What's new — Crosswind (Day 57)
+
+Every other Credicrew surface is **role-scoped**: Discover ranks the
+global pool against *one* role, Forecast and Cadence are per-role,
+Decision and Offer are per-candidate-within-role. A recruiter running ten
+reqs has a portfolio-level question none of them answer:
+
+> Of all the candidates I've already paid sourcing cost on, are they each
+> in the role that actually fits them best?
+
+**Crosswind** (`/crosswind`) is the cross-role routing layer. It re-uses
+the same explainable match engine that drives Discover (`matchCandidate`)
+to score every active candidate × every open role, then derives four
+portfolio-level signals from the resulting grid.
+
+- **Match matrix (centerpiece)** — rows are every active candidate
+  currently sitting in some shortlist (statuses ≠ `passed`/`offer`),
+  columns are every open role. Cells are coloured by score tier
+  (emerald ≥ 80 · sky 70 · amber 55 · rose 35 · slate &lt; 35). A
+  candidate's *home* role (where they currently sit) gets a white ring;
+  off-home cells scoring ≥ +10 over home get an emerald `↑` chip.
+  Clicking any non-home cell adds the candidate to that role's shortlist
+  as `new` — one click, one routing move.
+- **Routing moves** — sorted by score delta. Each move shows
+  from-role(score) → to-role(score), the delta as a pill, and a
+  **why** diff: matched skills gained/lost (named), location-state
+  transition (`partial → full`), seniority match flip. Apply button
+  writes the new shortlist entry directly.
+- **Talent magnets** — candidates with a `strong` match (≥ 80) in ≥ 3
+  distinct roles. These are scarce portfolio-level assets: losing them
+  costs you N reqs, not 1, so the panel surfaces them before they stall.
+- **Lonely roles** — roles whose own shortlist has *no* match ≥ 80, but
+  at least one candidate from another role's pool would score ≥ 70 here
+  *and* the move doesn't hurt their own home fit by more than 5 pts.
+  These are the "transplant" opportunities sitting in plain sight.
+- **Portfolio lift hero** — Σ(best_alt_score − current_score) over every
+  active candidate, normalised to a conic ring and band-tinted
+  (idle · modest · meaningful · urgent based on lift + move count).
+  Plus tiles: active candidates · open roles · routing moves · avg lift
+  per move · talent magnets · lonely roles.
+- **Routing flow** — a Sankey-style SVG with source roles on the left
+  (rose, count of candidates lost) and target roles on the right
+  (emerald, count gained), with edge thickness ∝ score gain. One glance
+  shows whether your portfolio is converging or diverging.
+- **Score histogram** — every (candidate × role) cell, bucketed into
+  10-pt bins so you can see at a glance whether your pool is broadly
+  strong across roles or whether 80% of cells live below 55.
+
+**Backend mirror** — `backend/app/services/crosswind.py` is the
+byte-for-byte Python port: same thresholds (`STRONG_FLOOR=80`,
+`MISPLACE_THRESHOLD=10`, `MAGNET_ROLES=3`, `TRANSPLANT_FLOOR=70`), same
+frozen statuses (`passed`, `offer`), same diff-why builder, same
+`(skill 0.55 · loc 0.15 · sen 0.20 · base 0.10)` weights. Verified on a
+5-candidate × 3-role fixture: same `current_total=390`,
+`optimal_total=500`, `lift=110`, two routing moves at +55 each,
+identical "why" lines.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/crosswind/summary \
+  -H 'content-type: application/json' \
+  -d '{ "roles": [...], "candidates": [...], "includeBrief": true }' \
+  | jq '.lift_total, .moves[0].why, .magnets[0].candidate_name'
+```
+
+API version bumped `0.12.0 → 0.13.0`.
+
+---
+
 ## What's new — Cadence Studio (Day 52)
 
 Forecast Studio (Day 47) is the **aggregate** answer: *will I hire by
