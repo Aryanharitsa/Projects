@@ -568,6 +568,49 @@ class ApiService {
     });
   }
 
+  // ─── Showdown Arena ────────────────────────────────────────────────────────
+  // Paired A/B test of two prompts ("Champion" vs "Challenger") across a
+  // shared set of test cases. Surfaces mean Δ, 95% bootstrap CI, sign-test
+  // p-value, Cohen's d, win rate, and a ship/keep/no-decision verdict.
+  // Round-13.
+
+  async listShowdowns(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/showdown${suffix}`);
+  }
+
+  async createShowdown(payload) {
+    return this.request('/showdown', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedShowdown() {
+    return this.request('/showdown/seed', { method: 'POST' });
+  }
+
+  async showdownStats() {
+    return this.request('/showdown/stats');
+  }
+
+  async getShowdown(showdownId) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}`);
+  }
+
+  async deleteShowdown(showdownId) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}`, { method: 'DELETE' });
+  }
+
+  async runShowdown(showdownId, payload = {}) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.
