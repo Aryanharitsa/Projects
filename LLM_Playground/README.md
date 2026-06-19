@@ -7,17 +7,146 @@ in a queryable, comparable history, see the **quality/cost frontier** across
 your whole spend in Insights, define **Eval Suites** to catch regressions
 before users do, build **Rubrics** (first‑class, anchor‑driven, versioned
 judge sheets), **Optimize** any prompt automatically against those rubrics
-into a measurably better one — and, new this round, **stress‑test** your
-shipped prompt with **Adversary Lab**: probe it against 15 deterministic
-perturbations (typos, structural flips, distractor noise, prompt‑injection
-vectors) and read off a 0‑100 Robustness Score before users find the cracks
-for you.
+into a measurably better one, **stress‑test** prompts with **Adversary Lab**
+(15 deterministic perturbations + Robustness score) — and, new this round,
+**A/B test** any two prompts head‑to‑head with **Showdown Arena**: paired
+mean Δ, 95 % bootstrap CI, sign‑test p‑value, Cohen's d, and a
+**ship / keep / no‑decision** verdict that tells you whether the challenger
+is actually better than the champion or just looks better on a few
+cherry‑picked cases.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Adversary Lab (Day 53)
+## 🆕 What's new — Showdown Arena (Day 58)
+
+> Round‑13. Every other surface in the playground answers a different
+> question — Arena fans one prompt out to many models, Vote ranks one
+> prompt's outputs, Suites batches one prompt across cases, Rubrics judges
+> one response, Optimizer *evolves* a prompt to chase a higher score,
+> Adversary probes how that prompt holds up under perturbation. None of them
+> answer the single question every prompt engineer hits the moment they have
+> a candidate revision: **"is this challenger actually better than the
+> champion currently in production, or am I about to ship noise?"**.
+
+Hit **Showdown** in the sidebar. A *showdown* runs the **same** test cases
+through both prompts ("Champion" and "Challenger"), judges each response with
+the same rubric, then surfaces a **paired** statistical comparison:
+
+* **Mean Δ** — average per‑case `(challenger.composite − champion.composite)`.
+* **Paired bootstrap 95 % CI** — `5000` resamples of the per‑case delta
+  vector (seeded off the showdown id so re‑runs are byte‑for‑byte
+  reproducible), percentile bounds at 2.5 % / 97.5 %.
+* **Sign‑test p‑value** — two‑sided exact binomial on the win/loss vector,
+  ties stripped. "Are the wins distinguishable from a coin?".
+* **Win rate** — fraction of cases where challenger > champion.
+* **Cohen's d** — paired effect size `mean(Δ) / std(Δ)` (sample std).
+* **Per‑dimension Δ** — when a rubric is attached, every rubric dim carries
+  its own mean Δ + worst/best Δ + sample count.
+
+### Decision rule
+
+The headline the UI lives on is a clean four‑way verdict driven by a single
+formula reused across the engine, the Markdown digest, and the badge in the
+sidebar list:
+
+```
+ship_challenger : mean_Δ ≥ +3.0  AND  ci_low > 0  AND  win_rate ≥ 0.55
+keep_champion   : mean_Δ ≤ −3.0  AND  ci_high < 0 AND  win_rate ≤ 0.45
+tied            : |mean_Δ| < 1.0 AND  CI straddles 0 AND  win_rate ∈ [.40,.60]
+no_decision     : effect there but not separable from noise — add more cases
+```
+
+### Two scoring modes
+
+- **Dry‑run** (default) — heuristic scoring with a deterministic synthesised
+  response per (prompt, case). Better‑engineered prompts produce more
+  scoring cues (step‑by‑step structure, format compliance, expected‑token
+  echoes) so the challenger consistently wins on prompt quality rather than
+  RNG. The entire loop runs **without any API keys** in milliseconds.
+- **Live** — real candidate model generates both responses, real judge
+  model scores each one against your saved Rubrics rubric. The API refuses
+  to spend money without `{confirm_live: true}`.
+
+### Seed → in 10 seconds
+
+Hit **Seed demo** to drop in a "Customer support — v1 vs v2 (concise +
+structured)" showdown with 10 representative support tickets (mobile
+crashes, refunds, GDPR Article 28, 502s, SSO pricing, custom‑field exports,
+data‑deletion). Champion is a terse one‑liner; Challenger is the same
+prompt rewritten with structure, examples, and constraints. Run it dry‑run
+and the deterministic engine produces:
+
+* **Decision: Ship Challenger** — `Ship v2 (structured). Mean Δ +3.95
+  across 10 cases (80% wins) is significant (p≈0.039).`
+* Mean Δ **+3.95** · 95 % CI **[+1.40, +6.20]** (excludes 0) · Cohen's d
+  **0.94** · sign‑test p **0.039** · **80 %** wins
+* Per‑case strip: 8 challenger wins, 1 tie, 1 champion win — sorted worst
+  → best so any regression bubbles to the top
+* Same numbers on every re‑run — seed and bootstrap are both deterministic
+
+### The visual surface
+
+* **Hero** — 168 px decision ring (conic gradient at win‑rate %, decision
+  glyph + Δ in the centre), gradient header tile with the new Swords
+  logomark, 5‑tile stats strip (Showdowns · Ship recs · Keep recs · Tied ·
+  Avg Δ).
+* **Decision banner** — full‑width gradient card hue‑lit by decision, 168 px
+  ring + headline + four metric tiles (champion composite · challenger
+  composite · win rate · Cohen's d) + action stack (Re‑run · Markdown digest
+  · Delete).
+* **Effect‑size forest plot** — centred bipolar bar with the 95 % CI band
+  drawn as a translucent overlay, zero line, three‑metric strip below
+  (`CI excludes 0?` · `Sign test (p<.05 ✓)` · cases compared).
+* **W/L/T pills** — emerald wins, slate ties, amber losses, labelled with
+  the user's Champion/Challenger names.
+* **Per‑dimension impact** — 2‑column grid of rubric dims, each a centred
+  bipolar Δ bar + worst/best Δ + sample count (absent without a rubric).
+* **Per‑case results** — every case row carries direction glyph (↑ ↓ =),
+  champion → challenger composite, signed Δ, hue‑coded bipolar bar; click
+  to expand and see champion vs challenger responses side‑by‑side, per‑dim
+  scores with delta chips, and the expected‑output reference.
+* **Markdown digest** — one click exports a copyable report (decision +
+  formula + per‑dim table + per‑case table) for the PR description.
+
+### API surface
+
+| Verb | Path | Purpose |
+|------|------|---------|
+| `GET` | `/api/showdown` | List showdowns (filter by `status` / `decision`) |
+| `POST` | `/api/showdown` | Create a draft showdown |
+| `POST` | `/api/showdown/seed` | Idempotent demo seed (re‑seed returns same id) |
+| `GET` | `/api/showdown/stats` | Roll‑up: counts by decision, avg/best mean Δ, recent 5 |
+| `GET` | `/api/showdown/<id>` | Full showdown + per‑case runs |
+| `DELETE` | `/api/showdown/<id>` | Delete showdown + every run |
+| `POST` | `/api/showdown/<id>/run` | Run both prompts × every case, persist stats |
+
+### Engine architecture
+
+* **`backend/src/showdown.py`** (~1100 LOC, pure stdlib) — schema bootstrap
+  for `showdowns` + `showdown_runs`, deterministic dry‑run scoring (mirrors
+  Adversary's heuristic so deltas compose), live scoring that fans
+  candidate + judge calls across 2 N tasks with a 4‑wide
+  `ThreadPoolExecutor`, paired bootstrap CI, log‑space exact‑binomial sign
+  test, Cohen's d, decision rule, per‑dimension roll‑up, headline
+  composer.
+* **Determinism** — bootstrap RNG seeded off the showdown id
+  (`md5(...)[0:8]`); same input → same CI on every run. Synthetic response
+  generator partitions on side seed (`"champ"` / `"chall"`) so tied prompts
+  don't collide on identical text.
+* **Validation** — `python3 -c "import ast"` clean on `showdown.py` and the
+  updated `routes/llm.py`; end‑to‑end engine smoke: seeded demo →
+  `decision='ship_challenger', mean_delta=+3.95, ci=[1.4, 6.2],
+  win_rate=0.8, p_sign≈0.039, d=0.94`; Flask `test_client` smoke pass on
+  all 7 endpoints; `npx vite build` clean — 1733 modules,
+  `index-CqA13br3.js` **778.74 kB / gzip 210.03 kB** (+40 kB raw / +9 kB
+  gzip vs pre‑Showdown baseline, fully accounted for by the ~1100‑LOC
+  component).
+
+---
+
+## What's new — Adversary Lab (Day 53)
 
 > Round‑11. Every other surface in the playground evaluates *clean* prompts:
 > Arena fans them out, Vote ranks them, Suites batches across cases, Rubrics

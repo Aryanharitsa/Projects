@@ -66,6 +66,7 @@ import EvalSuites from './components/EvalSuites';
 import RubricsStudio from './components/RubricsStudio';
 import OptimizerStudio from './components/OptimizerStudio';
 import AdversaryLab from './components/AdversaryLab';
+import ShowdownArena from './components/ShowdownArena';
 import './App.css';
 
 const App = () => {
@@ -1086,7 +1087,14 @@ const App = () => {
                       <RadioGroupItem value="adversary" id="adversary" />
                       <Label htmlFor="adversary" className="cursor-pointer flex items-center gap-1">
                         <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                        Adversary <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-cyan-500 to-rose-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Adversary
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="showdown" id="showdown" />
+                      <Label htmlFor="showdown" className="cursor-pointer flex items-center gap-1">
+                        <Swords className="w-3.5 h-3.5 text-cyan-600" />
+                        Showdown <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1353,7 +1361,11 @@ const App = () => {
           </div>
 
           {/* Main + Response swap out for the Arena panel when arena mode is active */}
-          {selectedMode === 'adversary' ? (
+          {selectedMode === 'showdown' ? (
+            <div className="lg:col-span-3">
+              <ShowdownArena />
+            </div>
+          ) : selectedMode === 'adversary' ? (
             <div className="lg:col-span-3">
               <AdversaryLab />
             </div>

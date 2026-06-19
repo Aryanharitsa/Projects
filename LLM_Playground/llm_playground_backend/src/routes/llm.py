@@ -20,6 +20,7 @@ from src import evals as evals_lib
 from src import rubrics as rubrics_lib
 from src import optimizer as optimizer_lib
 from src import adversary as adversary_lib
+from src import showdown as showdown_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1521,6 +1522,93 @@ def adversary_run(audit_id):
     try:
         payload, status = adversary_lib.run_audit(
             audit_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+# ─── Showdown Arena ────────────────────────────────────────────────────────
+# Paired A/B testing of two prompts ("Champion" vs "Challenger") across a
+# shared set of test cases. Surfaces real statistics — mean Δ, paired
+# bootstrap 95% CI, sign-test p-value, Cohen's d, win rate — and a
+# ship/keep/no-decision verdict. Round-13.
+
+@llm_bp.route('/showdown', methods=['GET'])
+def showdown_list():
+    args = request.args
+    rows, total = showdown_lib.list_showdowns(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        decision=(args.get('decision') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'showdowns': rows, 'total': total})
+
+
+@llm_bp.route('/showdown', methods=['POST'])
+def showdown_create():
+    data = request.get_json() or {}
+    try:
+        sd = showdown_lib.create_showdown(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            champion_prompt=(data.get('champion_prompt') or '').strip(),
+            challenger_prompt=(data.get('challenger_prompt') or '').strip(),
+            champion_label=(data.get('champion_label') or 'Champion'),
+            challenger_label=(data.get('challenger_label') or 'Challenger'),
+            rubric_id=(data.get('rubric_id') or '').strip(),
+            rubric_revision=data.get('rubric_revision'),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            test_cases=data.get('test_cases') or [],
+            dryrun=bool(data.get('dryrun', False)),
+            n_bootstrap=data.get('n_bootstrap', showdown_lib.DEFAULT_BOOTSTRAP),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'showdown': sd}), 201
+
+
+@llm_bp.route('/showdown/seed', methods=['POST'])
+def showdown_seed():
+    sd = showdown_lib.seed_demo()
+    return jsonify({'success': True, 'showdown': sd}), 201
+
+
+@llm_bp.route('/showdown/stats', methods=['GET'])
+def showdown_stats():
+    return jsonify({'success': True, 'stats': showdown_lib.stats()})
+
+
+@llm_bp.route('/showdown/<showdown_id>', methods=['GET'])
+def showdown_get(showdown_id):
+    sd = showdown_lib.get_showdown(showdown_id)
+    if not sd:
+        return jsonify({'success': False, 'error': 'showdown not found'}), 404
+    return jsonify({'success': True, 'showdown': sd})
+
+
+@llm_bp.route('/showdown/<showdown_id>', methods=['DELETE'])
+def showdown_delete(showdown_id):
+    if not showdown_lib.delete_showdown(showdown_id):
+        return jsonify({'success': False, 'error': 'showdown not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/showdown/<showdown_id>/run', methods=['POST'])
+def showdown_run(showdown_id):
+    """Run the showdown — both prompts × every case, paired stats roll-up."""
+    data = request.get_json() or {}
+    try:
+        payload, status = showdown_lib.run_showdown(
+            showdown_id,
             provider_factory=provider_factory,
             confirm_live=bool(data.get('confirm_live', False)),
         )
