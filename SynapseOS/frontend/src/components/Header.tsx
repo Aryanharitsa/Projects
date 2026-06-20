@@ -17,6 +17,8 @@ type Props = {
   onOpenAtlas?: () => void;
   onOpenChronicle?: () => void;
   chronicleBadge?: number;
+  onOpenPulse?: () => void;
+  pulseBadge?: number;
 };
 
 export function Header({
@@ -34,6 +36,8 @@ export function Header({
   onOpenAtlas,
   onOpenChronicle,
   chronicleBadge,
+  onOpenPulse,
+  pulseBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -148,6 +152,22 @@ export function Header({
               {chronicleBadge !== undefined && chronicleBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-pink/30 ring-1 ring-synapse-pink/60 text-[10px] text-ink-100 px-1">
                   {chronicleBadge > 99 ? "99+" : chronicleBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenPulse && (
+            <button
+              onClick={onOpenPulse}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-pink/20 via-synapse-lime/15 to-synapse-cyan/15 ring-1 ring-synapse-pink/40 hover:ring-synapse-pink/70 px-3 py-1 font-mono text-[11px] text-synapse-pink hover:text-ink-100 transition"
+              aria-label="open pulse"
+              title="What changed in your second brain this week — new notes, bridges, hubs, vocabulary delta"
+            >
+              <span aria-hidden>⩘</span>
+              pulse
+              {pulseBadge !== undefined && pulseBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-lime/30 ring-1 ring-synapse-lime/60 text-[10px] text-ink-100 px-1">
+                  {pulseBadge > 99 ? "99+" : pulseBadge}
                 </span>
               )}
             </button>

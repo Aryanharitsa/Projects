@@ -580,3 +580,120 @@ export type ChronicleReport = {
     most_stable?: string;
   };
 };
+
+// ----------------------------------------------------------------- pulse
+
+export type PulseClusterStatus =
+  | "born"
+  | "emerging"
+  | "hot"
+  | "warm"
+  | "dormant";
+
+export type PulseRecommendationKind =
+  | "synthesize"
+  | "name"
+  | "revisit"
+  | "bridge"
+  | "hub";
+
+export type PulseDay = {
+  date: string;        // YYYY-MM-DD
+  created: number;
+  revisited: number;
+};
+
+export type PulseCluster = {
+  cluster_id: number;
+  name: string;
+  color: string;
+  size: number;
+  new_count: number;
+  revisits_count: number;
+  share_new: number;
+  momentum: number;
+  centroid_drift: number | null;
+  status: PulseClusterStatus;
+  last_touched_days: number | null;
+  new_terms: string[];
+  hot_titles: string[];
+};
+
+export type PulseBridge = {
+  source_id: number;
+  source_title: string;
+  target_id: number;
+  target_title: string;
+  source_cluster_id: number;
+  source_cluster_name: string;
+  source_cluster_color: string;
+  target_cluster_id: number;
+  target_cluster_name: string;
+  target_cluster_color: string;
+  strength: number;
+  source_is_new: boolean;
+  target_is_new: boolean;
+};
+
+export type PulseHub = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  tags: string[];
+  degree: number;
+  weight: number;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  days_old: number;
+};
+
+export type PulseRecommendation = {
+  kind: PulseRecommendationKind;
+  headline: string;
+  detail: string;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  note_id: number | null;
+  priority: number;
+};
+
+export type PulseReport = {
+  window_days: number;
+  generated_at: string;
+  window_start: string;
+  headline: string;
+  total_notes: number;
+  new_notes: number;
+  revisited_notes: number;
+  words_written: number;
+  streak_days: number;
+  synapses_total: number;
+  bridges_born: number;
+  hubs_born: number;
+  clusters_total: number;
+  clusters_hot: number;
+  clusters_emerging: number;
+  clusters_dormant: number;
+  activity: PulseDay[];
+  clusters: PulseCluster[];
+  bridges: PulseBridge[];
+  hubs: PulseHub[];
+  emerged_terms: string[];
+  faded_terms: string[];
+  recommendations: PulseRecommendation[];
+  summary: {
+    new_notes?: number;
+    revisited_notes?: number;
+    words_written?: number;
+    streak_days?: number;
+    bridges_born?: number;
+    hubs_born?: number;
+    clusters_hot?: number;
+    clusters_emerging?: number;
+    clusters_dormant?: number;
+    synapses_total?: number;
+    avg_degree?: number;
+  };
+};
