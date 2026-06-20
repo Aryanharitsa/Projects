@@ -20,6 +20,7 @@ import type {
   Note,
   OrphanSuggestion,
   PathResult,
+  PulseReport,
   SearchHit,
   TensionReport,
   Trail,
@@ -313,5 +314,23 @@ export const api = {
       q.set("min_span_days", String(opts.minSpanDays));
     const qs = q.toString();
     return `${BASE}/chronicle/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  pulse: (opts?: { windowDays?: number; threshold?: number; topK?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    const qs = q.toString();
+    return j<PulseReport>(`/pulse${qs ? `?${qs}` : ""}`);
+  },
+
+  pulseExportUrl: (opts?: { windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return `${BASE}/pulse/export.md${qs ? `?${qs}` : ""}`;
   },
 };

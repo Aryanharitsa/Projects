@@ -87,6 +87,37 @@ threshold live, and watch your topical clusters discover themselves.
   W*". Click a bubble to inspect a cluster; click ✦ to jump straight into
   Synthesis; click ⊙ to isolate it on the canvas. Pure stdlib,
   deterministic, exportable to portable Markdown.
+- **Pulse — what changed in your second brain this week.**
+  Atlas is the snapshot of *where* every cluster sits right now.
+  Chronicle is the biography of *one* cluster, chapter by chapter.
+  Daily Brief is *today's* revisit picks. **Pulse fills the gap between
+  them — the cross-cluster, time-windowed diff.** Pick a window
+  (1d / 7d / 30d / 90d) and Pulse reads the whole graph as a story:
+  **new notes** written, ≈ **words shipped**, **revisits**, a
+  consecutive-day **writing streak**, the current
+  **synapse / hub / bridge** counts, and a daily activity
+  **sparkline** that splits creation vs revisits. Per cluster: a
+  **status badge** (``born`` if every member is in-window · ``hot``
+  if ≥ 3 new · ``emerging`` if the new majority crossed 50% · ``warm``
+  for minor moves · ``dormant`` for silence), a **momentum bar**,
+  **share-new %**, **centroid drift** between the pre-window and
+  in-window halves (when both are populated — same `1 − cosine` move
+  Chronicle uses), the **new vocabulary** the latest notes pulled in
+  scored against the rest of the cluster, and the in-window note
+  titles. **Bridges born** lists every fresh cross-cluster synapse
+  whose two ends sit in *different* communities and where at least
+  one end is a new note — the cross-pollination you just drew. **Hubs
+  born** lists new notes that already pull ≥ 3 synapses (instant
+  centrality is rare and worth surfacing). A library-wide **vocabulary
+  delta** prints emerged vs faded terms across the whole graph using
+  the same forgiveness factor as Chronicle so a slowly-mutating
+  lexicon still registers. A prioritized **recommendations** panel
+  distils the signals into one-click moves: *synthesize a hot cluster
+  before it scatters*, *name an emerging one*, *re-read a brand-new
+  hub*, *write a connector note for a fresh bridge*, *revisit a
+  long-dormant cluster*. Pure stdlib, deterministic, portable
+  Markdown export. Header badge counts new notes + bridges in the
+  last 7d so the surface signals when there's a story to read.
 - **Chronicle — watch your topics evolve.**
   Every other surface in SynapseOS is a snapshot of *right now*. Chronicle
   is the only one that asks *how has your thinking on this topic changed
@@ -202,7 +233,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas · Chronicle modals │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas · Chronicle · Pulse modals │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -773,6 +804,14 @@ Incremental moves for future rotation days:
       per-chapter anchor + sentence, inter-chapter drift velocity, pivot
       detection, emerged/faded vocabulary deltas, calm/shifting/pivoting
       categorization, portable Markdown export *(shipped)*
+- [x] **Pulse** — cross-cluster, time-windowed diff of the whole graph:
+      headline + metrics (new notes · words · revisits · streak),
+      daily activity sparkline (created vs revisited), per-cluster
+      status (born / hot / emerging / warm / dormant) with momentum bar,
+      share-new, centroid drift, new-vocabulary chips and hot titles,
+      cross-cluster bridges born, hubs born (new notes with degree ≥ 3),
+      library-wide vocabulary delta, prioritized recommendations,
+      portable Markdown export *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

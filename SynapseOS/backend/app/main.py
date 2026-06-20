@@ -31,6 +31,7 @@ from . import atlas as atlas_engine
 from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import chronicle as chronicle_engine
+from . import pulse as pulse_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
@@ -989,4 +990,57 @@ def chronicle_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="chronicle.md"'},
+    )
+
+
+# ---------------------------------------------------------------- pulse
+
+
+@app.get("/pulse", response_model=schemas.PulseReportOut)
+def pulse(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(
+        pulse_engine.DEFAULT_WINDOW_DAYS,
+        ge=pulse_engine.WINDOW_MIN,
+        le=pulse_engine.WINDOW_MAX,
+    ),
+) -> dict:
+    """Cross-cluster, time-windowed report — what changed in your second
+    brain over the last ``window_days``.
+
+    Per-cluster: how many notes are new, how many were re-engaged, the
+    centroid drift between pre- and in-window halves (when both are
+    populated), and a status (``born`` / ``emerging`` / ``hot`` /
+    ``warm`` / ``dormant``). Library-wide: bridges born (cross-cluster
+    synapses involving a new note), hubs born (new notes with degree
+    ≥ 3), an emerged/faded vocabulary delta, a daily activity
+    sparkline, and a prioritized recommendations list."""
+    r = pulse_engine.compute_pulse(
+        window_days=window_days, threshold=threshold, top_k=top_k
+    )
+    return pulse_engine.serialize(r)
+
+
+@app.get("/pulse/export.md")
+def pulse_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(
+        pulse_engine.DEFAULT_WINDOW_DAYS,
+        ge=pulse_engine.WINDOW_MIN,
+        le=pulse_engine.WINDOW_MAX,
+    ),
+) -> Response:
+    """Portable Markdown brief — headline, key metrics, vocab delta,
+    active clusters, bridges born, hubs, recommendations. Paste-anywhere
+    snapshot of the window."""
+    r = pulse_engine.compute_pulse(
+        window_days=window_days, threshold=threshold, top_k=top_k
+    )
+    md = pulse_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="pulse.md"'},
     )

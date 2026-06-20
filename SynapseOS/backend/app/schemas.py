@@ -604,3 +604,95 @@ class ChronicleReportOut(BaseModel):
     min_span_days: float
     clusters: list[ChronicleClusterOut]
     summary: dict
+
+
+# ----------------------------------------------------------------- pulse
+
+
+class PulseDayOut(BaseModel):
+    date: str
+    created: int
+    revisited: int
+
+
+class PulseClusterOut(BaseModel):
+    cluster_id: int
+    name: str
+    color: str
+    size: int
+    new_count: int
+    revisits_count: int
+    share_new: float
+    momentum: float
+    centroid_drift: float | None = None
+    status: Literal["born", "emerging", "hot", "warm", "dormant"]
+    last_touched_days: int | None = None
+    new_terms: list[str]
+    hot_titles: list[str]
+
+
+class PulseBridgeOut(BaseModel):
+    source_id: int
+    source_title: str
+    target_id: int
+    target_title: str
+    source_cluster_id: int
+    source_cluster_name: str
+    source_cluster_color: str
+    target_cluster_id: int
+    target_cluster_name: str
+    target_cluster_color: str
+    strength: float
+    source_is_new: bool
+    target_is_new: bool
+
+
+class PulseHubOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    degree: int
+    weight: float
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    days_old: int
+
+
+class PulseRecommendationOut(BaseModel):
+    kind: Literal["synthesize", "name", "revisit", "bridge", "hub"]
+    headline: str
+    detail: str
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    note_id: int | None = None
+    priority: float
+
+
+class PulseReportOut(BaseModel):
+    window_days: int
+    generated_at: str
+    window_start: str
+    headline: str
+    total_notes: int
+    new_notes: int
+    revisited_notes: int
+    words_written: int
+    streak_days: int
+    synapses_total: int
+    bridges_born: int
+    hubs_born: int
+    clusters_total: int
+    clusters_hot: int
+    clusters_emerging: int
+    clusters_dormant: int
+    activity: list[PulseDayOut]
+    clusters: list[PulseClusterOut]
+    bridges: list[PulseBridgeOut]
+    hubs: list[PulseHubOut]
+    emerged_terms: list[str]
+    faded_terms: list[str]
+    recommendations: list[PulseRecommendationOut]
+    summary: dict
