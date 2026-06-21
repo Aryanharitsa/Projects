@@ -49,6 +49,9 @@ export type ShortlistEntry = {
   candidateId: number;
   status: PipelineStatus;
   addedAt: number;
+  /** Timestamp of the most recent stage transition; defaults to addedAt
+   *  when not yet recorded. Used by Cadence Studio. */
+  stageChangedAt?: number;
   note?: string;
 };
 
@@ -172,7 +175,9 @@ export function setStatus(
   const role = getRole(id);
   if (!role) return null;
   const next = role.shortlist.map(e =>
-    e.candidateId === candidateId ? { ...e, status } : e,
+    e.candidateId === candidateId
+      ? { ...e, status, stageChangedAt: Date.now() }
+      : e,
   );
   return updateRole(id, { shortlist: next });
 }

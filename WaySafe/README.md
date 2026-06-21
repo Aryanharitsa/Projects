@@ -72,6 +72,85 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   Ships with a curated **15-stay Goa preset list** (hotels, resorts,
   hostels, homestays), takes custom lat/lon rows, and exports as JSON
   (`waysafe.staysafe.v1`) and markdown for WhatsApp/email.
+- **🆕 Pulse — Today's Outlook** — the *morning-brief* surface that
+  answers the question no other tab does: *"what's actually different in
+  my day vs yesterday, and what should I do about it before lunch?"*
+  Pulse treats your day as a portfolio of **watched points** — typically
+  your stay plus 1–3 planned destinations — and re-runs every WaySafe
+  engine for each point at **`now`** *and* at **`now − 24 h`**:
+  `safety.compute_safety` (signed Δscore + band shift), `forecast.risk_curve`
+  for today + the prior-day DOW (so a calm yesterday → restless today
+  swing pops out), `sentinel.cluster_incidents` (which clusters intersect
+  the day's plan within 1.5 km, escalating-first), and `refuge.find_refuge`
+  (is the closest help POI still in a Strong / Viable band?). It then
+  composes a single one-page brief: a **mood ring** (Calm / Watch /
+  Active / Critical, picked from worst-band + cluster pressure + ≥2
+  watched points slipping ≥10 pts), a **biggest-mover card** (signed
+  Δscore on the point that swung most), a **24-hour joint risk ribbon**
+  (`joint(h) = max_p curve_p(h)`) with the best 3-h **outdoor window**
+  outlined in green and the worst outlined in red, **per-watched-point
+  cards** (ring + delta chip + cluster pings + mini-curve + best-window /
+  nearest-refuge side panel), a **Sentinel intersections** list, a
+  ranked **"what changed since yesterday"** change log, and a prioritised
+  **plan-of-day** checklist that references Tempo and the Map tab by name
+  when those are the right follow-ups. Pulse is *pure composition* — it
+  adds zero new physics; every number comes from an engine that already
+  shipped. The *new* thing it brings to WaySafe is the **temporal-delta
+  lens**: every other surface up to Day 55 was forward-looking; Pulse is
+  the first surface that asks "what's different now than 24 hours ago",
+  which is the signal that makes a daily brief actually worth opening.
+  Exports as JSON (`waysafe.pulse.v1`) and markdown for the WhatsApp /
+  email family-update loop. Lives at `tabs[0]` because this is what the
+  traveller opens first thing in the morning. Pure-Python, zero new deps.
+- **🆕 Tempo — Departure-Window Optimizer** — the *temporal* layer that
+  closes the loop on planning: **when** should you leave? Every other
+  surface answers *where* (Compass), *where to sleep* (StaySafe), *how to
+  get there* (Plan Route), or *where to flee* (Refuge). None answer the
+  most common real-world question: *"I want to be at the destination
+  between 17:00 and 19:00 — what's the optimal minute to leave?"*. Tempo
+  sweeps the joint **(arrival_minute × route_flavor)** grid (safest ·
+  balanced · fastest), runs the forecast-aware A\* once per cell, and
+  scores each candidate by **integrated risk along the actual corridor**:
+  `risk_km = mean(forecast_blended_risk along corridor) × distance_km`,
+  composite `= 100·exp(−κ·risk_km)` with κ=0.35 (risk_km 0.64→80 ·
+  1.23→65 · 1.98→50 · 3.0→35). The winner is the highest-composite
+  feasible cell (depart ≥ now); ties broken by lower risk-km, then higher
+  min-safety, then shorter ETA. **Comparisons** name three baselines —
+  *depart-now*, *earliest arrival*, *latest arrival* — and quote the
+  concrete Δrisk-km saved vs each. **UI**: a hero card with the chosen
+  depart-time as a big ring (composite-filled, hue by band, with the
+  *in 41 min* relative time below), a colour-coded **flavor × arrival
+  heatmap** marking the winner with a glow ring and dimming cells whose
+  depart-time is already in the past, a **comparison strip** of side-by-side
+  cards (winner card glows, baselines show *−2 pts*, *+0.07 risk-km* deltas),
+  a **rationale** block of plain-English bullets ("vs Latest arrival
+  (18:41→19:00): winner saves 0.07 risk-km along the 9.9 km corridor,
+  +2 pts on the composite"), a **runners-up** strip for the next-best two
+  cells within 6 pts, and a **pydeck map** overlay of the winning corridor
+  in green with runners-up faint. Exports as JSON (`waysafe.tempo.v1`)
+  and markdown. Pure-Python, reuses `forecast.HazardForecaster`,
+  `routing.plan_forecast_route`, and `safety.point_risk` — Tempo's
+  verdict always agrees with the safest-A\* path at the chosen depart.
+- **🆕 Refuge — "Get Me to Safety" engine** — the missing *egress* layer
+  that answers the only question that matters when something feels wrong
+  *right now*: **where do I go in the next five minutes?** The previous
+  SOS tab was a placeholder — flip a flag, show the three closest help
+  POIs sorted by raw great-circle distance. That ranking is wrong in the
+  moments it matters. Refuge ranks every help POI inside the scan radius
+  by a deterministic composite **Refuge Score** — *proximity 35% · path
+  safety 25% · trust tier 20% · open-now 15% · corridor crowd 5%* — and
+  surfaces a bearing-compass hero ("Head **SSW** · police in **178 m**"),
+  per-tier arrival scripts (*"walk to triage and tell them you don't feel
+  safe"* for hospitals; *"ring the night-bell at the gate"* for fire
+  stations), a 5-step **corridor heat-strip** showing path safety along
+  the great-circle line to each option (dashed outline = waypoint inside
+  a geofenced risk zone), and a country-specific **emergency-card**
+  quick-dial (India 100/101/102/1091/1363 · EU 112 · US/CA 911). A
+  one-tap **Quiet Beacon** writes a broadcast row keyed to the top refuge
+  and produces a ready-to-send SMS payload with a walking Google-Maps
+  deeplink — designed for the threat model where a visible panic button
+  makes things worse. Pure-stdlib + reuses `safety.point_risk`, so Refuge
+  agrees with the safest-A\* router on which corridors are good.
 - **Sentinel — Live Cluster Intel** — DBSCAN over haversine groups raw
   incidents into discrete hotspots; each cluster is graded
   Critical / Emerging / Steady / Cooling by **velocity** (recent rate ÷
@@ -298,6 +377,381 @@ The render stack includes:
 Engine in `stays.py` (≈580 LOC, pure-stdlib + reuse of `safety` and
 `forecast`). UI render in `theme.render_staysafe`. Preset data in
 `data/stays.csv` (15 Goa stays).
+
+---
+
+## 🆘 Refuge — "Get Me to Safety" engine (Day 46)
+
+Every other WaySafe surface is a *planning* surface. Refuge is the
+*egress* surface — the one that fires when a tourist's plan has already
+broken. The pre-existing **SOS** tab in the app was a placeholder: it
+flipped a `sos_active` flag and listed the three closest help POIs by raw
+great-circle distance. That ranking is *wrong* in the only moments it
+matters:
+
+- A hospital 400 m away through an unlit, geofenced corridor is **worse**
+  than a 24/7 store 600 m away on a busy main road.
+- A fire station that's gated at midnight is **worse** than a police
+  chowki 200 m further that's actually staffed.
+- A hotel front desk is a refuge **only** if it's 24/7-attended.
+- Trust tiers exist: police > hospital > embassy > fire > tourist help
+  desk > 24/7 retail > hotel front desk > 24/7 petrol pump.
+
+Refuge replaces the broken ranking with a deterministic composite **0–100
+Refuge Score**:
+
+```
+refuge = 100 · ( 0.35 · proximity
+               + 0.25 · path_safety
+               + 0.20 · trust_tier
+               + 0.15 · open_confidence
+               + 0.05 · crowd_proxy )
+```
+
+| Factor | What it measures | Why it matters |
+|---|---|---|
+| `proximity` | linear: 1.0 at 0 km → 0.0 at `max_radius_km` | The cheapest fix first — closer is always better, all else equal |
+| `path_safety` | mean of `1 − safety.point_risk` across **5 evenly-spaced waypoints** on the great-circle line from you to the candidate | Reuses the exact physics the safest-A\* router uses, so Refuge agrees with the route planner on which corridors are good |
+| `trust_tier` | institutional weight, police 1.00 → 24/7 petrol 0.50 | A police station is intrinsically a stronger refuge than a 24/7 store even at the same distance |
+| `open_confidence` | 1.0 for 24/7 tiers (police, hospital ER, fire, 24/7 store, 24/7 petrol). Tourist help-desks & clinics degrade to 0.25 outside `open_window`; hotel front desks hold 0.85 at night | Refuges you can't enter aren't refuges |
+| `crowd_proxy` | 1.0 if any non-help POI sits within 0.5 km of the corridor midpoint, else 0.0 | A rough proxy for *populated, well-lit main road* vs *dark lane* |
+
+### Tiers
+
+| Key | Weight | 24/7? | Arrival script |
+|---|---:|---:|---|
+| `police` | **1.00** | ✓ | "Walk in. Ask for the duty officer. Show this screen for your location & beacon ID." |
+| `embassy` | 0.95 | ✗ (09–18) | "Show passport at the security booth. After-hours: ring the consular night line." |
+| `hospital` | 0.92 | ✓ | "Walk to Emergency / Casualty. Tell triage you don't feel safe — they will hold you in waiting." |
+| `fire` | 0.85 | ✓ | "Ring the night-bell at the gate. Crews are bunked on-site — someone always answers." |
+| `tourist_help_desk` | 0.78 | ✗ (08–21) | "Hand over your passport copy. They have direct tourist-police hotlines." |
+| `clinic` | 0.62 | ✗ (08–22) | "Reception desk. Most clinics will let you wait inside until conditions change." |
+| `allnight_store` | 0.62 | ✓ | "Walk in, buy something cheap, sit by the counter. Ask the cashier to call a cab." |
+| `hotel` | 0.55 | ✓ (front desk) | "Tell the night manager you need sanctuary. Show a booking on your phone if you have one." |
+| `petrol_24h` | 0.50 | ✓ | "Walk to the attendant booth. Ask to wait while you call someone." |
+
+### Refuge bands
+
+```
+refuge 72..100  →  Strong refuge   (#10B981)
+refuge 55..72   →  Viable refuge   (#FBBF24)
+refuge 35..55   →  Last resort     (#F59E0B)
+refuge  0..35   →  Not a refuge    (#EF4444)
+```
+
+### What the Refuge tab surfaces
+
+- **Bearing-compass hero** — a 168 px conic ring whose stroke colour
+  encodes the top refuge's band and a centred arrow rotated to the
+  initial great-circle bearing from you to the top refuge ("↑ SSW · 178°
+  · 98/100"). Headline reads as a one-liner you can act on without
+  reading the rest of the page: *"Head SSW · police station in 178 m
+  (2 min on foot)."*
+- **Local-spot pill** in the hero — your *current location's* safety
+  score on the right edge of the card. If your spot is **Danger** or
+  **High Risk**, the advisory line escalates to *"You're standing in a
+  high-risk zone (score 46/100) — move now."*
+- **Podium of up to 8 options**, each card stamped with:
+  - Tier icon + label, name, refuge score, band chip, score bar.
+  - Three mini-stats: distance (m), walk-time (min @ 5 km/h), heading
+    (cardinal label like "ENE").
+  - **5-step corridor heat-strip** — one bar per waypoint, hue-coded
+    from `1 − point_risk`, with a *dashed red outline* on any waypoint
+    that falls inside a geofenced risk zone. This is the rare UI element
+    that lets a user *see* whether the path from here to there cuts
+    through a bad area.
+  - Per-tier **arrival script** (one line, italic) so the user knows
+    what to do the moment they walk in.
+  - Up to 3 notes: *"corridor clips 1 risk-zone waypoint"*, *"quiet
+    corridor — no other POIs near midpoint; walk briskly"*, *"clinic
+    normally closes by 22:00 — expect a locked main door, ring the
+    night-bell or call before walking up"*, etc.
+- **Heat-mapped factor matrix** — options as columns, factors as rows,
+  every cell hue-coded by goodness so the trade-off is visible at a
+  glance (the closest option that has the worst path? the bright cell
+  tells you). Per-row weight chip surfaces the composite weights.
+- **Country emergency card** — pre-localised quick-dial. Selection is
+  by lat/lon: India (6–37° N, 68–98° E) → 100 / 101 / 102 / 1091 / 1363
+  / 108 with a note that 112 works as the unified emergency number EU
+  → 112. US/Canada → 911 + poison control + 988. Fallback → 112/911.
+  Renders even in the fallback case (no POI in radius) — phone numbers
+  always work.
+- **Quiet Beacon** — a ready-to-copy SMS payload string and a **walking
+  Google Maps deeplink** to the top refuge. A second button writes a
+  broadcast row keyed to the top refuge into `data/broadcasts.csv` (or
+  the offline outbox), reusing the existing Companion broadcast
+  contract so trusted contacts get a ping with the refuge target.
+  Designed for the threat model where a *visible* panic button makes
+  things worse — no audio, no flashing.
+
+### Fallback (no POI in radius)
+
+If `find_refuge` returns zero candidates, the engine still:
+
+1. Renders the user's own safety score and a single-line advisory
+   ("No registered help POI within scan radius. Use the emergency card
+   below. Move toward main-road traffic until you find lit, populated
+   space.")
+2. Renders the country emergency card — phone numbers don't depend on
+   POI density.
+
+### Data additions
+
+`data/poi.csv` now ships 32 POIs spanning every Refuge tier — hospitals,
+clinics, police stations & chowkis, fire stations & outposts, tourist
+help desks, 24/7 supermarkets and 24/7 petrol pumps — across Panaji,
+Calangute, Candolim, Anjuna, Vagator, Mapusa and Margao. This is what
+makes the tier-diversity in the ranking visible: the top-5 at Calangute
+on a Saturday night reads *police → fire → 24/7 store → 24/7 petrol →
+(closed) tourist office*, not five hospitals in different directions.
+
+Engine in `refuge.py` (≈540 LOC, pure-stdlib + reuse of `safety.point_risk`
+and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
+hour-aware open-confidence by un-checking *"Use current hour"* and
+sliding to 23:00 — the tourist help-desk and clinic drop out of the
+podium.
+
+---
+
+## 💓 Pulse — Today's Outlook (Day 56)
+
+Every WaySafe surface up to Day 55 is a *forward-looking* planner —
+Compass picks *where* to go, StaySafe picks *where to sleep*, Plan Route
+picks *how* to get there, Tempo picks *when* to leave, Refuge picks
+*where to flee*. None of them answer the question a traveller asks the
+*moment they wake up*:
+
+> "What's different in my day than it was 24 hours ago, and what
+>  should I do about it before lunch?"
+
+Pulse is that surface. It treats your day as a small portfolio of
+**watched points** — typically your stay plus 1–3 planned destinations —
+and re-runs every WaySafe engine for each point at **`now`** *and* at
+**`now − 24 h`**, then ranks the resulting deltas into a single one-page
+brief. Pulse adds **zero new physics**; every number on the screen comes
+from an engine that already shipped. The *new* thing it brings is the
+**temporal-delta lens** — the change-since-yesterday signal that makes a
+daily brief actually worth opening.
+
+### What gets re-run per watched point
+
+| Engine | What Pulse asks it twice | New signal |
+|---|---|---|
+| `safety.compute_safety` | score at `now` (full incident set) **and** at `now − 24 h` (filter out incidents created after the cutoff) | signed Δscore + band-shift flag |
+| `forecast.HazardForecaster.risk_curve` | 24-h curve for **today's** DOW + 24-h curve for **yesterday's** DOW | curve diff (mini ribbon per point) |
+| `sentinel.cluster_incidents` | the cluster set is computed once globally — Pulse picks the ones whose halo edge sits within **1.5 km** of the watched point | per-point cluster pings, escalating-first |
+| `refuge.find_refuge` | top option band & distance for the stay | "refuge readiness" tile |
+
+### How the day-level summary is built
+
+```
+joint_curve[h]            = max_p forecast.risk(p, today, h)
+best_outdoor_window       = argmin over h of mean(joint_curve[h : h+3])
+worst_outdoor_window      = argmax over h of mean(joint_curve[h : h+3])
+overall_band              = worst band across watched-point bands
+overall_mood              = Critical / Active / Watch / Calm
+                            (rules below — first match wins)
+```
+
+**Mood rules** (first match wins, so the worst signal sets the tone):
+
+- **Critical** — any watched point Danger, or any intersecting cluster Critical.
+- **Active**   — any watched point High Risk, or any cluster Emerging, or
+  ≥ 2 watched points slipped ≥ 10 pts in 24 h.
+- **Watch**    — any Caution band, or any point dropped ≥ 5 pts.
+- **Calm**     — otherwise.
+
+**Biggest mover** is the watched point that maximises a *signal* score:
+`|Δscore| · 1.0  +  new_incidents_24h · 4.0  +  Σ_escalating-clusters (6 + 2·(velocity−1))  +  6·band-shift  +  4·(refuge band ∈ {High Risk, Danger})`.
+
+### What you see
+
+- A **hero card** — left ring shows the mean watched-point score, mood
+  pill, mood-tinted glow. Headline is one sentence ("Critical morning ·
+  Baga beach down 21 pts · best window 03:00–06:00"). Right card calls
+  out the biggest mover with signed Δscore and a band arrow
+  (Caution → High Risk).
+- A **four-tile strip**: overall band · best 3-h outdoor window · total
+  new incidents within 1 km in the last 24 h · refuge readiness at the
+  stay (band + nearest POI + distance).
+- A **24-hour joint risk ribbon** — one row of 24 cells coloured by
+  `joint_curve(h)`, with the best window outlined in green, the worst
+  outlined in red, and a blue line marking the current hour. Past
+  hours dim to 35% opacity.
+- A **per-watched-point card** — score ring, kind chip (stay /
+  destination / custom), band, Δ-chip ("▼ −21 pts vs 24h ago"), cluster
+  pings (escalating ones go red), a band-shift chip when the band moved,
+  a plain-English changes block, a compact today-curve mini-ribbon, and
+  a side panel with the point's own best 3-h window and nearest refuge.
+- A **Sentinel intersections** list — de-duped across watched points,
+  closest-first within each escalation tier, escalating-first overall.
+- A ranked **"what changed since yesterday"** list — every per-snapshot
+  change line sorted by signal magnitude so the biggest-mover's lines
+  float to the top.
+- A prioritised **plan-of-day** checklist that references *Tempo* and
+  *Map* by name when those are the right follow-ups
+  ("Re-plan any leg through Cluster #1 — pick a corridor ≥ 1.5 km away
+  and prefer the Tempo winner over a now-departure.").
+- **Exports** — JSON (`waysafe.pulse.v1`) and markdown for the WhatsApp
+  / email family-update loop.
+
+### Why this matters
+
+A planner suite that only ever computes "what is" leaves the traveller
+to track "what changed" in their head. Pulse closes that loop. On a calm
+day it says so in one line and lets the user move on; on a day where a
+Sentinel cluster has crossed Critical velocity overnight, it surfaces
+the exact watched-point that touches it, names the cluster, quotes the
+edge distance, and tells the user which other WaySafe tab to open next.
+This is the surface a traveller opens *first* — which is why it now lives
+at `tabs[0]`.
+
+Pure-Python, zero new deps. Pulse is the first WaySafe surface that
+*has no engine of its own* — it's a composer. That's the point.
+
+---
+
+## ⏱ Tempo — Departure-Window Optimizer (Day 51)
+
+Every other surface in WaySafe answers a *spatial* question — where to
+go, where to sleep, how to get there, where to flee. The most common
+real-world planning question is *temporal*:
+
+> "I want to be at the destination between 17:00 and 19:00 today —
+>  when should I leave, and which route flavor should I take?"
+
+The forecaster has `find_best_window` (pointwise sweep around one cell)
+and the router has `find_best_departure` (sweep one alpha around one
+depart-time). Neither models the corridor; neither sweeps route flavors;
+neither anchors the search to a *target arrival window* with feasibility
+constraints. Tempo is the optimisation + UX layer that does.
+
+### Physics
+
+For each `(arrival_t, alpha)` in the grid:
+
+```
+eta_alpha = baseline ETA for that alpha (probed once at window midpoint)
+depart_t  = arrival_t − eta_alpha
+route     = plan_forecast_route(origin, dest, forecaster, depart_t, alpha)
+risk_km   = mean(forecast_blended_risk along corridor) × distance_km
+composite = 100 × exp(−κ · risk_km)        # κ = 0.35
+band      = All-clear ≥80 · Caution 65 · Elevated 50 · High Risk 35 · Danger <35
+```
+
+`risk_km` is the integrated exposure the traveller *actually* absorbs on
+the corridor at that time — it folds in distance, hour-conditional
+forecast, geofences and live-incident proximity into one number. The
+exponential keeps the curve gentle for small differences (so a 0.1 risk-km
+gap doesn't flip the band) and steep for big ones.
+
+Calibration check:
+
+| `risk_km` | composite | band      |
+|----------:|----------:|:----------|
+| 0.00      | 100       | All-clear |
+| 0.64      |  80       | All-clear |
+| 1.23      |  65       | Caution   |
+| 1.98      |  50       | Elevated  |
+| 3.00      |  35       | High Risk |
+
+### Selection
+
+- **Winner** = highest composite among **feasible** cells (where
+  `depart_t ≥ now`). Ties broken by lower `risk_km`, then higher
+  `min_safety`, then shorter ETA.
+- **Runners-up** = next-best two distinct (arrival, flavor) cells within
+  6 pts of the winner.
+- **Infeasible** cells (depart in the past) are still scored and dimmed
+  in the grid with a diagonal-stripe pattern, with a count footnote
+  ("3/30 cells would require leaving in the past").
+
+### Comparisons — three baselines
+
+Every Tempo result names the winner *and* three baselines on the same
+flavor for an honest comparison:
+
+| Baseline | Definition |
+|---|---|
+| **Depart now** | Same-flavor cell whose `depart_t` is closest to `now` |
+| **Earliest arrival** | First arrival slot in the window |
+| **Latest arrival** | Last arrival slot in the window |
+
+Each carries `Δcomposite = winner − baseline` and `Δrisk_km = baseline −
+winner`. The rationale lines quote them directly:
+
+> *"vs Latest arrival (18:41→19:00, composite 88): winner saves 0.07
+>  risk-km along the 9.9 km corridor, +2 pts on the composite."*
+
+When a baseline coincides with the winner (e.g. depart-now happens to be
+optimal), it's flagged "≈ tie with winner".
+
+### Cross-flavor rationale
+
+If at the winner's arrival minute a *different* flavor would have scored
+within 4 pts, Tempo says so explicitly — that tells the user routing
+choice barely moves the needle here, and they can pick by preference. If
+the gap is wider, the rationale surfaces it: *"At 00:15, the **safest**
+flavor beats **fastest** by 6 pts (87 vs 81) — routing matters more than
+departure timing here."*
+
+### What the Tempo tab surfaces
+
+1. **Hero card** — winner depart-time as a big composite-filled ring
+   (hue by band), the relative `in 41 min`, the destination + arrival
+   time on the right, a flavor pill with glyph (🛡 safest · ⚖ balanced ·
+   🏁 fastest), and a meta strip with ETA, distance, risk-km, avg/min
+   safety, and any warm-stretch warning.
+2. **Heatmap grid** — rows = flavors, cols = arrival slots, each cell
+   coloured by its band hue at score-proportional alpha; **winner cell
+   ringed and starred**, infeasible cells dimmed with a 135° stripe
+   pattern. Sub-label inside each cell shows the implied depart-time.
+   A legend strip at the bottom maps colours to bands.
+3. **Comparison strip** — side-by-side cards for **Winner / Depart-now /
+   Earliest / Latest**. Winner card has a coloured glow; baselines show
+   `▼ −2 pts · +0.07 risk-km vs winner` deltas in band-coloured chips.
+4. **Rationale block** — bulleted plain-English explanations of why this
+   minute beats each baseline, with concrete numbers and a forecast
+   pocket call-out when relevant.
+5. **Runners-up** — next-best two cells within 6 pts as compact cards
+   (rank badge · times · composite · band · risk-km · distance).
+6. **Winner-corridor preview** — pydeck map with the winning route in
+   green and runners-up corridors faint grey, plus origin (blue) and
+   destination (orange) markers.
+7. **Exports** — JSON (`waysafe.tempo.v1` schema, includes the full grid
+   for reproducibility) and a markdown digest for WhatsApp / email /
+   Notion paste.
+
+### What it adds over existing surfaces
+
+| Existing | Question it answers | Gap Tempo fills |
+|---|---|---|
+| `Forecast.find_best_window` | Risk-vs-time at *one cell* | Doesn't model the corridor; doesn't sweep route flavors |
+| `routing.find_best_departure` | Sweep depart-times for *one* alpha | One flavor only; ranks by avg/min safety, not exposure; no arrival anchoring |
+| `Compass` | Which destination is safest right now | Spatial only — doesn't move in time |
+| `Plan Route` | Best corridor *given* a depart-time | The depart-time is an input, not optimised |
+
+Tempo is the **optimisation layer** that uses the existing engines as
+oracles. Zero new physics: it reuses `plan_forecast_route` (which itself
+reuses `safety.point_risk` and `HazardForecaster.risk_at`), so Tempo's
+verdict is always consistent with the safest-A\* corridor at the chosen
+depart-time.
+
+### Headline demo — Panaji → Calangute, arrive between 17:30–19:00
+
+On the bundled `incidents.csv` with the corridor seed, anchored at
+`now = Fri 16:30`:
+
+- Winner: depart **17:11** → arrive **17:30**, safest flavor, composite
+  **90/100 · All-clear**, risk-km **0.30** along a 9.9 km corridor.
+- Heatmap: **safest** and **balanced** rows hover at 88–90 across the
+  window; **fastest** row sits flat at 79 — *"routing matters more than
+  departure timing"* is a one-glance read.
+- Comparison: depart-now is identical to the winner (anchor is 36 min
+  before depart, the closest depart-slot in the window is 17:11 itself);
+  latest-arrival (18:41→19:00) scores 88, +2 pts behind the winner.
+- Rationale: *"Destination cell sits in a quiet forecast pocket at 17:30
+  (0.01) — that pocket is why this slot wins."*
 
 ---
 

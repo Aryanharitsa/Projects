@@ -30,6 +30,8 @@ from theme import (
     render_advisory_brief, render_advisory_empty,
     render_compass, render_compass_empty,
     render_staysafe, render_staysafe_empty,
+    render_refuge, render_refuge_empty,
+    render_tempo, render_tempo_empty,
 )
 import companion as cp
 import itinerary as itn
@@ -37,6 +39,8 @@ import sentinel as sn
 import advisory as adv
 import compass as cmp
 import stays as sts
+import refuge as rfg
+import tempo as tmp
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -327,20 +331,145 @@ if role == "Tourist App":
     )
 
     tab_labels = [
-        "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
-        "Advisory", "Compass", "StaySafe", "Sentinel",
+        "Pulse", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
+        "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
         "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
     tabs = st.tabs(tab_labels)
 
-    # ---------------- Map
+    # ---------------- Pulse — Today's Outlook (Day 56)
+    # The morning-brief surface — re-runs Safety, Forecast, Sentinel and Refuge
+    # for each watched point at `now` and at `now − 24h` and surfaces the
+    # deltas. Pure composition of existing engines; lives at tabs[0] because
+    # this is what the traveller opens first thing in the morning.
     with tabs[0]:
+        import pulse as pls
+
+        st.subheader("Pulse — Today's Outlook")
+        st.caption(
+            "A one-page morning brief: every watched point re-scored at **now** "
+            "and at **now − 24 h**, the joint forecast curve across all of them, "
+            "Sentinel intersections, and a prioritised plan-of-day. "
+            "Composes the rest of WaySafe — adds zero new physics."
+        )
+
+        # Default watched roster: the user's current location as "stay",
+        # plus the two closest help-or-named POIs we can find (so the brief
+        # always has at least one destination to talk about).
+        if "pulse_watched" not in st.session_state:
+            seed: list[dict] = [
+                {"kind": "stay", "label": "Current location",
+                 "lat": float(my["lat"]), "lon": float(my["lon"])},
+            ]
+            if not poi_df.empty:
+                # Pick two non-help-POI named places near the user; fall back
+                # to the first two rows if the radius search is empty.
+                _picked = 0
+                for _, r in poi_df.iterrows():
+                    if _picked >= 2:
+                        break
+                    try:
+                        d = haversine_km(my["lat"], my["lon"], float(r["lat"]), float(r["lon"]))
+                    except Exception:
+                        continue
+                    if d > 5.0:
+                        continue
+                    if str(r.get("ptype", "")).lower() in {"hospital", "police", "clinic", "fire"}:
+                        continue
+                    seed.append({
+                        "kind": "destination", "label": str(r["name"]),
+                        "lat": float(r["lat"]), "lon": float(r["lon"]),
+                    })
+                    _picked += 1
+            st.session_state.pulse_watched = seed
+
+        with st.expander("Watched points", expanded=False):
+            st.caption(
+                "Edit the roster of points the brief is about. Mark exactly one "
+                "as `stay` — the refuge-readiness tile checks that one."
+            )
+            edited = st.data_editor(
+                pd.DataFrame(st.session_state.pulse_watched),
+                key="pulse_watched_editor", use_container_width=True, num_rows="dynamic",
+                column_config={
+                    "kind": st.column_config.SelectboxColumn(
+                        "kind", options=["stay", "destination", "custom"], width="small",
+                    ),
+                    "label": st.column_config.TextColumn("label", width="medium"),
+                    "lat": st.column_config.NumberColumn("lat", format="%.5f"),
+                    "lon": st.column_config.NumberColumn("lon", format="%.5f"),
+                },
+            )
+            cols_e = st.columns([1, 1, 4])
+            if cols_e[0].button("Save roster", key="pulse_save_roster"):
+                st.session_state.pulse_watched = edited.to_dict("records")
+                st.success(f"Saved {len(st.session_state.pulse_watched)} watched point(s).")
+            if cols_e[1].button("Reset to defaults", key="pulse_reset_roster"):
+                del st.session_state.pulse_watched
+                st.rerun()
+
+        if st.button("Compose Pulse", type="primary", use_container_width=True,
+                     key="pulse_compose"):
+            roster_rows = st.session_state.pulse_watched
+            watched: list[pls.WatchedPoint] = []
+            for r in roster_rows:
+                try:
+                    la = float(r["lat"]); lo = float(r["lon"])
+                    if la != la or lo != lo:  # NaN
+                        continue
+                    watched.append(pls.WatchedPoint(
+                        kind=str(r.get("kind", "destination")) or "destination",
+                        label=str(r.get("label", "Point")) or "Point",
+                        lat=la, lon=lo,
+                    ))
+                except Exception:
+                    continue
+            if not watched:
+                st.warning("Add at least one watched point with a valid lat/lon.")
+            else:
+                with st.spinner("Re-scoring across every WaySafe engine…"):
+                    forecaster = get_forecaster()
+                    pulse_day = pls.compose_pulse(
+                        watched=watched,
+                        incidents=_inc_records, geofences=GEOFENCES,
+                        pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                        forecaster=forecaster, now=datetime.utcnow(),
+                        clusters=sent_clusters,
+                    )
+                st.session_state.pulse_day = pulse_day
+
+        from theme import render_pulse, render_pulse_empty
+        pd_day = st.session_state.get("pulse_day")
+        if pd_day is None:
+            render_pulse_empty()
+        else:
+            render_pulse(pd_day)
+
+            with st.expander("Exports"):
+                col_j, col_m = st.columns(2)
+                col_j.download_button(
+                    "Download JSON",
+                    data=pd_day.to_json().encode("utf-8"),
+                    file_name=f"pulse_{pd_day.now.strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+                col_m.download_button(
+                    "Download Markdown",
+                    data=pd_day.to_markdown().encode("utf-8"),
+                    file_name=f"pulse_{pd_day.now.strftime('%Y%m%d_%H%M')}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+    # ---------------- Map
+    with tabs[1]:
         render_sentinel_watch_banner(sent_pulse)
         draw_map_layers(inc_df, bcast_df, poi_df, my, show_heatmap=st.session_state.show_heatmap)
         st.caption("🔴 verified incident · 🟡 pending · 🟢 help POI · 🟠 risk zone · 🔵 active broadcast")
 
     # ---------------- Plan Route (long-overdue Day-6 wiring)
-    with tabs[1]:
+    with tabs[2]:
         st.subheader("Plan a Safe Route")
         st.caption(
             "Risk-aware A* — runs **fastest** (α=0) and **safest** (α=4.5) in parallel. "
@@ -495,7 +624,7 @@ if role == "Tourist App":
                     render_best_window(windows, plan["depart_at"])
 
     # ---------------- Itinerary (Day-21 move) ----------------
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("Multi-Stop Itinerary")
         st.caption(
             "String multiple stops into a single safety-aware day. "
@@ -701,7 +830,7 @@ if role == "Tourist App":
                         st.success("Your chosen depart time is already optimal in this window.")
 
     # ---------------- Live Trip Companion (round-3 closer)
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Live Trip Companion")
         st.caption(
             "Be *with* the user during the trip — proactive geofence + risk-corridor alerts, "
@@ -1005,7 +1134,7 @@ if role == "Tourist App":
                 st.rerun()
 
     # ---------------- Forecast
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Hazard Forecast")
         st.caption(
             "Empirical-Bayes spatiotemporal model — historical hazards binned by "
@@ -1104,7 +1233,7 @@ if role == "Tourist App":
             )
 
     # ---------------- Advisory (Day 31) — pre-trip safety brief
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("🧭 Travel Advisory")
         st.caption(
             "A single-page safety brief that fuses **Safety Intelligence**, "
@@ -1229,7 +1358,7 @@ if role == "Tourist App":
                 st.code(json.dumps(adv.brief_to_json(brief), indent=2), language="json")
 
     # ---------------- Compass — Destination Safety Showdown (Day 36)
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("🧭 Compass — Destination Showdown")
         st.caption(
             "Can't decide *where* to go? Pick 2–5 candidates and Compass ranks "
@@ -1366,7 +1495,7 @@ if role == "Tourist App":
                 )
 
     # ---------------- StaySafe — Accommodation Safety Picker (Day 41)
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("🛏️ StaySafe — Accommodation Safety Picker")
         st.caption(
             "Compass compares places to *go*. StaySafe compares places to "
@@ -1525,7 +1654,7 @@ if role == "Tourist App":
                 )
 
     # ---------------- Sentinel (Day 26)
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("🛰️ Sentinel — Live Cluster Intel")
         st.caption(
             "DBSCAN over haversine groups raw incidents into discrete hotspots; each "
@@ -1654,8 +1783,321 @@ if role == "Tourist App":
                         f"({cl.status}, ×{cl.velocity:.2f}) — **{d_edge:g} km** from its edge."
                     )
 
+    # ---------------- Refuge (Get Me to Safety)
+    with tabs[10]:
+        st.subheader("Refuge — Get Me to Safety")
+        st.caption(
+            "Ranks help POIs around you by a composite **Refuge Score** — "
+            "proximity 35% · path safety 25% · trust tier 20% · open-now 15% · "
+            "corridor crowd 5%. Not just the *nearest* help; the *best* refuge to reach right now."
+        )
+
+        rcol1, rcol2, rcol3 = st.columns([2, 1, 1])
+        with rcol1:
+            ref_radius = st.slider(
+                "Scan radius (km)", min_value=1.0, max_value=8.0, value=4.0, step=0.5,
+                key="refuge_radius",
+                help="Refuges further than this are ignored. 4 km ≈ 50 min walk worst-case.",
+            )
+        with rcol2:
+            ref_results = st.number_input(
+                "Show top", min_value=1, max_value=8, value=5, step=1, key="refuge_max",
+            )
+        with rcol3:
+            ref_now_override = st.checkbox(
+                "Use current hour", value=True, key="refuge_use_now",
+                help="Uncheck to test the 'after-dark' scoring with a custom hour.",
+            )
+            if not ref_now_override:
+                ref_hour = st.slider("Hour (0-23)", 0, 23, 23, key="refuge_hour")
+
+        ref_now = datetime.utcnow()
+        if not ref_now_override:
+            ref_now = ref_now.replace(hour=int(ref_hour), minute=0)
+
+        scan = st.button(
+            "🆘  Find Refuge Now", type="primary", use_container_width=True, key="refuge_scan",
+        )
+
+        if "refuge_result" not in st.session_state:
+            st.session_state.refuge_result = None
+
+        if scan:
+            st.session_state.refuge_result = rfg.find_refuge(
+                st.session_state.current_loc["lat"],
+                st.session_state.current_loc["lon"],
+                pois=poi_df,
+                incidents=inc_df,
+                geofences=geofences,
+                now=ref_now,
+                max_radius_km=float(ref_radius),
+                max_results=int(ref_results),
+                user=st.session_state.user,
+            )
+
+        result = st.session_state.refuge_result
+        if result is None:
+            render_refuge_empty()
+        else:
+            render_refuge(result)
+            if result.options:
+                top = result.options[0]
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.link_button(
+                        f"🧭  Navigate to {top.poi_name}  ·  {top.distance_km*1000:.0f} m {top.bearing_label}",
+                        top.nav_url, use_container_width=True,
+                    )
+                with col_b:
+                    if st.button(
+                        "📡  Activate Quiet Beacon",
+                        use_container_width=True, key="refuge_beacon_btn",
+                    ):
+                        row = {
+                            "id": str(uuid.uuid4()),
+                            "incident_id": f"refuge-{uuid.uuid4().hex[:8]}",
+                            "lat": result.here_lat,
+                            "lon": result.here_lon,
+                            "radius_km": round(top.distance_km, 3),
+                            "created_at": result.now.isoformat(),
+                        }
+                        if st.session_state.offline:
+                            st.session_state.outbox.append({"type": "broadcast", "row": row})
+                            st.info("Beacon queued offline. Sync once you have signal.")
+                        else:
+                            try:
+                                b = load_csv("broadcasts.csv")
+                                b = pd.concat([b, pd.DataFrame([row])], ignore_index=True)
+                                save_csv(b, "broadcasts.csv")
+                                st.success(
+                                    "Beacon active — trusted-contact ping logged. "
+                                    "Stay on this screen while you walk."
+                                )
+                            except Exception as e:
+                                st.warning(f"Beacon log failed locally: {e}")
+                with st.expander("Why this ranking?"):
+                    st.markdown(
+                        "* **Proximity** is linear — 0 m → 1.0, scan-radius → 0.0.\n"
+                        "* **Path safety** averages `1 − point_risk` across 5 evenly-spaced "
+                        "waypoints between you and the refuge — that's the same `safety.point_risk` "
+                        "the route planner uses, so Refuge agrees with the safest A* path.\n"
+                        "* **Trust tier** is institutional weight — a police station is "
+                        "intrinsically a stronger refuge than a 24/7 store even at the same distance.\n"
+                        "* **Open now** degrades non-24/7 tiers (clinics, tourism desks) outside hours.\n"
+                        "* **Corridor crowd** rewards routes whose midpoint sits near another POI — "
+                        "a rough proxy for *populated, well-lit main road* vs *dark lane*.\n"
+                    )
+
+    # ---------------- Tempo (Departure-Window Optimizer)
+    with tabs[11]:
+        st.subheader("Tempo — Departure-Window Optimizer")
+        st.caption(
+            "*When* should you leave? Sweeps an arrival window × three route flavors "
+            "(safest · balanced · fastest), runs the forecast-aware A* at every cell, and "
+            "picks the minute that minimises **integrated risk along the actual corridor**. "
+            "Compares the winner to *depart-now*, *earliest*, and *latest* baselines."
+        )
+
+        # ---- destination + dest_label
+        tmp_poi_options = ["— custom lat/lon —"]
+        if not poi_df.empty:
+            tmp_poi_options += [f"{r['name']} · {r['ptype']}" for _, r in poi_df.iterrows()]
+        tmp_dest_choice = st.selectbox(
+            "Destination",
+            tmp_poi_options,
+            index=min(1, len(tmp_poi_options) - 1),
+            key="tempo_dest_select",
+        )
+        if tmp_dest_choice == "— custom lat/lon —":
+            tdc1, tdc2, tdc3 = st.columns([1, 1, 2])
+            t_lat = tdc1.number_input(
+                "Dest lat", value=15.5430, format="%.6f", key="tempo_dest_lat",
+            )
+            t_lon = tdc2.number_input(
+                "Dest lon", value=73.7546, format="%.6f", key="tempo_dest_lon",
+            )
+            t_dest_label = tdc3.text_input("Label", value="destination", key="tempo_dest_label")
+        else:
+            t_row = poi_df.iloc[tmp_poi_options.index(tmp_dest_choice) - 1]
+            t_lat = float(t_row["lat"]); t_lon = float(t_row["lon"])
+            t_dest_label = str(t_row["name"])
+
+        # ---- arrival window
+        wc1, wc2, wc3, wc4 = st.columns([1, 1, 1, 1])
+        with wc1:
+            t_date = st.date_input(
+                "Arrival date",
+                value=datetime.utcnow().date(),
+                key="tempo_arr_date",
+            )
+        with wc2:
+            t_arr_start = st.time_input(
+                "Earliest arrival",
+                value=time(17, 0),
+                key="tempo_arr_start",
+            )
+        with wc3:
+            t_arr_end = st.time_input(
+                "Latest arrival",
+                value=time(19, 0),
+                key="tempo_arr_end",
+            )
+        with wc4:
+            t_step = st.selectbox(
+                "Step (min)", [10, 15, 20, 30],
+                index=0, key="tempo_step",
+                help="Granularity of the arrival sweep. 10 min ≈ 13 slots over 2 h.",
+            )
+
+        # Flavor toggle
+        fc1, fc2 = st.columns([2, 1])
+        with fc1:
+            tmp_flavors_choice = st.multiselect(
+                "Route flavors",
+                options=["safest", "balanced", "fastest"],
+                default=["safest", "balanced", "fastest"],
+                key="tempo_flavors",
+                help=(
+                    "safest = α=4.5 (max corridor avoidance); "
+                    "balanced = α=2.5; fastest = α=0 (great-circle staircase)."
+                ),
+            )
+        with fc2:
+            tmp_use_now = st.checkbox(
+                "Anchor 'now' to current time",
+                value=True, key="tempo_anchor_now",
+                help="Uncheck to plan a future trip without dimming past-depart cells.",
+            )
+
+        flavor_map = {"safest": 4.5, "balanced": 2.5, "fastest": 0.0}
+        flavors = [(flavor_map[f], f) for f in tmp_flavors_choice] or [(4.5, "safest")]
+
+        arr_start_dt = datetime.combine(t_date, t_arr_start)
+        arr_end_dt = datetime.combine(t_date, t_arr_end)
+        if arr_end_dt <= arr_start_dt:
+            arr_end_dt = arr_start_dt + timedelta(hours=2)
+        anchor_now = datetime.utcnow() if tmp_use_now else (arr_start_dt - timedelta(hours=12))
+
+        # Quick window meta
+        st.caption(
+            f"Window: **{arr_start_dt.strftime('%a %H:%M')} → "
+            f"{arr_end_dt.strftime('%H:%M')}** "
+            f"({int((arr_end_dt - arr_start_dt).total_seconds() // 60)} min) "
+            f"· {len(flavors)} flavor{'s' if len(flavors)!=1 else ''} · "
+            f"step {t_step} min"
+        )
+
+        run_tempo = st.button(
+            "⏱  Optimize Departure", type="primary",
+            use_container_width=True, key="tempo_run",
+        )
+
+        if "tempo_result" not in st.session_state:
+            st.session_state.tempo_result = None
+
+        if run_tempo:
+            with st.spinner("Sweeping arrival × flavor grid (A* per cell)…"):
+                forecaster_t = get_forecaster()
+                st.session_state.tempo_result = tmp.optimize_departure(
+                    (my["lat"], my["lon"]),
+                    (t_lat, t_lon),
+                    forecaster=forecaster_t,
+                    arrive_window=(arr_start_dt, arr_end_dt),
+                    now=anchor_now,
+                    incidents=inc_df.to_dict("records") if not inc_df.empty else [],
+                    geofences=GEOFENCES,
+                    pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                    step_min=int(t_step),
+                    flavors=flavors,
+                    dest_label=t_dest_label,
+                )
+
+        tempo_res = st.session_state.tempo_result
+        if tempo_res is None:
+            render_tempo_empty()
+        else:
+            render_tempo(tempo_res)
+
+            # Winner corridor preview map
+            if tempo_res.winner is not None and tempo_res.winner.coords:
+                w = tempo_res.winner
+                # Build runner-up overlays for context (faint).
+                extras = []
+                for c in tempo_res.runners_up:
+                    if c.coords:
+                        extras += _route_path_layer(c, [137, 146, 166], glow_width=5, line_width=2)
+                extras += _route_path_layer(w, [83, 227, 166], glow_width=10, line_width=5)
+
+                origin_pt = {"lat": my["lat"], "lon": my["lon"]}
+                dest_pt = {"lat": w.coords[-1][0], "lon": w.coords[-1][1]}
+                extras.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    data=[origin_pt],
+                    get_position=["lon", "lat"],
+                    get_fill_color=[61, 169, 252, 220],
+                    get_radius=80, radius_min_pixels=6,
+                ))
+                extras.append(pdk.Layer(
+                    "ScatterplotLayer",
+                    data=[dest_pt],
+                    get_position=["lon", "lat"],
+                    get_fill_color=[255, 106, 61, 220],
+                    get_radius=80, radius_min_pixels=6,
+                ))
+                mid_lat = (my["lat"] + w.coords[-1][0]) / 2
+                mid_lon = (my["lon"] + w.coords[-1][1]) / 2
+                vs = pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=12)
+                st.pydeck_chart(pdk.Deck(
+                    layers=extras,
+                    initial_view_state=vs,
+                    map_style=None,
+                    tooltip={"text": "winning corridor (green) · runners-up faint"},
+                ))
+
+            # Exports
+            t1, t2 = st.columns(2)
+            with t1:
+                st.download_button(
+                    "⬇ JSON (waysafe.tempo.v1)",
+                    data=tempo_res.to_json().encode("utf-8"),
+                    file_name=f"tempo_{tempo_res.winner.depart.strftime('%Y%m%dT%H%M') if tempo_res.winner else 'empty'}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                    key="tempo_dl_json",
+                )
+            with t2:
+                st.download_button(
+                    "⬇ Markdown digest",
+                    data=tempo_res.to_markdown().encode("utf-8"),
+                    file_name=f"tempo_{tempo_res.winner.depart.strftime('%Y%m%dT%H%M') if tempo_res.winner else 'empty'}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                    key="tempo_dl_md",
+                )
+
+            with st.expander("How Tempo scores a cell"):
+                st.markdown(
+                    "* **Probe** each flavor once at the window midpoint to learn its ETA.\n"
+                    "* For each arrival slot `t_arr` and flavor `α`:\n"
+                    "  `depart = t_arr − eta_α`; "
+                    "run `plan_forecast_route(..., depart, α)`; "
+                    "`risk_km = mean(forecast_blended_risk along corridor) × distance_km`.\n"
+                    "* **Composite** = `100 × exp(−κ × risk_km)` with `κ = 0.35` "
+                    "(risk_km 0.64→80 · 1.23→65 · 1.98→50 · 3.0→35).\n"
+                    "* **Bands** mirror the rest of WaySafe: All-clear ≥80 · Caution 65 · "
+                    "Elevated 50 · High Risk 35 · Danger < 35.\n"
+                    "* **Winner** = highest composite among **feasible** cells "
+                    "(depart ≥ now). Ties broken by lower risk-km, then higher min-safety, "
+                    "then shorter ETA. Runners-up = next-best two within 6 pts.\n"
+                    "* **Baselines**: depart-now (closest depart to `now`), earliest, latest. "
+                    "Each comparison reports `Δcomposite` and `Δrisk-km` vs winner.\n"
+                    "* `risk_samples` and `point_risk` are the *same* engine the "
+                    "Plan-Route surface uses — Tempo's verdict always agrees with the "
+                    "safest A* corridor at that depart-time.\n"
+                )
+
     # ---------------- Report Hazard
-    with tabs[9]:
+    with tabs[12]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -1688,7 +2130,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[10]:
+    with tabs[13]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -1707,7 +2149,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[11]:
+    with tabs[14]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -1734,7 +2176,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[12]:
+    with tabs[15]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip

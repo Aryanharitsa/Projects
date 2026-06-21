@@ -14,6 +14,7 @@ Detectors
 - high_risk_geo     Counterparty geographies on the FATF grey/black list.
 - round_amount      Unusual concentration of "rounded" large transfers.
 - sanctions_hit     Subject or counterparty name matches the watchlist.
+- adverse_media     Subject or counterparty name appears in negative news.
 
 The scorer is purely a function: same input + same weight overrides →
 same output. That makes it auditable for compliance review and lets the
@@ -27,6 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+import media as media_engine
 import sanctions as sanctions_engine
 import typology as typology_engine
 
@@ -36,12 +38,13 @@ import typology as typology_engine
 # ---------------------------------------------------------------------------
 
 WEIGHTS: Dict[str, float] = {
-    "structuring": 26.0,
-    "velocity_spike": 16.0,
-    "round_trip": 20.0,
-    "sanctions_hit": 22.0,
-    "fan_in": 8.0,
-    "fan_out": 8.0,
+    "structuring": 24.0,
+    "velocity_spike": 14.0,
+    "round_trip": 18.0,
+    "sanctions_hit": 20.0,
+    "adverse_media": 14.0,
+    "fan_in": 7.0,
+    "fan_out": 7.0,
     "high_risk_geo": 6.0,
     "round_amount": 4.0,
 }
@@ -51,6 +54,7 @@ DETECTOR_ORDER: Tuple[str, ...] = (
     "velocity_spike",
     "round_trip",
     "sanctions_hit",
+    "adverse_media",
     "fan_in",
     "fan_out",
     "high_risk_geo",
@@ -61,6 +65,9 @@ DETECTOR_ORDER: Tuple[str, ...] = (
 # pin one factor to 100% and reduce the rest to noise.
 MAX_WEIGHT = 60.0
 SANCTIONS_HIT_THRESHOLD = 0.65  # similarity gate for hits_for_account
+ADVERSE_MEDIA_THRESHOLD = 0.55  # similarity gate for media.hits_for_account
+ADVERSE_MEDIA_INTENSITY_FLOOR = 35.0  # composite below this contributes nothing
+ADVERSE_MEDIA_INTENSITY_CEIL = 85.0   # composite at/above this is full weight
 
 # Indian FIU-IND CTR threshold proxy: treat structuring as multiple
 # deposits in [STRUCT_BAND_LOW, STRUCT_BAND_HIGH) within a 24h window.
@@ -143,6 +150,7 @@ class AccountReport:
     sanctions_hits: List[Dict[str, Any]] = field(default_factory=list)
     display_name: str = ""
     typologies: List[Dict[str, Any]] = field(default_factory=list)
+    adverse_media: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -157,6 +165,7 @@ class AccountReport:
             "outbound_total": round(self.outbound_total, 2),
             "sanctions_hits": self.sanctions_hits,
             "typologies": self.typologies,
+            "adverse_media": self.adverse_media,
         }
 
 
@@ -542,6 +551,101 @@ def _detect_sanctions(
     )
 
 
+def _detect_adverse_media(
+    account: str,
+    txs: List[Tx],
+    *,
+    weight: float,
+    similarity_floor: float = ADVERSE_MEDIA_THRESHOLD,
+) -> Tuple[Factor, Optional[Dict[str, Any]]]:
+    """Screen the account's name + every counterparty's name against the
+    bundled adverse-media corpus. Intensity ramps linearly across
+    ``[ADVERSE_MEDIA_INTENSITY_FLOOR, ADVERSE_MEDIA_INTENSITY_CEIL]`` so
+    a single weak hit doesn't flip an otherwise clean account, but a
+    material composite reliably moves the needle.
+    """
+    names: List[str] = []
+    seen: Set[str] = set()
+    for t in txs:
+        for raw in (t.subject_name, t.counterparty_name):
+            if not raw:
+                continue
+            key = raw.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            names.append(raw.strip())
+
+    if not names:
+        return (
+            Factor(
+                name="adverse_media",
+                points=0.0,
+                weight=weight,
+                detail="No party names supplied — adverse-media check skipped.",
+            ),
+            None,
+        )
+
+    report = media_engine.hits_for_account(
+        names,
+        similarity_floor=similarity_floor,
+    )
+    composite = report.get("composite", 0.0)
+    if composite < ADVERSE_MEDIA_INTENSITY_FLOOR or report.get("hit_count", 0) == 0:
+        return (
+            Factor(
+                name="adverse_media",
+                points=0.0,
+                weight=weight,
+                detail=(
+                    f"{report.get('hit_count', 0)} adverse-media hit(s) across "
+                    f"{report.get('names_screened', 0)} party name(s); "
+                    f"composite {composite:.0f} below intensity floor."
+                ),
+                evidence=[{
+                    "names_screened": report.get("names_screened", 0),
+                    "hit_count": report.get("hit_count", 0),
+                    "composite": composite,
+                    "per_name": report.get("per_name", []),
+                }],
+            ),
+            report,
+        )
+
+    span = max(1.0, ADVERSE_MEDIA_INTENSITY_CEIL - ADVERSE_MEDIA_INTENSITY_FLOOR)
+    intensity = min(1.0, (composite - ADVERSE_MEDIA_INTENSITY_FLOOR) / span)
+    top = (report.get("top_articles") or [])
+    return (
+        Factor(
+            name="adverse_media",
+            points=intensity * weight,
+            weight=weight,
+            detail=(
+                f"{report['hit_count']} adverse-media hit(s) across "
+                f"{report['names_screened']} party name(s); composite "
+                f"{composite:.0f} ({report['grade']})."
+            ),
+            evidence=[
+                {
+                    "article_id": h["article_id"],
+                    "headline": h["headline"],
+                    "source": h["source"],
+                    "source_tier": h["source_tier"],
+                    "published": h["published"],
+                    "category": h["category"],
+                    "similarity": h["similarity"],
+                    "hit_strength": h["hit_strength"],
+                    "queried_name": h.get("queried_name", ""),
+                    "matched_mention": h.get("matched_mention", ""),
+                }
+                for h in top[:3]
+            ],
+        ),
+        report,
+    )
+
+
 def _detect_round_amount(account: str, txs: List[Tx], *, weight: float) -> Factor:
     big_round = [
         t for t in txs
@@ -634,6 +738,11 @@ def score_accounts(
             weight=weights["sanctions_hit"],
             threshold=sanctions_threshold,
         )
+        f_media, media_report = _detect_adverse_media(
+            acct,
+            related,
+            weight=weights["adverse_media"],
+        )
         f_fan_in, f_fan_out = _detect_fan(
             acct, related, w_in=weights["fan_in"], w_out=weights["fan_out"]
         )
@@ -645,6 +754,7 @@ def score_accounts(
             "velocity_spike": f_vel,
             "round_trip": f_cycle,
             "sanctions_hit": f_sanction,
+            "adverse_media": f_media,
             "fan_in": f_fan_in,
             "fan_out": f_fan_out,
             "high_risk_geo": f_geo,
@@ -677,6 +787,7 @@ def score_accounts(
             inbound_total=sum(t.amount for t in related if t.counterparty == acct),
             outbound_total=sum(t.amount for t in related if t.account_id == acct),
             sanctions_hits=sanction_hits,
+            adverse_media=media_report,
         )
         # Typology classification runs against the freshly assembled report
         # — it consumes factor intensities + structural stats only, so the
@@ -695,12 +806,16 @@ def score_accounts(
             "total_accounts": len(reports),
             "alerted": len(alerted),
             "sanctions_alerted": len(sanction_alerts),
+            "media_alerted": sum(
+                1 for r in reports
+                if (r.adverse_media or {}).get("grade") in {"material", "severe"}
+            ),
             "highest_score": round(reports[0].risk_score, 1) if reports else 0,
             "average_score": round(sum(r.risk_score for r in reports) / len(reports), 1) if reports else 0,
         },
         "effective_weights": weights,
         "sanctions_threshold": sanctions_threshold,
-        "rules_version": "1.2.0",
+        "rules_version": "1.3.0",
     }
 
 
@@ -709,7 +824,7 @@ def get_rules() -> Dict[str, Any]:
     auditors can verify what the engine is actually doing.
     """
     return {
-        "version": "1.2.0",
+        "version": "1.3.0",
         "weights": WEIGHTS,
         "max_weight": MAX_WEIGHT,
         "detectors": list(DETECTOR_ORDER),
@@ -731,6 +846,12 @@ def get_rules() -> Dict[str, Any]:
             "sanctions_hit": {
                 "similarity_threshold": SANCTIONS_HIT_THRESHOLD,
                 "watchlist": sanctions_engine.get_metadata(),
+            },
+            "adverse_media": {
+                "similarity_threshold": ADVERSE_MEDIA_THRESHOLD,
+                "intensity_floor_composite": ADVERSE_MEDIA_INTENSITY_FLOOR,
+                "intensity_ceil_composite": ADVERSE_MEDIA_INTENSITY_CEIL,
+                "corpus": media_engine.get_metadata(),
             },
             "fan": {"degree_high": FAN_DEGREE_HIGH},
             "high_risk_geo": sorted(HIGH_RISK_GEOS),

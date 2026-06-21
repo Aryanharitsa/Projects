@@ -58,6 +58,7 @@ DETECTOR_LABELS: Dict[str, str] = {
     "velocity_spike": "Velocity spike",
     "round_trip": "Round-trip cycle",
     "sanctions_hit": "Sanctions hit",
+    "adverse_media": "Adverse media",
     "fan_in": "Fan-in",
     "fan_out": "Fan-out",
     "high_risk_geo": "High-risk geo",

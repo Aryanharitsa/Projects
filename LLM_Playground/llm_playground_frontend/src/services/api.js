@@ -448,6 +448,169 @@ class ApiService {
     });
   }
 
+  // ─── Optimizer Studio ──────────────────────────────────────────────────────
+  // Automated prompt evolution against a Rubrics rubric. Each generation
+  // mutates the elites + base prompt, scores every variant on every test
+  // case, persists the lineage. Round-10.
+
+  async listOptimizations(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/optimize${suffix}`);
+  }
+
+  async createOptimization(payload) {
+    return this.request('/optimize', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedOptimization() {
+    return this.request('/optimize/seed', { method: 'POST' });
+  }
+
+  async optimizerStats() {
+    return this.request('/optimize/stats');
+  }
+
+  async getOptimization(optId) {
+    return this.request(`/optimize/${encodeURIComponent(optId)}`);
+  }
+
+  async deleteOptimization(optId) {
+    return this.request(`/optimize/${encodeURIComponent(optId)}`, { method: 'DELETE' });
+  }
+
+  async advanceOptimization(optId) {
+    return this.request(`/optimize/${encodeURIComponent(optId)}/advance`, { method: 'POST' });
+  }
+
+  async runOptimization(optId, payload = {}) {
+    return this.request(`/optimize/${encodeURIComponent(optId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async promoteVariant(optId, variantId) {
+    return this.request(
+      `/optimize/${encodeURIComponent(optId)}/promote/${encodeURIComponent(variantId)}`,
+      { method: 'POST' },
+    );
+  }
+
+  async optimizerMutations() {
+    return this.request('/optimize/mutations');
+  }
+
+  async optimizerPreview(payload) {
+    return this.request('/optimize/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // ─── Adversary Lab ─────────────────────────────────────────────────────────
+  // Prompt robustness tester. An audit runs the base prompt against a catalog
+  // of perturbations (typographic / structural / distractor / injection) and
+  // scores each one against the same rubric the clean baseline used. The
+  // composite Robustness score blends a degradation axis (how much the
+  // composite drops under noise) with a safety axis (what fraction of
+  // injection vectors leak a marker). Round-11.
+
+  async listAudits(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/adversary${suffix}`);
+  }
+
+  async createAudit(payload) {
+    return this.request('/adversary', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedAudit() {
+    return this.request('/adversary/seed', { method: 'POST' });
+  }
+
+  async adversaryStats() {
+    return this.request('/adversary/stats');
+  }
+
+  async getAudit(auditId) {
+    return this.request(`/adversary/${encodeURIComponent(auditId)}`);
+  }
+
+  async deleteAudit(auditId) {
+    return this.request(`/adversary/${encodeURIComponent(auditId)}`, { method: 'DELETE' });
+  }
+
+  async runAudit(auditId, payload = {}) {
+    return this.request(`/adversary/${encodeURIComponent(auditId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async adversaryPerturbations() {
+    return this.request('/adversary/perturbations');
+  }
+
+  async adversaryPreview(payload) {
+    return this.request('/adversary/preview', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // ─── Showdown Arena ────────────────────────────────────────────────────────
+  // Paired A/B test of two prompts ("Champion" vs "Challenger") across a
+  // shared set of test cases. Surfaces mean Δ, 95% bootstrap CI, sign-test
+  // p-value, Cohen's d, win rate, and a ship/keep/no-decision verdict.
+  // Round-13.
+
+  async listShowdowns(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/showdown${suffix}`);
+  }
+
+  async createShowdown(payload) {
+    return this.request('/showdown', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedShowdown() {
+    return this.request('/showdown/seed', { method: 'POST' });
+  }
+
+  async showdownStats() {
+    return this.request('/showdown/stats');
+  }
+
+  async getShowdown(showdownId) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}`);
+  }
+
+  async deleteShowdown(showdownId) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}`, { method: 'DELETE' });
+  }
+
+  async runShowdown(showdownId, payload = {}) {
+    return this.request(`/showdown/${encodeURIComponent(showdownId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.
