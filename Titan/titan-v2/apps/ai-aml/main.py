@@ -70,6 +70,13 @@ GET    /aml/peer/rules             metric list, direction gates, cohort fallback
 GET    /aml/peer/sample            bundled six-cohort demo portfolio
 POST   /aml/peer/analyze           customer-vs-cohort outlier scoring across 9 axes →
                                    robust z-scores (MAD), top drivers, cohort context
+
+Pulse — compliance officer's morning brief (round-13, day-60)
+-------------------------------------------------------------
+GET    /aml/pulse/rules            window bounds, signal weights, mood ladder
+GET    /aml/pulse/sample           rich demo pulse from the bundled customer book
+GET    /aml/pulse                  LIVE composer over persisted profiles + cases
+GET    /aml/pulse/export.md        markdown brief (paste into Slack / email)
 """
 
 from __future__ import annotations
@@ -87,12 +94,13 @@ import media as media_engine
 import network as network_engine
 import peer as peer_engine
 import profile as profile_engine
+import pulse as pulse_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.10.0"
+ENGINE_VERSION = "titan-aml/1.11.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1042,3 +1050,69 @@ def peer_analyze(req: PeerAnalyzeReq = Body(...)) -> Dict[str, Any]:
     transactions = [t.model_dump() for t in req.transactions]
     out = peer_engine.analyze(customers, transactions)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Pulse — compliance officer's morning brief (round-13, day-60)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/pulse/rules")
+def pulse_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **pulse_engine.get_rules()}
+
+
+@app.get("/aml/pulse/sample")
+def pulse_sample(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+) -> Dict[str, Any]:
+    """Rich demo pulse from the bundled customer book + synthetic priors.
+
+    Used by the frontend on first load so the surface lights up without
+    the analyst having to seed the store first.
+    """
+    report = pulse_engine.get_sample_pulse(window_days=window_days)
+    return {"ok": True, **report.to_dict()}
+
+
+@app.get("/aml/pulse")
+def pulse_live(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+) -> Dict[str, Any]:
+    """LIVE pulse — composes over the persisted profile + cases stores.
+
+    Falls back to the sample pulse when the profile store is empty so the
+    surface never renders a depressing "no data" state. The response
+    carries ``source: live|sample`` so the UI can hint at the difference.
+    """
+    report = pulse_engine.build_live(window_days=window_days)
+    if report.portfolio_size == 0:
+        report = pulse_engine.get_sample_pulse(window_days=window_days)
+        return {"ok": True, "source": "sample", **report.to_dict()}
+    return {"ok": True, "source": "live", **report.to_dict()}
+
+
+@app.get("/aml/pulse/export.md", response_class=None)
+def pulse_export_md(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+    source: str = Query(default="auto", pattern="^(auto|live|sample)$"),
+):
+    from fastapi.responses import PlainTextResponse
+    if source == "sample":
+        report = pulse_engine.get_sample_pulse(window_days=window_days)
+    elif source == "live":
+        report = pulse_engine.build_live(window_days=window_days)
+    else:
+        report = pulse_engine.build_live(window_days=window_days)
+        if report.portfolio_size == 0:
+            report = pulse_engine.get_sample_pulse(window_days=window_days)
+    return PlainTextResponse(
+        pulse_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )

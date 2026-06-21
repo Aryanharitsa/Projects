@@ -970,3 +970,9 @@ body::before {
     radial-gradient(360px 160px at 50% 0%, rgba(45, 225, 194, 0.10), transparent 70%),
     linear-gradient(135deg, rgba(110, 91, 255, 0.06) 0%, rgba(45, 225, 194, 0.04) 100%);
 }
+
+/* ---------- Pulse (round-13, day-60) ---------- */
+@keyframes pulse-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.025); opacity: 0.88; }
+}

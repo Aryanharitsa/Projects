@@ -694,3 +694,45 @@ async def aml_peer_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
         return r.json()
+
+
+# ----- Pulse pass-through (round-13, day-60)
+
+
+@app.get("/aml/pulse/rules")
+async def aml_pulse_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/pulse/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/pulse/sample")
+async def aml_pulse_sample(window_days: int = 1) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/pulse/sample", params={"window_days": window_days})
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/pulse")
+async def aml_pulse_live(window_days: int = 1) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(f"{AML_SVC}/aml/pulse", params={"window_days": window_days})
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.json().get("detail", r.text))
+        return r.json()
+
+
+@app.get("/aml/pulse/export.md")
+async def aml_pulse_export(window_days: int = 1, source: str = "auto"):
+    from fastapi.responses import PlainTextResponse
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/pulse/export.md",
+            params={"window_days": window_days, "source": source},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")

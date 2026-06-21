@@ -13,6 +13,41 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-60 — Pulse · the compliance officer's morning brief.** Every
+> prior surface in TITAN measures *right now*: `risk` & `typology` score
+> one batch, `profile` composites a customer's surfaces into one number,
+> `cases` queues alerts, `peer` scores cohort outliers. None answer the
+> question an MLRO opens Monday with — *"across my whole customer book,
+> what's different since yesterday, and what should I look at FIRST?"*.
+> New `apps/ai-aml/pulse.py` (~700 LOC, pure-stdlib, **zero new physics**
+> — Pulse is a *composer*) reads every customer's persisted CRP + its
+> history rows, the case-store's open cases + SLA breaches, derives a
+> signed `composite_delta`, a `bucket_shift` (`medium → critical`), and
+> a per-customer **signal** = `abs(Δ)·1 + bucket_upgraded·8 +
+> new_case_critical·6 + new_case_high·4 + open_breach·5 + refresh_overdue·3
+> + critical_floor·4`. A first-match-wins **mood ladder** (calm · watch ·
+> active · critical) rolls the portfolio up; a **headline** names the
+> biggest mover; a ranked **change-log** drops the top-10 plain-English
+> deltas; a prioritised **plan-of-day** writes the analyst's first 8
+> moves and *names the TITAN tab each one lives in* (Cases, Profile,
+> Sanctions, Media). Ships a `titan.pulse.v1` JSON envelope + a
+> paste-able markdown brief via `GET /aml/pulse/export.md`. **Surface**
+> — new `/pulse` route between Overview and Profile: hero card with a
+> mood-tinted breathing conic-gradient ring + ECG heartbeat polyline
+> glyph + headline + advisory; 6-tile vital-signs strip (new cases · open
+> · breaches · movers · KYC overdue · portfolio); SVG daily-activity
+> sparkline with breach overlay; bucket-drift bars showing window-start
+> vs now with dotted prior + solid now overlay; horizontally-scrolling
+> Biggest Movers cards (per-customer composite ring + Δ-chip + bucket-shift
+> chip + 2-line change excerpt, click → Profile); ranked Change Log + Plan
+> of Day side-by-side; full customer roster table sortable by signal /
+> composite / Δ with bucket pills + KYC status + breach chips + new-case
+> markers; composite-distribution histogram tiered to the bucket palette;
+> rules-explainer footer. Deterministic — same `(profiles, cases, now,
+> window_days)` in → identical bytes out. The rotation deliberately ships
+> Pulse across three projects in a row (WaySafe Day 56 → SynapseOS Day 59
+> → TITAN Day 60): same vital-signs metaphor, different domains.
+
 > **Day-30 — Typology Classifier.** Eight detectors answer
 > *"what suspicious patterns are present?"*. Compliance officers always
 > ask the next question: *"…and which playbook does that add up to?"*.

@@ -1765,3 +1765,147 @@ export async function analyzePeers(
   });
   return jsonOrThrow(r);
 }
+
+// ---------------------------------------------------------------------------
+// Pulse — compliance officer's morning brief (round-13, day-60)
+// ---------------------------------------------------------------------------
+
+export type PulseMood = "calm" | "watch" | "active" | "critical";
+
+export type PulseActionKind =
+  | "case"
+  | "profile"
+  | "sanctions"
+  | "media"
+  | "refresh"
+  | "escalate";
+
+export type PulseAction = {
+  kind: PulseActionKind;
+  priority: CasePriority;
+  body: string;
+  customer_id: string | null;
+  href: string | null;
+};
+
+export type PulseCustomer = {
+  customer_id: string;
+  display_name: string;
+  domicile: string | null;
+  bucket: ProfileBucket;
+  bucket_prior: ProfileBucket | null;
+  bucket_accent: string;
+  composite: number;
+  composite_prior: number | null;
+  composite_delta: number | null;
+  refresh_label: ProfileRefreshLabel;
+  refresh_days_to_due: number | null;
+  open_case_count: number;
+  new_case_count: number;
+  new_case_critical: number;
+  new_case_high: number;
+  open_breach_count: number;
+  pep: boolean;
+  products: string[];
+  headline: string;
+  change_lines: string[];
+  signal: number;
+  band_shift_direction: "up" | "down" | "";
+  is_biggest_mover: boolean;
+};
+
+export type PulseSparkPoint = {
+  date: string;
+  new_cases: number;
+  sla_breaches: number;
+};
+
+export type PulseHistogramBucket = {
+  min: number;
+  max: number;
+  count: number;
+  label: string;
+};
+
+export type PulseReport = {
+  ok: boolean;
+  source?: "live" | "sample";
+  schema: "titan.pulse.v1";
+  engine: string;
+  rules_version: string;
+  computed_at: string;
+  window_days: number;
+  window_start: string;
+  now: string;
+  mood: PulseMood;
+  mood_accent: string;
+  mood_label: string;
+  mood_blurb: string;
+  headline: string;
+  advisory: string;
+  portfolio_size: number;
+  movers_count: number;
+  new_cases_total: number;
+  new_cases_critical: number;
+  open_breaches: number;
+  open_cases_total: number;
+  refresh_overdue: number;
+  refresh_due_soon: number;
+  by_bucket: Record<ProfileBucket, number>;
+  by_bucket_prior: Record<ProfileBucket, number>;
+  bucket_drift: Record<ProfileBucket, number>;
+  activity_sparkline: PulseSparkPoint[];
+  score_histogram: PulseHistogramBucket[];
+  biggest_movers: PulseCustomer[];
+  change_log: string[];
+  plan_of_day: PulseAction[];
+  customers: PulseCustomer[];
+};
+
+export type PulseRules = {
+  ok: boolean;
+  engine: string;
+  version: string;
+  default_window_days: number;
+  min_window_days: number;
+  max_window_days: number;
+  composite_delta_floor: number;
+  critical_composite_floor: number;
+  active_big_shift_floor: number;
+  active_big_shift_min_customers: number;
+  active_new_cases_floor: number;
+  watch_shift_floor: number;
+  change_log_cap: number;
+  plan_of_day_cap: number;
+  top_movers_cap: number;
+  signal_weights: Record<string, number>;
+  mood_order: PulseMood[];
+  mood_meta: Record<PulseMood, { accent: string; label: string; blurb: string }>;
+  fresh_case_priorities: string[];
+};
+
+export async function getPulseRules(): Promise<PulseRules> {
+  const r = await fetch(`${API_BASE}/aml/pulse/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getPulse(window_days = 1): Promise<PulseReport> {
+  const r = await fetch(`${API_BASE}/aml/pulse?window_days=${window_days}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function getPulseSample(window_days = 1): Promise<PulseReport> {
+  const r = await fetch(`${API_BASE}/aml/pulse/sample?window_days=${window_days}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export function pulseExportUrl(opts: { window_days?: number; source?: "auto" | "live" | "sample" } = {}) {
+  const qs = new URLSearchParams();
+  qs.set("window_days", String(opts.window_days ?? 1));
+  qs.set("source", opts.source ?? "auto");
+  return `${API_BASE}/aml/pulse/export.md?${qs.toString()}`;
+}
