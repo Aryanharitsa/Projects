@@ -27,9 +27,12 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import atlas as atlas_engine
 from . import atomize as atomize_engine
 from . import chat as chat_engine
-from . import community, revisit, schemas, store, synapse, synthesis, tensions, trails
+from . import chronicle as chronicle_engine
+from . import pulse as pulse_engine
+from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
@@ -773,4 +776,271 @@ def tensions_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="tensions.md"'},
+    )
+
+
+# ------------------------------------------------------------------ echo
+
+
+@app.get("/echo", response_model=schemas.EchoReportOut)
+def echo_report(
+    threshold: float = Query(echo.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    limit: int = Query(20, ge=1, le=100),
+) -> dict:
+    """Find clusters of near-duplicate notes you might want to merge.
+
+    Pairs at-or-above ``threshold`` form an undirected graph; connected
+    components of size ≥ 2 become clusters. Each cluster reports its
+    redundancy %, the chars you'd save by merging, the canonical
+    "merge-into" target, and a sentence-level overlap ledger.
+
+    ``threshold`` defaults to 0.72 — high enough that hits are real
+    duplicates rather than merely-related notes. The UI exposes a
+    slider for manual sweeps.
+    """
+    r = echo.find_clusters(threshold=threshold, limit=limit)
+    return echo.report_to_dict(r)
+
+
+@app.post("/echo/preview", response_model=schemas.EchoClusterOut)
+def echo_preview(req: schemas.EchoPreviewRequest) -> dict:
+    """Build a merge preview against a user-chosen cluster + canonical.
+
+    No DB writes — the user can sweep multiple canonical choices in the
+    modal before committing.
+    """
+    try:
+        c = echo.preview_merge(req.note_ids, canonical_id=req.canonical_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return echo.cluster_to_dict(c)
+
+
+@app.post("/echo/merge", response_model=schemas.EchoMergeResult, status_code=201)
+def echo_merge(req: schemas.EchoMergeRequest) -> dict:
+    """Collapse a cluster into a single canonical note.
+
+    The canonical note is replaced in-place (its id is preserved so any
+    external bookmarks keep resolving). All other cluster members are
+    deleted. Returns the recovered char count and the merged note's
+    post-merge synapse count.
+    """
+    try:
+        result = echo.merge_cluster(
+            req.note_ids,
+            canonical_id=req.canonical_id,
+            title_override=req.title,
+            body_override=req.body,
+            tags_override=req.tags,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return {
+        "merged_note_id": result.merged_note_id,
+        "merged_title": result.merged_title,
+        "deleted_ids": result.deleted_ids,
+        "wasted_chars_recovered": result.wasted_chars_recovered,
+        "final_synapses": result.final_synapses,
+    }
+
+
+@app.post("/echo/skip", response_model=schemas.EchoSkipResult, status_code=201)
+def echo_skip(req: schemas.EchoSkipRequest) -> dict:
+    """Mark one-or-more pairs as intentionally distinct.
+
+    Persisted to ``dedupe_skips``. Subsequent ``/echo`` calls filter
+    these pairs out, so a "no, those two are different" decision sticks
+    forever (until the user explicitly clears it via ``DELETE``).
+    """
+    pairs = [(a, b) for a, b in req.pairs]
+    inserted = echo.add_skips(pairs, reason=req.reason)
+    total = len(echo.list_skips())
+    return {"inserted": inserted, "total_skips": total}
+
+
+@app.get("/echo/skips", response_model=list[schemas.EchoSkipEntry])
+def echo_skip_list() -> list[dict]:
+    return echo.list_skips()
+
+
+@app.delete("/echo/skip")
+def echo_skip_delete(
+    a: int = Query(..., ge=1),
+    b: int = Query(..., ge=1),
+) -> Response:
+    if not echo.remove_skip(a, b):
+        raise HTTPException(404, "skip not found")
+    return Response(status_code=204)
+
+
+@app.get("/echo/export.md")
+def echo_export(
+    threshold: float = Query(echo.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    limit: int = Query(20, ge=1, le=100),
+) -> Response:
+    r = echo.find_clusters(threshold=threshold, limit=limit)
+    md = echo.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="echoes.md"'},
+    )
+
+
+# ----------------------------------------------------------------- atlas
+
+
+@app.get("/atlas", response_model=schemas.AtlasReportOut)
+def atlas(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(atlas_engine.DEFAULT_WINDOW_DAYS, ge=1, le=365),
+) -> dict:
+    """Executive cartography of every cluster + prioritized recommendations.
+
+    Each cluster lands in one of four quadrants by ``cohesion × activity``
+    and ships with size, internal density, growth velocity over the
+    window, days-since-touch, and a count of "bridge candidates" the
+    synapse graph hasn't drawn. Recommendations are sorted by priority so
+    the most actionable items surface first.
+    """
+    r = atlas_engine.compute_atlas(
+        threshold=threshold, top_k=top_k, window_days=window_days
+    )
+    return atlas_engine.serialize(r)
+
+
+@app.get("/atlas/export.md")
+def atlas_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(atlas_engine.DEFAULT_WINDOW_DAYS, ge=1, le=365),
+) -> Response:
+    """Portable Markdown brief — quadrant counts, per-cluster lines,
+    recommendations — paste-into-anywhere stand-alone."""
+    r = atlas_engine.compute_atlas(
+        threshold=threshold, top_k=top_k, window_days=window_days
+    )
+    md = atlas_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="atlas.md"'},
+    )
+
+
+# ------------------------------------------------------------- chronicle
+
+
+@app.get("/chronicle", response_model=schemas.ChronicleReportOut)
+def chronicle(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    max_chapters: int = Query(chronicle_engine.DEFAULT_MAX_CHAPTERS, ge=2, le=8),
+    min_cluster_notes: int = Query(
+        chronicle_engine.DEFAULT_MIN_CLUSTER_NOTES, ge=2, le=20
+    ),
+    min_span_days: float = Query(
+        chronicle_engine.DEFAULT_MIN_SPAN_DAYS, ge=0.0, le=365.0
+    ),
+) -> dict:
+    """Temporal narrative of every eligible cluster.
+
+    Each cluster is sliced into equal-duration chapters; we report the
+    drift velocity between consecutive chapters, the pivot moment, the
+    vocabulary that emerged or faded, an anchor note per chapter, and the
+    overall stability category (``calm`` / ``shifting`` / ``pivoting``).
+    """
+    r = chronicle_engine.compute_chronicle(
+        threshold=threshold,
+        top_k=top_k,
+        max_chapters=max_chapters,
+        min_cluster_notes=min_cluster_notes,
+        min_span_days=min_span_days,
+    )
+    return chronicle_engine.serialize(r)
+
+
+@app.get("/chronicle/export.md")
+def chronicle_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    max_chapters: int = Query(chronicle_engine.DEFAULT_MAX_CHAPTERS, ge=2, le=8),
+    min_cluster_notes: int = Query(
+        chronicle_engine.DEFAULT_MIN_CLUSTER_NOTES, ge=2, le=20
+    ),
+    min_span_days: float = Query(
+        chronicle_engine.DEFAULT_MIN_SPAN_DAYS, ge=0.0, le=365.0
+    ),
+) -> Response:
+    """Portable Markdown chronicle — one section per cluster, paste-anywhere."""
+    r = chronicle_engine.compute_chronicle(
+        threshold=threshold,
+        top_k=top_k,
+        max_chapters=max_chapters,
+        min_cluster_notes=min_cluster_notes,
+        min_span_days=min_span_days,
+    )
+    md = chronicle_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="chronicle.md"'},
+    )
+
+
+# ---------------------------------------------------------------- pulse
+
+
+@app.get("/pulse", response_model=schemas.PulseReportOut)
+def pulse(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(
+        pulse_engine.DEFAULT_WINDOW_DAYS,
+        ge=pulse_engine.WINDOW_MIN,
+        le=pulse_engine.WINDOW_MAX,
+    ),
+) -> dict:
+    """Cross-cluster, time-windowed report — what changed in your second
+    brain over the last ``window_days``.
+
+    Per-cluster: how many notes are new, how many were re-engaged, the
+    centroid drift between pre- and in-window halves (when both are
+    populated), and a status (``born`` / ``emerging`` / ``hot`` /
+    ``warm`` / ``dormant``). Library-wide: bridges born (cross-cluster
+    synapses involving a new note), hubs born (new notes with degree
+    ≥ 3), an emerged/faded vocabulary delta, a daily activity
+    sparkline, and a prioritized recommendations list."""
+    r = pulse_engine.compute_pulse(
+        window_days=window_days, threshold=threshold, top_k=top_k
+    )
+    return pulse_engine.serialize(r)
+
+
+@app.get("/pulse/export.md")
+def pulse_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    window_days: int = Query(
+        pulse_engine.DEFAULT_WINDOW_DAYS,
+        ge=pulse_engine.WINDOW_MIN,
+        le=pulse_engine.WINDOW_MAX,
+    ),
+) -> Response:
+    """Portable Markdown brief — headline, key metrics, vocab delta,
+    active clusters, bridges born, hubs, recommendations. Paste-anywhere
+    snapshot of the window."""
+    r = pulse_engine.compute_pulse(
+        window_days=window_days, threshold=threshold, top_k=top_k
+    )
+    md = pulse_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="pulse.md"'},
     )

@@ -1,5 +1,7 @@
 import type {
+  AtlasReport,
   AtomCommit,
+  ChronicleReport,
   AtomizeCommitResponse,
   AtomizeMode,
   AtomizeResponse,
@@ -9,11 +11,16 @@ import type {
   ChatStatus,
   ClusterDigest,
   Community,
+  EchoCluster,
+  EchoMergeResult,
+  EchoReport,
+  EchoSkipEntry,
   Graph,
   Neighbor,
   Note,
   OrphanSuggestion,
   PathResult,
+  PulseReport,
   SearchHit,
   TensionReport,
   Trail,
@@ -199,5 +206,131 @@ export const api = {
     if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
     const qs = q.toString();
     return `${BASE}/tensions/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  echo: (opts?: { threshold?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return j<EchoReport>(`/echo${qs ? `?${qs}` : ""}`);
+  },
+
+  echoPreview: (payload: { note_ids: number[]; canonical_id?: number | null }) =>
+    j<EchoCluster>(`/echo/preview`, {
+      method: "POST",
+      body: JSON.stringify({
+        note_ids: payload.note_ids,
+        canonical_id: payload.canonical_id ?? null,
+      }),
+    }),
+
+  echoMerge: (payload: {
+    note_ids: number[];
+    canonical_id?: number | null;
+    title?: string;
+    body?: string;
+    tags?: string[];
+  }) =>
+    j<EchoMergeResult>(`/echo/merge`, {
+      method: "POST",
+      body: JSON.stringify({
+        note_ids: payload.note_ids,
+        canonical_id: payload.canonical_id ?? null,
+        title: payload.title,
+        body: payload.body,
+        tags: payload.tags,
+      }),
+    }),
+
+  echoSkip: (payload: { pairs: [number, number][]; reason?: string }) =>
+    j<{ inserted: number; total_skips: number }>(`/echo/skip`, {
+      method: "POST",
+      body: JSON.stringify({ pairs: payload.pairs, reason: payload.reason ?? "" }),
+    }),
+
+  echoSkips: () => j<EchoSkipEntry[]>(`/echo/skips`),
+
+  echoUnskip: (a: number, b: number) =>
+    j<void>(`/echo/skip?a=${a}&b=${b}`, { method: "DELETE" }),
+
+  echoExportUrl: (opts?: { threshold?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    const qs = q.toString();
+    return `${BASE}/echo/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  atlas: (opts?: { threshold?: number; topK?: number; windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return j<AtlasReport>(`/atlas${qs ? `?${qs}` : ""}`);
+  },
+
+  atlasExportUrl: (opts?: { windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return `${BASE}/atlas/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  chronicle: (opts?: {
+    threshold?: number;
+    topK?: number;
+    maxChapters?: number;
+    minClusterNotes?: number;
+    minSpanDays?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.maxChapters !== undefined)
+      q.set("max_chapters", String(opts.maxChapters));
+    if (opts?.minClusterNotes !== undefined)
+      q.set("min_cluster_notes", String(opts.minClusterNotes));
+    if (opts?.minSpanDays !== undefined)
+      q.set("min_span_days", String(opts.minSpanDays));
+    const qs = q.toString();
+    return j<ChronicleReport>(`/chronicle${qs ? `?${qs}` : ""}`);
+  },
+
+  chronicleExportUrl: (opts?: {
+    maxChapters?: number;
+    minClusterNotes?: number;
+    minSpanDays?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.maxChapters !== undefined)
+      q.set("max_chapters", String(opts.maxChapters));
+    if (opts?.minClusterNotes !== undefined)
+      q.set("min_cluster_notes", String(opts.minClusterNotes));
+    if (opts?.minSpanDays !== undefined)
+      q.set("min_span_days", String(opts.minSpanDays));
+    const qs = q.toString();
+    return `${BASE}/chronicle/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  pulse: (opts?: { windowDays?: number; threshold?: number; topK?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    const qs = q.toString();
+    return j<PulseReport>(`/pulse${qs ? `?${qs}` : ""}`);
+  },
+
+  pulseExportUrl: (opts?: { windowDays?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.windowDays !== undefined)
+      q.set("window_days", String(opts.windowDays));
+    const qs = q.toString();
+    return `${BASE}/pulse/export.md${qs ? `?${qs}` : ""}`;
   },
 };

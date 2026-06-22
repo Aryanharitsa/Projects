@@ -18,6 +18,9 @@ from src import prompts as prompts_lib
 from src import insights as insights_lib
 from src import evals as evals_lib
 from src import rubrics as rubrics_lib
+from src import optimizer as optimizer_lib
+from src import adversary as adversary_lib
+from src import showdown as showdown_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1265,6 +1268,354 @@ def rubrics_judgement_delete(judgement_id):
     if not rubrics_lib.delete_judgement(judgement_id):
         return jsonify({'success': False, 'error': 'judgement not found'}), 404
     return jsonify({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Optimizer Studio — automated prompt evolution against a rubric. Round-10.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/optimize/mutations', methods=['GET'])
+def optimize_mutations():
+    return jsonify({'success': True, 'mutations': optimizer_lib.mutation_catalog()})
+
+
+@llm_bp.route('/optimize/preview', methods=['POST'])
+def optimize_preview():
+    """Dry-render every mutation against ``base_prompt`` so the Setup pane
+    shows the user what each strategy would do before committing to a run."""
+    data = request.get_json() or {}
+    base_prompt = (data.get('base_prompt') or '').strip()
+    if not base_prompt:
+        return jsonify({'success': False, 'error': 'base_prompt is required'}), 400
+    cases = data.get('test_cases') or []
+    rubric_id = (data.get('rubric_id') or '').strip()
+    rubric_dims = []
+    if rubric_id:
+        rb = rubrics_lib.get_rubric(rubric_id, include_revisions=False, recent_judgements=0)
+        if rb:
+            rubric_dims = rb.get('dimensions') or []
+    out = optimizer_lib.preview_all_mutations(base_prompt, {
+        'cases': cases,
+        'rubric_dimensions': rubric_dims,
+    })
+    return jsonify({'success': True, 'previews': out})
+
+
+@llm_bp.route('/optimize', methods=['GET'])
+def optimize_list():
+    args = request.args
+    rows, total = optimizer_lib.list_optimizations(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'optimizations': rows, 'total': total})
+
+
+@llm_bp.route('/optimize', methods=['POST'])
+def optimize_create():
+    data = request.get_json() or {}
+    try:
+        opt = optimizer_lib.create_optimization(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            base_prompt=(data.get('base_prompt') or '').strip(),
+            rubric_id=(data.get('rubric_id') or '').strip(),
+            rubric_revision=data.get('rubric_revision'),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            test_cases=data.get('test_cases') or [],
+            target_generations=int(data.get('target_generations') or 3),
+            strategy=data.get('strategy'),
+            dryrun=bool(data.get('dryrun', False)),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'optimization': opt}), 201
+
+
+@llm_bp.route('/optimize/seed', methods=['POST'])
+def optimize_seed():
+    opt = optimizer_lib.seed_demo()
+    return jsonify({'success': True, 'optimization': opt}), 201
+
+
+@llm_bp.route('/optimize/stats', methods=['GET'])
+def optimize_stats():
+    return jsonify({'success': True, 'stats': optimizer_lib.stats()})
+
+
+@llm_bp.route('/optimize/<opt_id>', methods=['GET'])
+def optimize_get(opt_id):
+    opt = optimizer_lib.get_optimization(opt_id)
+    if not opt:
+        return jsonify({'success': False, 'error': 'optimization not found'}), 404
+    return jsonify({'success': True, 'optimization': opt})
+
+
+@llm_bp.route('/optimize/<opt_id>', methods=['DELETE'])
+def optimize_delete(opt_id):
+    if not optimizer_lib.delete_optimization(opt_id):
+        return jsonify({'success': False, 'error': 'optimization not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/optimize/<opt_id>/advance', methods=['POST'])
+def optimize_advance(opt_id):
+    """Run one generation. The frontend can call this repeatedly to step
+    through evolution, or hit ``/run`` to consume all remaining generations
+    in one shot (for dry-run only — live mode should be stepped)."""
+    try:
+        payload, status = optimizer_lib.advance_generation(
+            opt_id, provider_factory=provider_factory,
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+@llm_bp.route('/optimize/<opt_id>/run', methods=['POST'])
+def optimize_run_all(opt_id):
+    """Consume every remaining generation in one call. Intended for the demo /
+    dry-run path; live runs should step generation-by-generation so the user
+    can stop after each one if they don't like where it's going."""
+    opt = optimizer_lib.get_optimization(opt_id)
+    if not opt:
+        return jsonify({'success': False, 'error': 'optimization not found'}), 404
+    if not opt['dryrun']:
+        # Refuse to spend money in one shot without explicit confirmation.
+        data = request.get_json() or {}
+        if not data.get('confirm_live'):
+            return jsonify({
+                'success': False,
+                'error': "live optimization: pass {confirm_live: true} or step via /advance",
+            }), 400
+    remaining = opt['target_generations'] - opt['generations_done']
+    if remaining <= 0:
+        return jsonify({'success': False, 'error': 'no generations remaining'}), 400
+    gens_run = []
+    for _ in range(remaining):
+        try:
+            payload, status = optimizer_lib.advance_generation(
+                opt_id, provider_factory=provider_factory,
+            )
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.error(traceback.format_exc())
+            return jsonify({'success': False, 'error': str(exc)}), 500
+        if status != 200:
+            return jsonify(payload), status
+        gens_run.append({
+            'generation': payload['generation'],
+            'best': payload.get('best_in_generation'),
+            'cost': payload.get('gen_cost'),
+        })
+    return jsonify({
+        'success': True,
+        'optimization': optimizer_lib.get_optimization(opt_id),
+        'generations_run': gens_run,
+    })
+
+
+@llm_bp.route('/optimize/<opt_id>/promote/<variant_id>', methods=['POST'])
+def optimize_promote(opt_id, variant_id):
+    opt = optimizer_lib.promote_variant(opt_id, variant_id)
+    if opt is None:
+        return jsonify({'success': False, 'error': 'optimization or variant not found'}), 404
+    return jsonify({'success': True, 'optimization': opt})
+
+
+# ---------------------------------------------------------------------------
+# Adversary Lab — prompt robustness tester. Day-53.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/adversary/perturbations', methods=['GET'])
+def adversary_perturbations():
+    return jsonify({'success': True, 'perturbations': adversary_lib.perturbation_catalog()})
+
+
+@llm_bp.route('/adversary/preview', methods=['POST'])
+def adversary_preview():
+    """Dry-render every perturbation against a base prompt + optional sample
+    input. Drives the Setup-tab live preview without persisting anything."""
+    data = request.get_json() or {}
+    base_prompt = (data.get('base_prompt') or '').strip()
+    if not base_prompt:
+        return jsonify({'success': False, 'error': 'base_prompt is required'}), 400
+    sample_input = (data.get('sample_input') or '').strip()
+    kinds = data.get('kinds') if isinstance(data.get('kinds'), list) else None
+    out = adversary_lib.preview_perturbations(base_prompt, sample_input, kinds)
+    return jsonify({'success': True, 'previews': out})
+
+
+@llm_bp.route('/adversary', methods=['GET'])
+def adversary_list():
+    args = request.args
+    rows, total = adversary_lib.list_audits(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'audits': rows, 'total': total})
+
+
+@llm_bp.route('/adversary', methods=['POST'])
+def adversary_create():
+    data = request.get_json() or {}
+    try:
+        audit = adversary_lib.create_audit(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            base_prompt=(data.get('base_prompt') or '').strip(),
+            rubric_id=(data.get('rubric_id') or '').strip(),
+            rubric_revision=data.get('rubric_revision'),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            test_cases=data.get('test_cases') or [],
+            perturbations=data.get('perturbations'),
+            dryrun=bool(data.get('dryrun', False)),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'audit': audit}), 201
+
+
+@llm_bp.route('/adversary/seed', methods=['POST'])
+def adversary_seed():
+    audit = adversary_lib.seed_demo()
+    return jsonify({'success': True, 'audit': audit}), 201
+
+
+@llm_bp.route('/adversary/stats', methods=['GET'])
+def adversary_stats():
+    return jsonify({'success': True, 'stats': adversary_lib.stats()})
+
+
+@llm_bp.route('/adversary/<audit_id>', methods=['GET'])
+def adversary_get(audit_id):
+    audit = adversary_lib.get_audit(audit_id)
+    if not audit:
+        return jsonify({'success': False, 'error': 'audit not found'}), 404
+    return jsonify({'success': True, 'audit': audit})
+
+
+@llm_bp.route('/adversary/<audit_id>', methods=['DELETE'])
+def adversary_delete(audit_id):
+    if not adversary_lib.delete_audit(audit_id):
+        return jsonify({'success': False, 'error': 'audit not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/adversary/<audit_id>/run', methods=['POST'])
+def adversary_run(audit_id):
+    """Run the audit — clean baseline + every selected perturbation.
+
+    For live mode requires ``{confirm_live: true}`` so we don't accidentally
+    spend money. Dry-run mode runs instantly and needs no keys."""
+    data = request.get_json() or {}
+    try:
+        payload, status = adversary_lib.run_audit(
+            audit_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+# ─── Showdown Arena ────────────────────────────────────────────────────────
+# Paired A/B testing of two prompts ("Champion" vs "Challenger") across a
+# shared set of test cases. Surfaces real statistics — mean Δ, paired
+# bootstrap 95% CI, sign-test p-value, Cohen's d, win rate — and a
+# ship/keep/no-decision verdict. Round-13.
+
+@llm_bp.route('/showdown', methods=['GET'])
+def showdown_list():
+    args = request.args
+    rows, total = showdown_lib.list_showdowns(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        decision=(args.get('decision') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'showdowns': rows, 'total': total})
+
+
+@llm_bp.route('/showdown', methods=['POST'])
+def showdown_create():
+    data = request.get_json() or {}
+    try:
+        sd = showdown_lib.create_showdown(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            champion_prompt=(data.get('champion_prompt') or '').strip(),
+            challenger_prompt=(data.get('challenger_prompt') or '').strip(),
+            champion_label=(data.get('champion_label') or 'Champion'),
+            challenger_label=(data.get('challenger_label') or 'Challenger'),
+            rubric_id=(data.get('rubric_id') or '').strip(),
+            rubric_revision=data.get('rubric_revision'),
+            judge_provider=(data.get('judge_provider') or '').strip(),
+            judge_model=(data.get('judge_model') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            test_cases=data.get('test_cases') or [],
+            dryrun=bool(data.get('dryrun', False)),
+            n_bootstrap=data.get('n_bootstrap', showdown_lib.DEFAULT_BOOTSTRAP),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'showdown': sd}), 201
+
+
+@llm_bp.route('/showdown/seed', methods=['POST'])
+def showdown_seed():
+    sd = showdown_lib.seed_demo()
+    return jsonify({'success': True, 'showdown': sd}), 201
+
+
+@llm_bp.route('/showdown/stats', methods=['GET'])
+def showdown_stats():
+    return jsonify({'success': True, 'stats': showdown_lib.stats()})
+
+
+@llm_bp.route('/showdown/<showdown_id>', methods=['GET'])
+def showdown_get(showdown_id):
+    sd = showdown_lib.get_showdown(showdown_id)
+    if not sd:
+        return jsonify({'success': False, 'error': 'showdown not found'}), 404
+    return jsonify({'success': True, 'showdown': sd})
+
+
+@llm_bp.route('/showdown/<showdown_id>', methods=['DELETE'])
+def showdown_delete(showdown_id):
+    if not showdown_lib.delete_showdown(showdown_id):
+        return jsonify({'success': False, 'error': 'showdown not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/showdown/<showdown_id>/run', methods=['POST'])
+def showdown_run(showdown_id):
+    """Run the showdown — both prompts × every case, paired stats roll-up."""
+    data = request.get_json() or {}
+    try:
+        payload, status = showdown_lib.run_showdown(
+            showdown_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
 
 
 @llm_bp.route('/insights', methods=['GET'])
