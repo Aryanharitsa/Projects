@@ -4710,3 +4710,487 @@ def render_pulse_empty(hint: str = "Pick your stay and 1–3 destinations, then 
         """,
         unsafe_allow_html=True,
     )
+
+
+# ============================================================================
+# Beacon — Group Safety Coordinator (Day 61)
+# ============================================================================
+
+_BEACON_MOOD_HUE: dict[str, str] = {
+    "Calm":     "#53E3A6",
+    "Watch":    "#F9C440",
+    "Active":   "#FF9F43",
+    "Critical": "#FF3D60",
+}
+
+_BEACON_BAND_HUE: dict[str, str] = {
+    "Safe":      "#53E3A6",
+    "Caution":   "#F9C440",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+    "Unknown":   "#8892A6",
+}
+
+_BEACON_SOURCE_HUE: dict[str, str] = {
+    "help_poi":      "#3DA9FC",
+    "centroid":      "#A78BFA",
+    "safe_pocket":   "#53E3A6",
+    "stable_member": "#F9C440",
+}
+
+_BEACON_SOURCE_LABEL: dict[str, str] = {
+    "help_poi":      "help POI",
+    "centroid":      "centroid",
+    "safe_pocket":   "safe pocket",
+    "stable_member": "stable member",
+}
+
+_BEACON_CSS = """
+<style>
+.ws-bcn-hero {
+  position:relative;
+  border-radius:18px;
+  padding:18px 22px;
+  margin: 8px 0 14px;
+  background:
+    radial-gradient(150% 95% at -8% -40%, var(--glow) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%),
+    #161A23;
+  border: 1px solid rgba(255,255,255,0.08);
+  display:grid;
+  grid-template-columns: minmax(190px, 1fr) 3.4fr 1.4fr;
+  gap: 18px; align-items:center; overflow:hidden;
+}
+.ws-bcn-hero::after {
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(120deg, var(--glow) 0%, transparent 38%);
+  pointer-events:none; opacity:.55;
+}
+@keyframes ws-bcn-breathe {
+  0%   { transform: scale(1.000); opacity:1.00; }
+  50%  { transform: scale(1.028); opacity:0.88; }
+  100% { transform: scale(1.000); opacity:1.00; }
+}
+.ws-bcn-ring {
+  width: 152px; height: 152px; border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px var(--glow);
+  flex-shrink:0;
+  animation: ws-bcn-breathe 4.6s ease-in-out infinite;
+}
+.ws-bcn-ring::after {
+  content:""; position:absolute; inset:14px; border-radius:50%;
+  background:#161A23; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.ws-bcn-ring-inner {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.ws-bcn-ring-mood {
+  font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+  color: var(--hue); font-weight:700;
+}
+.ws-bcn-ring-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  font-size: 2.05rem; letter-spacing:-.04em;
+}
+.ws-bcn-ring-sub { font-size:.78rem; color:#A4ADC2; }
+.ws-bcn-hero-body { position:relative; z-index:1; }
+.ws-bcn-kicker {
+  font-size:.72rem; letter-spacing:.22em; text-transform:uppercase;
+  color: var(--hue); font-weight:700; margin-bottom:6px;
+}
+.ws-bcn-headline { font-size:1.32rem; font-weight:800; letter-spacing:-.02em; line-height:1.28; }
+.ws-bcn-advisory { color:#C8D0E0; font-size:.95rem; margin-top:6px; }
+.ws-bcn-concern {
+  position:relative; z-index:1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius:14px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.ws-bcn-concern-kicker { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-concern-label { font-weight:700; font-size:1.0rem; }
+.ws-bcn-concern-band {
+  display:inline-block; align-self:flex-start;
+  padding:3px 10px; border-radius:999px; font-weight:800;
+  background: var(--bg, rgba(255,255,255,0.08)); color: var(--c, #E6EAF2);
+  font-size:.78rem;
+}
+.ws-bcn-concern-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-bcn-tiles {
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 4px 0 14px;
+}
+.ws-bcn-tile {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:2px;
+  position:relative; overflow:hidden;
+}
+.ws-bcn-tile::after {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: var(--accent, #3DA9FC);
+}
+.ws-bcn-tile-kicker { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-tile-val { font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:1.32rem; letter-spacing:-.02em; }
+.ws-bcn-tile-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-bcn-section-title {
+  font-weight:800; font-size:.92rem; letter-spacing:.04em; text-transform:uppercase;
+  color:#8892A6; margin: 14px 0 6px;
+}
+
+.ws-bcn-member-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
+.ws-bcn-member {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px; padding:12px 14px;
+  display:grid; grid-template-columns: 78px 1fr; gap:12px;
+  align-items:center; position:relative;
+}
+.ws-bcn-member::before {
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px;
+  background: var(--accent, #8892A6); border-radius:0 4px 4px 0;
+}
+.ws-bcn-member-ring {
+  width: 70px; height:70px; border-radius:50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.ws-bcn-member-ring::after { content:""; position:absolute; inset:6px; border-radius:50%; background:#161A23; }
+.ws-bcn-member-ring-val { position:relative; z-index:2; font-weight:800; font-variant-numeric:tabular-nums; font-size:1.15rem; }
+.ws-bcn-member-name { font-weight:700; font-size:1.0rem; display:flex; align-items:center; gap:6px; }
+.ws-bcn-member-kind { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-member-meta { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.ws-bcn-chip {
+  display:inline-block; padding:3px 8px; border-radius:999px;
+  font-size:.72rem; font-weight:700;
+  background: rgba(255,255,255,0.06); color:#E6EAF2;
+}
+.ws-bcn-chip.warn { background: rgba(255,159,67,0.16); color:#FFB077; }
+.ws-bcn-chip.bad  { background: rgba(255,61,96,0.16);  color:#FF6F88; }
+.ws-bcn-chip.ok   { background: rgba(83,227,166,0.14); color:#62E9B2; }
+.ws-bcn-chip.cool { background: rgba(61,169,252,0.16); color:#7BC4FE; }
+
+.ws-bcn-cand-table {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px; padding:8px;
+}
+.ws-bcn-cand-row {
+  display:grid;
+  grid-template-columns: 30px minmax(180px, 1.4fr) 64px 64px 80px 90px 80px;
+  gap:8px; align-items:center;
+  padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04);
+  font-size:.85rem;
+}
+.ws-bcn-cand-row:last-child { border-bottom: none; }
+.ws-bcn-cand-row.head { color:#8892A6; font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.08); }
+.ws-bcn-cand-row.chosen {
+  background: linear-gradient(180deg, rgba(83,227,166,0.06), rgba(83,227,166,0.02));
+  border-left: 2px solid #53E3A6;
+}
+.ws-bcn-cand-row.secondary {
+  background: linear-gradient(180deg, rgba(249,196,64,0.04), transparent);
+  border-left: 2px solid rgba(249,196,64,0.6);
+}
+.ws-bcn-cand-rank {
+  width:24px; height:24px; border-radius:50%;
+  background: rgba(255,255,255,0.07); color:#C8D0E0;
+  font-weight:700; font-size:.78rem;
+  display:flex; align-items:center; justify-content:center;
+}
+.ws-bcn-cand-label { display:flex; flex-direction:column; gap:1px; }
+.ws-bcn-cand-label b { font-size:.92rem; }
+.ws-bcn-cand-label small { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-cand-num { font-variant-numeric:tabular-nums; font-weight:700; text-align:right; }
+.ws-bcn-cand-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  text-align:right;
+}
+
+.ws-bcn-alert {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.4;
+  border-left: 3px solid var(--severity, #F9C440);
+}
+.ws-bcn-alert b { color:#E6EAF2; }
+
+.ws-bcn-plan-list { list-style:none; padding-left:0; margin:0; counter-reset: ws-bcn-plan; }
+.ws-bcn-plan-list li {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px 10px 40px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.45;
+  position:relative;
+}
+.ws-bcn-plan-list li::before {
+  counter-increment: ws-bcn-plan;
+  content: counter(ws-bcn-plan);
+  position:absolute; left:10px; top:10px;
+  width:22px; height:22px; border-radius:50%;
+  background: rgba(120, 200, 255, 0.16);
+  color: #7BC4FE; font-size:.78rem; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.ws-bcn-plan-list li b { color:#E6EAF2; }
+
+.ws-bcn-source-pill {
+  display:inline-block; padding:2px 8px; border-radius:999px;
+  font-size:.66rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  background: var(--bg, rgba(255,255,255,0.06));
+  color: var(--c, #C8D0E0);
+}
+
+.ws-bcn-empty {
+  background:#161A23; border:1px dashed rgba(255,255,255,0.10);
+  border-radius:16px; padding:26px; text-align:center; color:#A4ADC2;
+}
+.ws-bcn-empty-title { font-weight:800; color:#E6EAF2; font-size:1.05rem; margin-bottom:6px; }
+</style>
+"""
+
+
+def _bcn_rec_to_html(text) -> str:
+    """Tiny **bold** parser identical to the Pulse one."""
+    if text is None:
+        return ""
+    s = _esc(str(text))
+    out = []
+    i = 0
+    bold = False
+    while i < len(s):
+        if s[i] == "*" and i + 1 < len(s) and s[i + 1] == "*":
+            out.append("</b>" if bold else "<b>")
+            bold = not bold
+            i += 2
+        else:
+            out.append(s[i]); i += 1
+    if bold:
+        out.append("</b>")
+    return "".join(out).replace("\n", "<br/>")
+
+
+def _bcn_alert_severity(line: str) -> str:
+    low = line.lower()
+    if "danger" in low or "critical" in low or "high risk" in low or "high_risk" in low:
+        return "#FF3D60"
+    if "isolated" in low or "fragmented" in low or "geofenced" in low:
+        return "#FF9F43"
+    if "corridor" in low or "re-route" in low or "escort" in low:
+        return "#F9C440"
+    return "#3DA9FC"
+
+
+def render_beacon(report) -> None:
+    """Render the full Beacon — Group Safety Coordinator brief."""
+    st.markdown(_BEACON_CSS, unsafe_allow_html=True)
+
+    mood = report.mood
+    hue = _BEACON_MOOD_HUE.get(mood, "#8892A6")
+    glow = _hex_to_rgba(hue, 0.22)
+
+    # ---- hero ----------------------------------------------------------
+    concern = next(
+        (s for s in report.members if s.member.id == report.biggest_concern),
+        None,
+    )
+    if concern is not None:
+        c_hue = _BEACON_BAND_HUE.get(concern.band, "#C8D0E0")
+        c_bg = _hex_to_rgba(c_hue, 0.18)
+        concern_block = f"""
+          <div class="ws-bcn-concern">
+            <div class="ws-bcn-concern-kicker">Biggest concern</div>
+            <div class="ws-bcn-concern-label">{_esc(concern.glyph)} {_esc(concern.member.label)}</div>
+            <div class="ws-bcn-concern-band" style="--bg:{c_bg}; --c:{c_hue};">{_esc(concern.band)} · score {concern.score}</div>
+            <div class="ws-bcn-concern-sub">
+              isolation {concern.isolation_km:.2f} km · nearest help {(f'{concern.nearest_help_km:.2f} km' if concern.nearest_help_km is not None else '—')}
+            </div>
+          </div>
+        """
+    else:
+        concern_block = ""
+
+    st.markdown(
+        f"""
+        <div class="ws-bcn-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-bcn-ring" style="--hue:{hue}; --pct:{report.group_score}; --glow:{glow};">
+            <div class="ws-bcn-ring-inner">
+              <div class="ws-bcn-ring-mood">{_esc(mood)}</div>
+              <div class="ws-bcn-ring-score">{report.group_score}</div>
+              <div class="ws-bcn-ring-sub">group score · {_esc(report.group_band)}</div>
+            </div>
+          </div>
+          <div class="ws-bcn-hero-body">
+            <div class="ws-bcn-kicker">Beacon · {_esc(report.now.strftime('%a %d %b · %H:%M'))}</div>
+            <div class="ws-bcn-headline">{_bcn_rec_to_html(report.headline)}</div>
+            <div class="ws-bcn-advisory">{_bcn_rec_to_html(report.advisory_line)}</div>
+          </div>
+          {concern_block}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- 4-tile vital signs --------------------------------------------
+    band_hue = _BEACON_BAND_HUE.get(report.group_band, "#8892A6")
+    spread = report.group_spread_km
+    if spread > 2.5:    spread_hue = "#FF3D60"
+    elif spread > 1.2:  spread_hue = "#FF9F43"
+    elif spread > 0.5:  spread_hue = "#F9C440"
+    else:               spread_hue = "#53E3A6"
+    chosen_lab = report.chosen.label if report.chosen else "—"
+    chosen_eta = (
+        f"{report.chosen.eta_max_minutes:.0f} min slow · {report.chosen.max_walk_km:.2f} km"
+        if report.chosen else "no candidate"
+    )
+    chosen_src_hue = _BEACON_SOURCE_HUE.get(report.chosen.source, "#8892A6") if report.chosen else "#8892A6"
+    st.markdown(
+        f"""
+        <div class="ws-bcn-tiles">
+          <div class="ws-bcn-tile" style="--accent:{band_hue};">
+            <div class="ws-bcn-tile-kicker">Group band</div>
+            <div class="ws-bcn-tile-val" style="color:{band_hue};">{_esc(report.group_band)}</div>
+            <div class="ws-bcn-tile-sub">score {report.group_score} · {len(report.members)} member(s)</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:{spread_hue};">
+            <div class="ws-bcn-tile-kicker">Group spread</div>
+            <div class="ws-bcn-tile-val" style="color:{spread_hue};">{spread:.2f} km</div>
+            <div class="ws-bcn-tile-sub">max pairwise distance</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:#A78BFA;">
+            <div class="ws-bcn-tile-kicker">Mood</div>
+            <div class="ws-bcn-tile-val" style="color:{hue};">{_esc(mood)}</div>
+            <div class="ws-bcn-tile-sub">{len(report.alerts)} alert(s) · {len(report.candidates)} candidate(s)</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:{chosen_src_hue};">
+            <div class="ws-bcn-tile-kicker">Meet at</div>
+            <div class="ws-bcn-tile-val">{_esc(chosen_lab[:22])}</div>
+            <div class="ws-bcn-tile-sub">{_esc(chosen_eta)}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- Per-member cards ----------------------------------------------
+    st.markdown('<div class="ws-bcn-section-title">Members</div>', unsafe_allow_html=True)
+    cor_by_id = {c.member_id: c for c in report.corridors}
+    cards: list[str] = []
+    for s in report.members:
+        m_hue = _BEACON_BAND_HUE.get(s.band, "#8892A6")
+        cor = cor_by_id.get(s.member.id)
+        chips: list[str] = []
+        chips.append(f'<span class="ws-bcn-chip">iso {s.isolation_km:.2f} km</span>')
+        if s.nearest_help_km is not None:
+            help_cls = "ok" if s.nearest_help_km <= 1.0 else ("warn" if s.nearest_help_km <= 2.5 else "bad")
+            chips.append(f'<span class="ws-bcn-chip {help_cls}">help {s.nearest_help_km:.2f} km</span>')
+        if cor is not None:
+            cor_cls = "bad" if cor.peak_risk >= 0.55 else ("warn" if cor.peak_risk >= 0.35 else "ok")
+            chips.append(f'<span class="ws-bcn-chip {cor_cls}">→ meet · {cor.distance_km:.2f} km · {cor.eta_minutes:.0f} min</span>')
+            chips.append(f'<span class="ws-bcn-chip {cor_cls}">corridor risk {cor.peak_risk:.2f}</span>')
+        band_cls = {"Safe": "ok", "Caution": "warn", "High Risk": "bad", "Danger": "bad"}.get(s.band, "")
+        chips.append(f'<span class="ws-bcn-chip {band_cls}">{_esc(s.band)}</span>')
+        chips_html = "".join(chips)
+        cards.append(f"""
+          <div class="ws-bcn-member" style="--accent:{m_hue};">
+            <div class="ws-bcn-member-ring" style="--hue:{m_hue}; --pct:{s.score};">
+              <div class="ws-bcn-member-ring-val">{s.score}</div>
+            </div>
+            <div>
+              <div class="ws-bcn-member-name">{_esc(s.glyph)} {_esc(s.member.label)}</div>
+              <div class="ws-bcn-member-kind">{_esc(s.member.kind)}</div>
+              <div class="ws-bcn-member-meta">{chips_html}</div>
+            </div>
+          </div>
+        """)
+    st.markdown(
+        f'<div class="ws-bcn-member-grid">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- Meet-point candidates -----------------------------------------
+    if report.candidates:
+        st.markdown('<div class="ws-bcn-section-title">Meet-point candidates</div>', unsafe_allow_html=True)
+        rows: list[str] = []
+        rows.append("""
+          <div class="ws-bcn-cand-row head">
+            <div></div>
+            <div>Where</div>
+            <div style="text-align:right;">Score</div>
+            <div style="text-align:right;">Safety</div>
+            <div style="text-align:right;">Max walk</div>
+            <div style="text-align:right;">Sum walk</div>
+            <div style="text-align:right;">Worst risk</div>
+          </div>
+        """)
+        chosen_id = id(report.chosen) if report.chosen else None
+        secondary_id = id(report.secondary) if report.secondary else None
+        for i, c in enumerate(report.candidates[:6], 1):
+            extra_cls = ""
+            if id(c) == chosen_id:
+                extra_cls = " chosen"
+            elif id(c) == secondary_id:
+                extra_cls = " secondary"
+            src_hue = _BEACON_SOURCE_HUE.get(c.source, "#8892A6")
+            src_bg = _hex_to_rgba(src_hue, 0.16)
+            src_label = _BEACON_SOURCE_LABEL.get(c.source, c.source)
+            risk_hue = "#FF3D60" if c.max_path_risk >= 0.55 else ("#F9C440" if c.max_path_risk >= 0.35 else "#53E3A6")
+            rows.append(f"""
+              <div class="ws-bcn-cand-row{extra_cls}">
+                <div class="ws-bcn-cand-rank">{i}</div>
+                <div class="ws-bcn-cand-label">
+                  <b>{_esc(c.label)}</b>
+                  <small><span class="ws-bcn-source-pill" style="--bg:{src_bg}; --c:{src_hue};">{_esc(src_label)}</span></small>
+                </div>
+                <div class="ws-bcn-cand-score" style="color:{_BEACON_MOOD_HUE.get(mood) if id(c)==chosen_id else '#E6EAF2'};">{c.score}</div>
+                <div class="ws-bcn-cand-num">{c.safety_at}</div>
+                <div class="ws-bcn-cand-num">{c.max_walk_km:.2f} km</div>
+                <div class="ws-bcn-cand-num">{c.sum_walk_km:.2f} km</div>
+                <div class="ws-bcn-cand-num" style="color:{risk_hue};">{c.max_path_risk:.2f}</div>
+              </div>
+            """)
+        st.markdown(
+            f'<div class="ws-bcn-cand-table">{"".join(rows)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- Alerts --------------------------------------------------------
+    if report.alerts:
+        st.markdown('<div class="ws-bcn-section-title">Alerts</div>', unsafe_allow_html=True)
+        for line in report.alerts:
+            sev = _bcn_alert_severity(line)
+            st.markdown(
+                f'<div class="ws-bcn-alert" style="--severity:{sev};">{_bcn_rec_to_html(line)}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ---- Plan of action ------------------------------------------------
+    if report.plan_of_action:
+        st.markdown('<div class="ws-bcn-section-title">Plan of action</div>', unsafe_allow_html=True)
+        items = "".join(
+            f'<li>{_bcn_rec_to_html(p)}</li>' for p in report.plan_of_action
+        )
+        st.markdown(f'<ol class="ws-bcn-plan-list">{items}</ol>', unsafe_allow_html=True)
+
+
+def render_beacon_empty(
+    hint: str = "Add 2–6 group members (lat/lon), then press **Compose Beacon**.",
+) -> None:
+    st.markdown(_BEACON_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-bcn-empty">
+          <div class="ws-bcn-empty-title">Beacon idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">Beacon is a *group-first* composer —
+          every other WaySafe surface scores a single point at a time.
+          Beacon scores the group as a whole, ranks meet-point candidates by
+          how the walk to each point would actually go for every member, and
+          paints rendezvous corridors with per-waypoint risk samples.
+          Pure-Python, zero new deps.</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

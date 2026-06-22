@@ -331,7 +331,7 @@ if role == "Tourist App":
     )
 
     tab_labels = [
-        "Pulse", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
+        "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
         "Report Hazard", "Alerts", "SOS", "Trip Log",
     ]
@@ -462,14 +462,216 @@ if role == "Tourist App":
                     use_container_width=True,
                 )
 
-    # ---------------- Map
+    # ---------------- Beacon — Group Safety Coordinator (Day 61)
+    # The first WaySafe surface that thinks in terms of a group instead of
+    # a single point. Pure composition over `compute_safety` + `point_risk`
+    # — zero new physics. Same composer family as Pulse / SynapseOS Pulse /
+    # TITAN Pulse: every number comes from an engine that already shipped.
     with tabs[1]:
+        import beacon as bcn
+
+        st.subheader("Beacon — Group Safety Coordinator")
+        st.caption(
+            "Score your **group** as a whole, find the **meet-point** that "
+            "minimises max-member walk-risk, and paint a **rendezvous corridor** "
+            "from each member with per-waypoint risk samples. Built for "
+            "families, student trips, business teams — 2–6 members."
+        )
+
+        # Default roster — the user's current location seeded as the lead +
+        # three small perturbations so the demo always has a meaningful group
+        # to render. Real users edit the roster in the data_editor below.
+        if "beacon_roster" not in st.session_state:
+            lat0, lon0 = float(my["lat"]), float(my["lon"])
+            st.session_state.beacon_roster = [
+                {"id": "m1", "label": "You (lead)",
+                 "kind": "lead",      "lat": lat0,           "lon": lon0},
+                {"id": "m2", "label": "Companion 1",
+                 "kind": "traveller", "lat": lat0 + 0.0090,  "lon": lon0 - 0.0070},
+                {"id": "m3", "label": "Companion 2",
+                 "kind": "traveller", "lat": lat0 - 0.0075,  "lon": lon0 + 0.0095},
+            ]
+
+        with st.expander("Group roster", expanded=False):
+            st.caption(
+                "Edit the group — 2 to 6 members. `kind` weights the "
+                "composite (minor / elder count for more safety weight)."
+            )
+            edited = st.data_editor(
+                pd.DataFrame(st.session_state.beacon_roster),
+                key="beacon_roster_editor",
+                use_container_width=True, num_rows="dynamic",
+                column_config={
+                    "id": st.column_config.TextColumn("id", width="small"),
+                    "kind": st.column_config.SelectboxColumn(
+                        "kind",
+                        options=["lead", "traveller", "minor", "elder", "guide"],
+                        width="small",
+                    ),
+                    "label": st.column_config.TextColumn("label", width="medium"),
+                    "lat": st.column_config.NumberColumn("lat", format="%.5f"),
+                    "lon": st.column_config.NumberColumn("lon", format="%.5f"),
+                },
+            )
+            cols_e = st.columns([1, 1, 1, 3])
+            if cols_e[0].button("Save roster", key="beacon_save_roster"):
+                st.session_state.beacon_roster = edited.to_dict("records")
+                st.success(f"Saved {len(st.session_state.beacon_roster)} member(s).")
+            if cols_e[1].button("Reset roster", key="beacon_reset_roster"):
+                del st.session_state.beacon_roster
+                st.rerun()
+            if cols_e[2].button("Snap all to me", key="beacon_snap_roster",
+                                help="Snap every member to your current location — "
+                                     "useful when you've just regrouped."):
+                lat0, lon0 = float(my["lat"]), float(my["lon"])
+                for r in st.session_state.beacon_roster:
+                    r["lat"] = lat0
+                    r["lon"] = lon0
+                st.rerun()
+
+        if st.button("Compose Beacon", type="primary",
+                     use_container_width=True, key="beacon_compose"):
+            roster_rows = st.session_state.beacon_roster
+            with st.spinner("Scoring members · ranking meet-points · drawing corridors…"):
+                rep = bcn.compute_beacon(
+                    roster_rows,
+                    incidents=_inc_records, geofences=GEOFENCES,
+                    pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                    now=datetime.utcnow(),
+                )
+            st.session_state.beacon_report = rep
+
+        from theme import render_beacon, render_beacon_empty
+        b_rep = st.session_state.get("beacon_report")
+        if b_rep is None or not b_rep.members:
+            render_beacon_empty()
+        else:
+            render_beacon(b_rep)
+
+            # ---- Map of members + corridors + meet-points ----
+            if b_rep.chosen is not None:
+                st.markdown("##### Group map")
+                # Members: scatter, band-colored.
+                band_rgb = {
+                    "Safe":      [83, 227, 166],
+                    "Caution":   [249, 196, 64],
+                    "High Risk": [255, 127, 80],
+                    "Danger":    [255, 61, 96],
+                    "Unknown":   [136, 146, 166],
+                }
+                member_records = [
+                    {
+                        "lat": float(s.member.lat),
+                        "lon": float(s.member.lon),
+                        "label": s.member.label,
+                        "kind": s.member.kind,
+                        "score": int(s.score),
+                        "band": s.band,
+                        "color": band_rgb.get(s.band, [136, 146, 166]),
+                    }
+                    for s in b_rep.members
+                ]
+                member_layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=member_records,
+                    get_position="[lon, lat]",
+                    get_radius=90,
+                    get_fill_color="color",
+                    get_line_color=[255, 255, 255, 180],
+                    line_width_min_pixels=2,
+                    pickable=True,
+                    radius_min_pixels=8,
+                )
+                # Meet-point: gold star.
+                meet_records = [{
+                    "lat": float(b_rep.chosen.lat),
+                    "lon": float(b_rep.chosen.lon),
+                    "label": b_rep.chosen.label,
+                    "score": int(b_rep.chosen.score),
+                }]
+                meet_layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=meet_records,
+                    get_position="[lon, lat]",
+                    get_radius=160,
+                    get_fill_color=[249, 196, 64, 230],
+                    get_line_color=[255, 255, 255, 230],
+                    line_width_min_pixels=3,
+                    pickable=True,
+                    radius_min_pixels=12,
+                )
+                # Rendezvous corridors — one PathLayer per member, hue-graded
+                # by peak risk.
+                cor_records = []
+                for cor in b_rep.corridors:
+                    path = [[lo, la] for la, lo in cor.coords]
+                    if cor.peak_risk >= 0.55:
+                        color = [255, 61, 96, 200]
+                    elif cor.peak_risk >= 0.35:
+                        color = [249, 196, 64, 200]
+                    else:
+                        color = [61, 169, 252, 200]
+                    cor_records.append({
+                        "path": path,
+                        "color": color,
+                        "peak_risk": cor.peak_risk,
+                        "member_id": cor.member_id,
+                    })
+                corridor_layer = pdk.Layer(
+                    "PathLayer",
+                    data=cor_records,
+                    get_path="path",
+                    get_color="color",
+                    width_scale=4, width_min_pixels=3,
+                    pickable=False,
+                )
+                # Auto-fit the view around all members + meet-point.
+                all_lats = [r["lat"] for r in member_records] + [b_rep.chosen.lat]
+                all_lons = [r["lon"] for r in member_records] + [b_rep.chosen.lon]
+                view = pdk.ViewState(
+                    latitude=sum(all_lats) / len(all_lats),
+                    longitude=sum(all_lons) / len(all_lons),
+                    zoom=14, pitch=0,
+                )
+                st.pydeck_chart(pdk.Deck(
+                    layers=[corridor_layer, member_layer, meet_layer],
+                    initial_view_state=view,
+                    map_style=None,
+                    tooltip={
+                        "html": "<b>{label}</b><br/>score: {score}<br/>{band}",
+                        "style": {"color": "#E6EAF2"},
+                    },
+                ), use_container_width=True)
+                st.caption(
+                    "● members coloured by band · ★ chosen meet-point in gold · "
+                    "corridors painted blue / amber / rose by peak risk."
+                )
+
+            with st.expander("Exports"):
+                col_j, col_m = st.columns(2)
+                col_j.download_button(
+                    "Download JSON",
+                    data=b_rep.to_json().encode("utf-8"),
+                    file_name=f"beacon_{b_rep.now.strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+                col_m.download_button(
+                    "Download Markdown",
+                    data=b_rep.to_markdown().encode("utf-8"),
+                    file_name=f"beacon_{b_rep.now.strftime('%Y%m%d_%H%M')}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+    # ---------------- Map
+    with tabs[2]:
         render_sentinel_watch_banner(sent_pulse)
         draw_map_layers(inc_df, bcast_df, poi_df, my, show_heatmap=st.session_state.show_heatmap)
         st.caption("🔴 verified incident · 🟡 pending · 🟢 help POI · 🟠 risk zone · 🔵 active broadcast")
 
     # ---------------- Plan Route (long-overdue Day-6 wiring)
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("Plan a Safe Route")
         st.caption(
             "Risk-aware A* — runs **fastest** (α=0) and **safest** (α=4.5) in parallel. "
@@ -624,7 +826,7 @@ if role == "Tourist App":
                     render_best_window(windows, plan["depart_at"])
 
     # ---------------- Itinerary (Day-21 move) ----------------
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Multi-Stop Itinerary")
         st.caption(
             "String multiple stops into a single safety-aware day. "
@@ -830,7 +1032,7 @@ if role == "Tourist App":
                         st.success("Your chosen depart time is already optimal in this window.")
 
     # ---------------- Live Trip Companion (round-3 closer)
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Live Trip Companion")
         st.caption(
             "Be *with* the user during the trip — proactive geofence + risk-corridor alerts, "
@@ -1134,7 +1336,7 @@ if role == "Tourist App":
                 st.rerun()
 
     # ---------------- Forecast
-    with tabs[5]:
+    with tabs[6]:
         st.subheader("Hazard Forecast")
         st.caption(
             "Empirical-Bayes spatiotemporal model — historical hazards binned by "
@@ -1233,7 +1435,7 @@ if role == "Tourist App":
             )
 
     # ---------------- Advisory (Day 31) — pre-trip safety brief
-    with tabs[6]:
+    with tabs[7]:
         st.subheader("🧭 Travel Advisory")
         st.caption(
             "A single-page safety brief that fuses **Safety Intelligence**, "
@@ -1358,7 +1560,7 @@ if role == "Tourist App":
                 st.code(json.dumps(adv.brief_to_json(brief), indent=2), language="json")
 
     # ---------------- Compass — Destination Safety Showdown (Day 36)
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("🧭 Compass — Destination Showdown")
         st.caption(
             "Can't decide *where* to go? Pick 2–5 candidates and Compass ranks "
@@ -1495,7 +1697,7 @@ if role == "Tourist App":
                 )
 
     # ---------------- StaySafe — Accommodation Safety Picker (Day 41)
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("🛏️ StaySafe — Accommodation Safety Picker")
         st.caption(
             "Compass compares places to *go*. StaySafe compares places to "
@@ -1654,7 +1856,7 @@ if role == "Tourist App":
                 )
 
     # ---------------- Sentinel (Day 26)
-    with tabs[9]:
+    with tabs[10]:
         st.subheader("🛰️ Sentinel — Live Cluster Intel")
         st.caption(
             "DBSCAN over haversine groups raw incidents into discrete hotspots; each "
@@ -1784,7 +1986,7 @@ if role == "Tourist App":
                     )
 
     # ---------------- Refuge (Get Me to Safety)
-    with tabs[10]:
+    with tabs[11]:
         st.subheader("Refuge — Get Me to Safety")
         st.caption(
             "Ranks help POIs around you by a composite **Refuge Score** — "
@@ -1889,7 +2091,7 @@ if role == "Tourist App":
                     )
 
     # ---------------- Tempo (Departure-Window Optimizer)
-    with tabs[11]:
+    with tabs[12]:
         st.subheader("Tempo — Departure-Window Optimizer")
         st.caption(
             "*When* should you leave? Sweeps an arrival window × three route flavors "
@@ -2097,7 +2299,7 @@ if role == "Tourist App":
                 )
 
     # ---------------- Report Hazard
-    with tabs[12]:
+    with tabs[13]:
         st.subheader("Report a Hazard")
         category = st.selectbox("Category", ["landslide","roadblock","accident","flooding","other"])
         note = st.text_area("Note (optional)")
@@ -2130,7 +2332,7 @@ if role == "Tourist App":
             if applied: st.success(f"Synced {applied} queued items."); inc_df = load_csv("incidents.csv")
 
     # ---------------- Alerts
-    with tabs[13]:
+    with tabs[14]:
         st.subheader("Broadcast Alerts near you")
         my2 = st.session_state.current_loc
         if bcast_df.empty:
@@ -2149,7 +2351,7 @@ if role == "Tourist App":
         st.caption("Simulated WS via file updates.")
 
     # ---------------- SOS
-    with tabs[14]:
+    with tabs[15]:
         st.subheader("SOS")
         col1, col2 = st.columns(2)
         with col1:
@@ -2176,7 +2378,7 @@ if role == "Tourist App":
             st.write("Nearest help:"); st.table(poi_local.sort_values("dist_km").head(3)[["name","ptype","dist_km"]])
 
     # ---------------- Trip Log
-    with tabs[15]:
+    with tabs[16]:
         st.subheader("Trip Log")
         log = st.session_state.trip_log
         live = st.session_state.trip

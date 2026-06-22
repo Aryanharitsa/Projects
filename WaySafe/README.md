@@ -102,6 +102,40 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
   Exports as JSON (`waysafe.pulse.v1`) and markdown for the WhatsApp /
   email family-update loop. Lives at `tabs[0]` because this is what the
   traveller opens first thing in the morning. Pure-Python, zero new deps.
+- **🆕 Beacon — Group Safety Coordinator** — every other WaySafe surface
+  treats the traveller as a single point. Beacon is the first surface that
+  thinks in terms of a **group** — 2–6 members (family, student trip,
+  business team) who have temporarily split up and need to regroup
+  *safely*, not just *somewhere*. Three engines stacked on top of the
+  existing physics: (1) a **group composite** = `0.50·min_score +
+  0.30·kind-weighted_mean + 0.20·spread_score` where `spread_score` falls
+  linearly from 100 at ≤800 m max-pairwise-distance to 0 at ≥3.8 km — so
+  a splintered group reads as *less coordinated* even if every member's
+  individual score is fine; (2) a **meet-point ranker** that scores
+  candidates by `0.40·safety_at_point + 0.25·(1 − worst_corridor_risk) +
+  0.20·(1 − max_walk/4 km) + 0.15·(1 − sum_walk/(4·n))` — the chain is
+  only as strong as its riskiest member-walk, and the slowest member
+  dominates a real-world rendezvous, so both make the blend; candidates
+  come from four sources (geometric centroid, top-5 help POIs within 4 km
+  of centroid ranked by raw safety score, top-3 cells from a 5×5
+  safe-grid sample, plus a *"stay with X"* fallback when one member is
+  already in a Safe band); (3) **rendezvous corridors** sample 8
+  waypoints from each member to the chosen meet-point and price each by
+  `safety.point_risk` so the map paints them blue / amber / rose by peak
+  risk and the alerts surface re-routes when peak ≥ 0.55. Mood ladder
+  (first-match-wins): `Critical` if any member Danger or chosen worst
+  corridor ≥ 0.65 · `Active` if any High Risk or spread > 2.5 km ·
+  `Watch` if any Caution or spread > 1.2 km · else `Calm`. Per-member
+  cards show ring + isolation chip + nearest-help chip + corridor
+  distance/ETA/risk; meet-point table highlights the chosen pick green
+  and the secondary amber so the analyst can see *why* one beat the
+  other across all four factors; a prioritised plan-of-action references
+  **Refuge**, **Live Trip**, and **Alerts** by name when those are the
+  right follow-ups. Pure-stdlib + reuse of `compute_safety` and
+  `point_risk` — zero new physics. Exports as JSON
+  (`waysafe.beacon.v1`) and markdown for the squad chat. Lives at
+  `tabs[1]` next to Pulse because both are *composer* surfaces — Pulse
+  asks *"what changed?"*, Beacon asks *"where do we meet?"*.
 - **🆕 Tempo — Departure-Window Optimizer** — the *temporal* layer that
   closes the loop on planning: **when** should you leave? Every other
   surface answers *where* (Compass), *where to sleep* (StaySafe), *how to
@@ -510,6 +544,134 @@ and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
 hour-aware open-confidence by un-checking *"Use current hour"* and
 sliding to 23:00 — the tourist help-desk and clinic drop out of the
 podium.
+
+---
+
+## 🛟 Beacon — Group Safety Coordinator (Day 61)
+
+Every other WaySafe surface treats the traveller as a single point. **Beacon
+is the first surface that thinks in terms of a group** — a family, a student
+trip, a business team, a tour party of 2–6 people who have temporarily split
+up and need to regroup *safely* (not just *somewhere*). Beacon answers three
+questions a single-point engine can't:
+
+1. **How is the group as a whole doing right now?** Not just the worst
+   member, not just the average — a composite that penalises *spread*
+   (a group whose members are 4 km apart is materially less coordinated
+   than the same members 200 m apart, even at identical individual scores).
+2. **Where should we meet?** Not the centroid (that's a geometric trick
+   that ignores risk) and not the nearest help POI (that's only safe if
+   the *paths* to it are safe). Beacon evaluates four candidate sources
+   and ranks them by a four-factor blend.
+3. **What's the per-member plan?** For the chosen meet-point we draw a
+   rendezvous **corridor** from each member, sample 8 waypoints, price
+   each by `point_risk`, and surface per-member alerts — who's in danger,
+   who's most isolated, whose corridor crosses a geofence.
+
+### How it composes
+
+| Stage | Formula | Notes |
+|---|---|---|
+| Per-member score | `compute_safety(lat, lon, …)` | Same physics as the rest of WaySafe. |
+| Per-member isolation | `min_{j ≠ i} haversine(i, j)` | Surfaced as a chip on every member card. |
+| Group spread | `max_{i, j} haversine(i, j)` | The classic "fragmentation" proxy. |
+| Spread penalty | `0.0` if ≤ 0.8 km, `1.0` if ≥ 3.8 km (linear) | Tunable in `beacon.SPREAD_FREE_KM` / `SPREAD_FULL_KM`. |
+| **Group score** | `0.50·min_member + 0.30·kind-weighted_mean + 0.20·(100·(1 − spread_penalty))` | Weighted mean uses `KIND_WEIGHT` (`minor`=1.25, `elder`=1.20, `guide`=0.90, others=1.00). |
+| **Group band** | `Safe / Caution / High Risk / Danger` from group score | Same `_band` thresholds as `safety.compute_safety`. |
+| **Mood** ladder | first match wins, `Critical > Active > Watch > Calm` | See rules below. |
+
+### Meet-point candidate sources
+
+| Source | How many | What it adds |
+|---|---|---|
+| `centroid` | 1 | The geometric "fair" pick — useful when the group is loosely scattered. |
+| `help_poi` | top-5 within 4 km of centroid | Institutional refuges (police, hospital, fire, clinic, tourist help-desk) ranked by raw `compute_safety` score so we don't waste a slot on a gated hospital next to a midnight roadblock. |
+| `safe_pocket` | top-3 from a 5×5 grid centred on the centroid | Catches off-beat safe corners that aren't near any institutional refuge. |
+| `stable_member` | 0–N | A member who's already in a Safe band becomes a candidate (`"Stay with X"`) — sometimes the best move is to **not** make everyone walk. |
+
+### Meet-point score
+
+```
+score = 100 · (
+    0.40 · safety_at_point/100
+  + 0.25 · (1 − max_path_risk)        # the chain is only as strong as
+                                       # its riskiest member-walk
+  + 0.20 · (1 − min(1, max_walk / 4 km))   # slowest member dominates a
+                                            # real-world rendezvous
+  + 0.15 · (1 − min(1, sum_walk / (4 km · n))) # load-shedding bonus
+)
+```
+
+`safety_at_point` is `compute_safety` at the candidate. `max_path_risk` is
+the worst `point_risk` across 5 waypoints sampled along the great-circle
+line from *every* member to the candidate. `max_walk` is the haversine
+distance of the slowest member; `sum_walk` of everyone combined.
+
+### Mood ladder (first-match-wins)
+
+- **Critical** — any member in `Danger`, **or** group score < 35, **or**
+  the chosen meet-point's worst corridor risk ≥ 0.65.
+- **Active** — any member in `High Risk`, **or** group score < 60,
+  **or** group spread > 2.5 km.
+- **Watch** — any member in `Caution`, **or** group score < 80, **or**
+  group spread > 1.2 km.
+- **Calm** — otherwise.
+
+### Biggest concern
+
+The member that maximises:
+`band_weight + max(0, isolation_km − 2.5) · 10 + max(0, 70 − score) · 0.4 + 8·(kind ∈ {minor, elder})`
+where `band_weight ∈ {Danger:60, High Risk:40, Caution:20, Safe:0}`.
+
+### Rendezvous corridors
+
+For the chosen meet-point we sample **8 waypoints** from each member's
+position to the meet-point (linear interpolation — at Goa-scale corridors
+≤ 4 km, this matches the great-circle line to within ~1 m), price each by
+`safety.point_risk`, and emit a `Corridor` with `mean_risk`, `peak_risk`,
+distance, and ETA at a `4.5 km/h` walking pace. Corridors with peak risk
+≥ `0.55` get a *risky* flag, which feeds the alerts panel and the map's
+risk-graded `PathLayer` (blue / amber / rose).
+
+### What you see
+
+- **Hero** — group ring (mood-tinted hue, conic gradient, breathing animation)
+  with the mood eyebrow + group score + group band; headline ("Critical ·
+  Sister (minor) needs immediate help — group score 53 (High Risk)"); a
+  *biggest concern* card on the right with the member glyph, band pill, and
+  isolation + nearest-help summary.
+- **Four-tile strip** — Group band · Group spread (km, hue-ramped) · Mood
+  (+ alert count + candidate count) · Meet at (chosen label + slowest-member
+  ETA + max walk).
+- **Per-member cards** — score ring + kind glyph + label + isolation chip +
+  nearest-help chip (hue-ramped) + corridor distance/ETA/risk chips
+  (hue-ramped by peak risk) + band chip.
+- **Meet-point table** — ranked candidates with the chosen pick highlighted
+  green and the secondary highlighted amber. Each row shows source pill,
+  composite score, safety at point, max walk, sum walk, worst corridor risk.
+- **Group map** (`pydeck`) — members as band-colored `ScatterplotLayer`,
+  meet-point as a gold star, corridors as a `PathLayer` painted blue / amber
+  / rose by peak risk.
+- **Alerts** — severity-banded cards (rose for Danger / High Risk lines,
+  amber for isolation / geofence lines, yellow for corridor warnings,
+  blue for informational).
+- **Plan of action** — numbered checklist that references **Refuge**,
+  **Live Trip**, and **Alerts** by name when those are the right
+  follow-ups, plus a fallback meet-point line and a re-Beacon cadence
+  reminder.
+- **Exports** — JSON (`waysafe.beacon.v1`) and Markdown for the squad
+  chat / WhatsApp loop.
+
+### Why this matters
+
+A single-point safety engine assumes the traveller *is* the unit of
+analysis. The moment two or more people are on the same trip, that
+assumption breaks: the question is no longer *"am I safe?"* but *"are
+**we** safe, and what do we do *together* about it?"*. Beacon closes
+that gap with the same composer DNA as Pulse (Day 56), SynapseOS Pulse
+(Day 59), and TITAN Pulse (Day 60) — every number on the screen comes
+from an engine that already shipped; the **group lens** is the new
+thing.
 
 ---
 
