@@ -18,10 +18,14 @@ to the top of the funnel* with **Channel Studio**, the sourcing-intelligence
 layer that scores every channel on quality, conversion, cost, and speed
 — **forecasts the funnel itself** with **Forecast Studio**, a Monte-Carlo
 simulator that answers the one question every hiring manager opens with:
-*will I have a hire by the start date?*, and now **runs cadence on the
+*will I have a hire by the start date?*, **runs cadence on the
 per-candidate layer** with **Cadence Studio** — every candidate&apos;s stage
 age vs the stage SLA, who&apos;s about to fall off this week, and the
-exponential-hazard exit forecast over the next 7 days. All from a dark,
+exponential-hazard exit forecast over the next 7 days, and now
+**reactivates the silver-medalist pool** with **Revive** — the candidates
+you already paid to source but passed on, re-scored against every other
+open role with a 90-day recency-decay so the queue stays fresh and
+sunk-cost talent never falls out of the funnel quietly. All from a dark,
 fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
@@ -29,6 +33,87 @@ the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Revive (Day 62)
+
+Crosswind (Day 57) routes the candidates sitting in your pipelines
+*right now*. It explicitly skips `passed` and `offer` statuses, because
+re-routing rejected candidates is a different problem from re-routing
+active ones. The side effect: every **already-sourced** candidate you
+ever marked Passed becomes invisible to every cross-role surface in
+Credicrew. That dormant pool — your silver medalists — is the highest-ROI
+sourcing channel a recruiter has, and Credicrew had no surface for it.
+
+**Revive** (`/revive`) is the Silver Medalist Reactivation Engine. It
+walks every role's shortlist, lifts out the `passed` entries, and
+re-scores each one against every *other currently open role's* plan with
+the same `matchCandidate` engine that powers Discover and Crosswind.
+From the resulting candidate × role grid it computes a single
+**reactivation score** per opportunity:
+
+```
+reactivation = matchScore × (0.5 + 0.5 × recency)
+recency      = 2 ^ (−daysDormant / 90)
+```
+
+A 90-day half-life with a 0.5 recency floor: match quality dominates,
+recency tilts the queue, and a year-old silver medalist never falls
+below half their fit weight. Opportunities below the **match floor**
+(65) and below the **composite floor** (55) are pruned so the queue
+stays honest.
+
+- **Hero strip** — pool size, revivable count, estimated sourcing-cost
+  saved (`|distinct_revivable_candidates| × $1500`), top-pick
+  reactivation score. A band line (high-yield / healthy / niche /
+  low-yield) reads off the revivable/silver ratio so you know whether
+  the queue is worth working today.
+- **Opportunity cards** — for every silver medalist with a passing fit,
+  a card shows their from-role → to-role with both scores and a Δ pill,
+  a 108-px conic reactivation ring tinted by tier (hot / warm / tepid),
+  a matched-skills vs missing-skills diff for the new role, a recency
+  bar (tabular days-dormant + recency %), and a list of "why now"
+  reasons. One emerald button reactivates them.
+- **Reactivate** is a one-click move: it adds the candidate to the new
+  role's shortlist as `new` with a provenance note ("Reactivated from
+  *original role*"), then removes them from the original role's passed
+  bucket so the queue doesn't re-surface the same person.
+- **By candidate / by open role** toggle — same grid, two reads. The
+  candidate view collapses each silver to a single best fit and tucks
+  the alternative roles into a "show N other fits" expander. The role
+  view sorts roles by best available reactivation and lists the top
+  picks for each.
+- **Filters** — min reactivation score slider, hide-stale (>180 days)
+  toggle. Both run against the same in-memory opportunity list so the
+  hero counts and the queue stay consistent.
+- **Empty state with seed** — if your roles have no `passed` entries
+  yet, Revive offers a one-click "seed demo pool" that drops 8 unused
+  candidates across your roles as silver medalists with a synthetic
+  dormancy spread (5d, 27d, 49d, 71d, …) so you can see the engine work
+  on a real fixture without manually clicking Pass 8 times.
+- **Copy briefing** — pours the engine summary into a markdown brief
+  (pool size, revivable count, cost saved, top pick + why, top
+  per-role picks) for paste into the morning recruiter standup.
+
+**Backend mirror** — `backend/app/services/revive.py` is the
+byte-for-byte Python port: same thresholds
+(`RECENCY_HALF_LIFE_DAYS=90`, `RECENCY_FLOOR=0.5`,
+`REVIVE_MATCH_FLOOR=65`, `REVIVE_COMPOSITE_FLOOR=55`,
+`STALE_DAYS=180`, `SOURCING_COST_PER_HIRE_USD=1500`), same per-candidate
+de-dupe by most recent pass, same recency math, same "why" line
+generator. Verified on a 3-role × 3-candidate fixture: same
+`revivable_count=2`, `cost_saved=3000`, identical top-pick (Asha P,
+Senior Backend → Mid Python Remote, reactivation 80 at 20 days).
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/revive/summary \
+  -H 'content-type: application/json' \
+  -d '{ "roles": [...], "candidates": [...], "includeBrief": true }' \
+  | jq '.revivable_count, .top_pick.candidate_name, .band.label'
+```
+
+API version bumped `0.13.0 → 0.14.0`.
 
 ---
 
