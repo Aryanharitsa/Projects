@@ -86,6 +86,7 @@ export default function Discover() {
             <Link href="/" className="text-white">Discover</Link>
             <Link href="/roles" className="hover:text-white">Roles</Link>
             <Link href="/hq" className="hover:text-white">Command Center</Link>
+            <Link href="/revive" className="hover:text-white">Revive</Link>
             <Link href="/pipeline" className="hover:text-white">Pipeline</Link>
             <Link href="/submit" className="hover:text-white">Submit</Link>
           </nav>

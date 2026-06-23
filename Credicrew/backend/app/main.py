@@ -16,8 +16,9 @@ from app.routers.sources import router as sources_router
 from app.routers.forecast import router as forecast_router
 from app.routers.cadence import router as cadence_router
 from app.routers.crosswind import router as crosswind_router
+from app.routers.revive import router as revive_router
 
-app = FastAPI(title="Credicrew API", version="0.13.0")
+app = FastAPI(title="Credicrew API", version="0.14.0")
 
 # Allow local dev UI
 app.add_middleware(
@@ -43,6 +44,7 @@ app.include_router(sources_router)
 app.include_router(forecast_router)
 app.include_router(cadence_router)
 app.include_router(crosswind_router)
+app.include_router(revive_router)
 
 
 @app.get("/")
@@ -75,5 +77,8 @@ async def root() -> dict[str, str]:
         "crosswind_summary": "POST /crosswind/summary",
         "crosswind_brief": "POST /crosswind/brief",
         "crosswind_defaults": "GET /crosswind/defaults",
+        "revive_summary": "POST /revive/summary",
+        "revive_brief": "POST /revive/brief",
+        "revive_defaults": "GET /revive/defaults",
         "docs": "/docs",
     }
