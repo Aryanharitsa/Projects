@@ -21,6 +21,7 @@ from src import rubrics as rubrics_lib
 from src import optimizer as optimizer_lib
 from src import adversary as adversary_lib
 from src import showdown as showdown_lib
+from src import drift as drift_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1629,6 +1630,97 @@ def studio_insights():
         min_appearances = 1
     data = insights_lib.build_insights(min_appearances=max(1, min_appearances))
     return jsonify({'success': True, **data})
+
+
+# ─── Drift Lab ─────────────────────────────────────────────────────────────
+# Output-stability tester. Replays the exact same prompt against the exact
+# same model N times and rolls the bag into a composite Stability Score +
+# pairwise similarity matrix + cluster summary + variance-type verdict.
+# Answers the question every "temperature > 0" prompt eventually asks:
+# *how non-deterministic is this thing in production?* Round-14.
+
+@llm_bp.route('/drift/defaults', methods=['GET'])
+def drift_defaults():
+    return jsonify({'success': True, 'defaults': drift_lib.defaults()})
+
+
+@llm_bp.route('/drift/stats', methods=['GET'])
+def drift_stats():
+    return jsonify({'success': True, 'stats': drift_lib.stats()})
+
+
+@llm_bp.route('/drift', methods=['GET'])
+def drift_list():
+    args = request.args
+    rows, total = drift_lib.list_drifts(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'drifts': rows, 'total': total})
+
+
+@llm_bp.route('/drift', methods=['POST'])
+def drift_create():
+    data = request.get_json() or {}
+    try:
+        drift = drift_lib.create_drift(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            system_prompt=(data.get('system_prompt') or ''),
+            user_prompt=(data.get('user_prompt') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            temperature=data.get('temperature', drift_lib.DEFAULT_TEMPERATURE),
+            top_p=data.get('top_p', drift_lib.DEFAULT_TOP_P),
+            n_replays=data.get('n_replays', drift_lib.DEFAULT_N_REPLAYS),
+            cluster_threshold=data.get('cluster_threshold', drift_lib.DEFAULT_CLUSTER_THRESHOLD),
+            dryrun=bool(data.get('dryrun', False)),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'drift': drift}), 201
+
+
+@llm_bp.route('/drift/seed', methods=['POST'])
+def drift_seed():
+    drift = drift_lib.seed_demo()
+    return jsonify({'success': True, 'drift': drift}), 201
+
+
+@llm_bp.route('/drift/<drift_id>', methods=['GET'])
+def drift_get(drift_id):
+    drift = drift_lib.get_drift(drift_id)
+    if not drift:
+        return jsonify({'success': False, 'error': 'drift run not found'}), 404
+    return jsonify({'success': True, 'drift': drift})
+
+
+@llm_bp.route('/drift/<drift_id>', methods=['DELETE'])
+def drift_delete(drift_id):
+    if not drift_lib.delete_drift(drift_id):
+        return jsonify({'success': False, 'error': 'drift run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/drift/<drift_id>/run', methods=['POST'])
+def drift_run(drift_id):
+    """Execute the replay batch and roll the bag into stability metrics.
+
+    Live mode requires ``{confirm_live: true}`` so we don't accidentally
+    spend API credits."""
+    data = request.get_json() or {}
+    try:
+        payload, status = drift_lib.run_drift(
+            drift_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
 
 
 @llm_bp.route('/august/upload', methods=['POST'])

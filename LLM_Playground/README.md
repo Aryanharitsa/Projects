@@ -8,18 +8,185 @@ your whole spend in Insights, define **Eval Suites** to catch regressions
 before users do, build **Rubrics** (first‑class, anchor‑driven, versioned
 judge sheets), **Optimize** any prompt automatically against those rubrics
 into a measurably better one, **stress‑test** prompts with **Adversary Lab**
-(15 deterministic perturbations + Robustness score) — and, new this round,
-**A/B test** any two prompts head‑to‑head with **Showdown Arena**: paired
-mean Δ, 95 % bootstrap CI, sign‑test p‑value, Cohen's d, and a
-**ship / keep / no‑decision** verdict that tells you whether the challenger
-is actually better than the champion or just looks better on a few
-cherry‑picked cases.
+(15 deterministic perturbations + Robustness score), **A/B test** any two
+prompts head‑to‑head with **Showdown Arena** (paired mean Δ, 95 % bootstrap
+CI, sign‑test p‑value, Cohen's d, ship / keep / no‑decision verdict) — and,
+new this round, **Drift Lab**: fire the exact same prompt at the exact same
+model **N times in parallel** and surface a composite **Stability Score**
+(lexical + length + latency drift), a full pairwise similarity heatmap, a
+cluster count, and the canonical **medoid** answer — so you know how
+non‑deterministic your prompt actually is at `temperature > 0` *before* a
+user hits the call where the model produces a different answer than the one
+you QA'd.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Showdown Arena (Day 58)
+## 🆕 What's new — Drift Lab (Day 63)
+
+> Round‑14. Every prior quality surface in the playground perturbs
+> *something* about the call: **Adversary** changes the *input* (typos,
+> structural shuffles, injection vectors); **Showdown** changes the *prompt*
+> (champion vs. challenger); **Suites / Rubrics / Judge** change the *test
+> case*. None of them touches the question every engineer who ships at
+> `temperature > 0` eventually hits: *if I call this exact prompt eight
+> times in a row against this exact model, how non‑deterministic is the
+> answer?* In production that question is the difference between two users
+> getting consistent answers and one of them getting a refund while another
+> gets a polite shrug from the same call. Drift Lab is the surface that
+> measures it.
+
+Hit **Drift** in the sidebar. A drift run is `(system_prompt + user_prompt)
+× (provider, model, temperature, top_p) × n_replays`. Defaults: **8 replays
+at T=0.7**. The engine fires them in parallel (`ThreadPoolExecutor`), then
+rolls the bag of responses into a composite **Stability Score (0–100)**
+blended from three independent axes:
+
+* **Lexical** (`0.55`) — mean pairwise Jaccard over **3‑gram word‑shingles**.
+  `1.0` = every reply lexically identical, `0.0` = nothing in common.
+  Short answers (where the 3‑gram set would otherwise be empty) fall back
+  to unigrams so a one‑sentence reply still has a meaningful similarity.
+* **Length** (`0.30`) — `100 · (1 − clip(σ / μ, 0, 1))` over output token
+  counts. A model that answers in 80 tokens one call and 800 the next reads
+  as *unreliable* even when the words overlap.
+* **Latency** (`0.15`) — same CV‑floor trick over wall‑clock time. Models
+  that spike 5× slower sometimes burn caller patience even when the text
+  is fine.
+
+`composite = (0.55·lex + 0.30·len + 0.15·lat)`, renormalised over whichever
+axes have data so a single missing axis doesn't collapse the score to 0.
+
+Bands: **Steady ≥ 80 · Consistent ≥ 60 · Drifty ≥ 40 · Wild < 40**.
+
+### Variance type — not just *how* drifty, but *what kind*
+
+A composite alone hides the failure mode. Drift Lab also classifies every
+run into one of four **variance types** by combining lex‑sim with
+length‑CV (first‑match‑wins, evaluated in this order):
+
+| Type | Condition | Reads as |
+|---|---|---|
+| `Steady` | lex ≥ 90 *and* length‑CV ≤ 0.08 | Boringly stable — replies near‑identical. |
+| `Substantive` | lex < 50 | Replies disagree on the *substance*, not just the wording. |
+| `Verbose` | length‑CV ≥ 0.20 | Same gist, but verbosity drifts call‑to‑call. |
+| `Cosmetic` | otherwise | Same answer, slightly reworded. |
+
+The advisory line on the hero card is keyed off both `band` and
+`variance_type` — `Drifty + Substantive` recommends *"add explicit
+constraints — scope, format, refusal rules"*; `Drifty + Verbose`
+recommends *"add an explicit length constraint to your system prompt"*;
+`Wild` (any type) tells you the prompt is unsafe to ship at that
+temperature. Calibrated to be honest, not flattering.
+
+### Clusters + medoid — collapse the bag into structure
+
+Average similarity tells you *how* drifty the bag is on a single number.
+Two things make it actionable:
+
+* **Single‑link clustering** at a tunable `τ` (default `0.55`) collapses
+  the n × n similarity matrix into connected components. `n_clusters = 1`
+  means *the model always says basically the same thing*; `n_clusters = N`
+  means *every reply lives in its own cluster — total chaos*. The UI
+  paints each cluster a distinct colour and lists which replays landed in
+  which.
+* **Medoid** — the single response with the highest *mean similarity to
+  every other reply*. This is the *canonical* answer — the one most likely
+  to represent what a user actually sees. Crowned in the heatmap, in the
+  cluster columns, and on the response card. If the medoid sits in a
+  three‑member cluster while two stragglers occupy their own clusters,
+  you can see at a glance that 6 of 8 replies are in fact pretty
+  consistent and only 2 outliers are dragging the composite down.
+
+### Seed → in 10 seconds
+
+```bash
+curl -s -X POST http://127.0.0.1:5050/api/drift/seed | jq .drift.id
+# returns the canonical "Customer support — Drift baseline" run (dry-run)
+curl -s -X POST http://127.0.0.1:5050/api/drift/<id>/run -H 'content-type: application/json' -d '{}'
+```
+
+Dry‑run mode synthesises deterministic responses with controlled drift
+based on `(prompt, idx, temperature)` — so the demo lights up the moment
+the page loads, with **zero API keys**, and produces a stable headline on
+every refresh. The seed picks defaults that show a meaningful drift
+signature: a customer‑support prompt fired 8× at T=0.7 reads as **Drifty
+(59/100) — Substantive drift**, advising the user to add explicit
+constraints before shipping.
+
+### What you see
+
+* **Hero card** — 168 px conic‑gradient `StabilityRing` hue‑ramped
+  red→amber→emerald, headline + advisory + band chip + variance chip +
+  three sub‑axis bars (lexical · length · latency), plus a vertical
+  action stack (`Re-run · Copy all · Export JSON · Delete`).
+* **Vital‑signs strip** — six tiles: `Replays · Clusters · Mean sim ·
+  Min sim · Length CV · Cost`. Hues track the value — `Length CV` goes
+  green under 0.10, amber by 0.30, rose past 0.60.
+* **Pairwise similarity heatmap** — full n × n Jaccard table painted with
+  a green→amber→red ramp. The medoid's row and column get a 1‑px amber
+  outline. Hovering a cell tooltips the exact Jaccard between those two
+  replays. A vertical legend on the right docks the scale.
+* **Cluster columns** — one column per cluster, tinted by cluster id from
+  an 8‑colour palette, listing each member's index + mean‑sim + token
+  count, with a crown on the medoid.
+* **Per‑replay grid** — every reply as its own card: replay index pill
+  in the cluster's hue, cluster chip, a 36 px `SimRing` (0–1 conic gradient
+  hue‑ramped) showing that reply's μ‑sim, three Tile mini‑cards
+  (`Tokens · Latency · Cost`), then the response body (truncated to 240
+  chars with show‑full / copy controls). Medoid gets an amber ring +
+  inset rail + 🜨 crown badge.
+* **Run config foot** — model · provider · temperature · top‑p ·
+  duration as a five‑pill row, so the page is self‑describing if you
+  export it.
+
+### API surface
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `GET`  | `/api/drift/defaults` | Engine thresholds + composite weights + band/variance‑type catalogue (drives the UI sliders + colour ramps). |
+| `GET`  | `/api/drift/stats` | Counts + best/worst stability + per‑band + per‑variance‑type roll‑up. |
+| `GET`  | `/api/drift` | List runs (filterable by `q` + `status`). |
+| `POST` | `/api/drift` | Create a new drift run (draft until `/run`). Body: `name`, `user_prompt` (required), optional `system_prompt`, `candidate_provider`, `candidate_model`, `temperature`, `top_p`, `n_replays` (3–16), `cluster_threshold` (0.2–0.95), `dryrun`. |
+| `POST` | `/api/drift/seed` | Idempotent demo — creates the canonical "Customer support — Drift baseline" run. |
+| `GET`  | `/api/drift/<id>` | Full run + every replay sample + cluster assignment + per‑sample mean‑sim. |
+| `POST` | `/api/drift/<id>/run` | Execute the replay batch (re‑runnable in place, wipes prior samples). Live mode requires `{confirm_live: true}` so you don't spend credits by accident. |
+| `DELETE` | `/api/drift/<id>` | Delete the run and every sample. |
+
+### Engine architecture
+
+```
+backend/src/drift.py        — the engine
+  ├ defaults()              # exposes weights + thresholds for the UI
+  ├ _shingles(text, n=3)    # word-level n-gram set (unigram fallback)
+  ├ _jaccard(a, b)          # symmetric, [0,1], handles empty sets
+  ├ _pairwise_similarity()  # full n×n matrix (symmetric, diag=1)
+  ├ _single_link_cluster()  # connected components at threshold τ
+  ├ _cv(xs) = σ/μ           # coeff of variation, μ≈0 → 0
+  ├ _classify_variance()    # ladder: Steady → Substantive → Verbose → Cosmetic
+  ├ _composite(lex,len,lat) # weighted blend, renormalised over present axes
+  ├ _live_replays()         # ThreadPoolExecutor fan-out, per-call error capture
+  ├ _dry_replays()          # deterministic synthesis, hash-driven, T-controlled
+  └ run_drift()             # full pipeline + persistence + headline + advisory
+
+frontend/src/components/DriftLab.jsx
+  ├ StabilityRing / MiniRing / SimRing  — conic-gradient primitives
+  ├ BandChip / VarianceChip / ClusterChip — semantic chips
+  ├ Heatmap                              — n×n grid + medoid outline + legend
+  ├ ClusterColumns                       — cluster cards + per-row μ-sim
+  ├ ReplayCard                           — per-reply card grid w/ medoid crown
+  ├ SetupTab (form) / ResultsTab (analytics) / RunRail (left rail)
+  └ exposes: ApiService.{driftDefaults, driftStats, listDrifts, createDrift,
+              seedDrift, getDrift, runDrift, deleteDrift}
+```
+
+The whole engine is pure stdlib + the existing `pricing.estimate_cost`. The
+frontend reuses the same shadcn/ui primitives every other surface uses, so
+adding the tab cost ~1.7 kB of incremental JS gzipped.
+
+---
+
+## What's new — Showdown Arena (Day 58)
 
 > Round‑13. Every other surface in the playground answers a different
 > question — Arena fans one prompt out to many models, Vote ranks one

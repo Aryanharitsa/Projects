@@ -611,6 +611,53 @@ class ApiService {
     });
   }
 
+  // ─── Drift Lab ─────────────────────────────────────────────────────────────
+  // Output stability tester. Replays the same prompt against the same model
+  // N times and rolls the bag into a composite Stability Score (lexical +
+  // length + latency axes) plus a pairwise similarity matrix, cluster
+  // summary, medoid pick, and variance-type verdict. Round-14.
+
+  async listDrifts(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/drift${suffix}`);
+  }
+
+  async createDrift(payload) {
+    return this.request('/drift', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedDrift() {
+    return this.request('/drift/seed', { method: 'POST' });
+  }
+
+  async driftStats() {
+    return this.request('/drift/stats');
+  }
+
+  async driftDefaults() {
+    return this.request('/drift/defaults');
+  }
+
+  async getDrift(driftId) {
+    return this.request(`/drift/${encodeURIComponent(driftId)}`);
+  }
+
+  async deleteDrift(driftId) {
+    return this.request(`/drift/${encodeURIComponent(driftId)}`, { method: 'DELETE' });
+  }
+
+  async runDrift(driftId, payload = {}) {
+    return this.request(`/drift/${encodeURIComponent(driftId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.
