@@ -13,17 +13,343 @@ months of pay-band discipline, rolls every role up into a
 **Command Center** so a recruiter running ten reqs sees the whole portfolio
 on one screen, **calibrates the panel** itself, surfacing which
 interviewers are lenient or severe, how reliably the panel agrees, and
-whether removing that bias changes who you'd hire — and now closes the
-loop *back to the top of the funnel* with **Channel Studio**, the missing
-sourcing-intelligence layer that scores every channel on quality,
-conversion, cost, and speed so a recruiter knows where to spend their
-next hour of outreach. All from a dark, fast, single-page workspace.
+whether removing that bias changes who you'd hire, closes the loop *back
+to the top of the funnel* with **Channel Studio**, the sourcing-intelligence
+layer that scores every channel on quality, conversion, cost, and speed
+— **forecasts the funnel itself** with **Forecast Studio**, a Monte-Carlo
+simulator that answers the one question every hiring manager opens with:
+*will I have a hire by the start date?*, **runs cadence on the
+per-candidate layer** with **Cadence Studio** — every candidate&apos;s stage
+age vs the stage SLA, who&apos;s about to fall off this week, and the
+exponential-hazard exit forecast over the next 7 days, and now
+**reactivates the silver-medalist pool** with **Revive** — the candidates
+you already paid to source but passed on, re-scored against every other
+open role with a 90-day recency-decay so the queue stays fresh and
+sunk-cost talent never falls out of the funnel quietly. All from a dark,
+fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Revive (Day 62)
+
+Crosswind (Day 57) routes the candidates sitting in your pipelines
+*right now*. It explicitly skips `passed` and `offer` statuses, because
+re-routing rejected candidates is a different problem from re-routing
+active ones. The side effect: every **already-sourced** candidate you
+ever marked Passed becomes invisible to every cross-role surface in
+Credicrew. That dormant pool — your silver medalists — is the highest-ROI
+sourcing channel a recruiter has, and Credicrew had no surface for it.
+
+**Revive** (`/revive`) is the Silver Medalist Reactivation Engine. It
+walks every role's shortlist, lifts out the `passed` entries, and
+re-scores each one against every *other currently open role's* plan with
+the same `matchCandidate` engine that powers Discover and Crosswind.
+From the resulting candidate × role grid it computes a single
+**reactivation score** per opportunity:
+
+```
+reactivation = matchScore × (0.5 + 0.5 × recency)
+recency      = 2 ^ (−daysDormant / 90)
+```
+
+A 90-day half-life with a 0.5 recency floor: match quality dominates,
+recency tilts the queue, and a year-old silver medalist never falls
+below half their fit weight. Opportunities below the **match floor**
+(65) and below the **composite floor** (55) are pruned so the queue
+stays honest.
+
+- **Hero strip** — pool size, revivable count, estimated sourcing-cost
+  saved (`|distinct_revivable_candidates| × $1500`), top-pick
+  reactivation score. A band line (high-yield / healthy / niche /
+  low-yield) reads off the revivable/silver ratio so you know whether
+  the queue is worth working today.
+- **Opportunity cards** — for every silver medalist with a passing fit,
+  a card shows their from-role → to-role with both scores and a Δ pill,
+  a 108-px conic reactivation ring tinted by tier (hot / warm / tepid),
+  a matched-skills vs missing-skills diff for the new role, a recency
+  bar (tabular days-dormant + recency %), and a list of "why now"
+  reasons. One emerald button reactivates them.
+- **Reactivate** is a one-click move: it adds the candidate to the new
+  role's shortlist as `new` with a provenance note ("Reactivated from
+  *original role*"), then removes them from the original role's passed
+  bucket so the queue doesn't re-surface the same person.
+- **By candidate / by open role** toggle — same grid, two reads. The
+  candidate view collapses each silver to a single best fit and tucks
+  the alternative roles into a "show N other fits" expander. The role
+  view sorts roles by best available reactivation and lists the top
+  picks for each.
+- **Filters** — min reactivation score slider, hide-stale (>180 days)
+  toggle. Both run against the same in-memory opportunity list so the
+  hero counts and the queue stay consistent.
+- **Empty state with seed** — if your roles have no `passed` entries
+  yet, Revive offers a one-click "seed demo pool" that drops 8 unused
+  candidates across your roles as silver medalists with a synthetic
+  dormancy spread (5d, 27d, 49d, 71d, …) so you can see the engine work
+  on a real fixture without manually clicking Pass 8 times.
+- **Copy briefing** — pours the engine summary into a markdown brief
+  (pool size, revivable count, cost saved, top pick + why, top
+  per-role picks) for paste into the morning recruiter standup.
+
+**Backend mirror** — `backend/app/services/revive.py` is the
+byte-for-byte Python port: same thresholds
+(`RECENCY_HALF_LIFE_DAYS=90`, `RECENCY_FLOOR=0.5`,
+`REVIVE_MATCH_FLOOR=65`, `REVIVE_COMPOSITE_FLOOR=55`,
+`STALE_DAYS=180`, `SOURCING_COST_PER_HIRE_USD=1500`), same per-candidate
+de-dupe by most recent pass, same recency math, same "why" line
+generator. Verified on a 3-role × 3-candidate fixture: same
+`revivable_count=2`, `cost_saved=3000`, identical top-pick (Asha P,
+Senior Backend → Mid Python Remote, reactivation 80 at 20 days).
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/revive/summary \
+  -H 'content-type: application/json' \
+  -d '{ "roles": [...], "candidates": [...], "includeBrief": true }' \
+  | jq '.revivable_count, .top_pick.candidate_name, .band.label'
+```
+
+API version bumped `0.13.0 → 0.14.0`.
+
+---
+
+## What's new — Crosswind (Day 57)
+
+Every other Credicrew surface is **role-scoped**: Discover ranks the
+global pool against *one* role, Forecast and Cadence are per-role,
+Decision and Offer are per-candidate-within-role. A recruiter running ten
+reqs has a portfolio-level question none of them answer:
+
+> Of all the candidates I've already paid sourcing cost on, are they each
+> in the role that actually fits them best?
+
+**Crosswind** (`/crosswind`) is the cross-role routing layer. It re-uses
+the same explainable match engine that drives Discover (`matchCandidate`)
+to score every active candidate × every open role, then derives four
+portfolio-level signals from the resulting grid.
+
+- **Match matrix (centerpiece)** — rows are every active candidate
+  currently sitting in some shortlist (statuses ≠ `passed`/`offer`),
+  columns are every open role. Cells are coloured by score tier
+  (emerald ≥ 80 · sky 70 · amber 55 · rose 35 · slate &lt; 35). A
+  candidate's *home* role (where they currently sit) gets a white ring;
+  off-home cells scoring ≥ +10 over home get an emerald `↑` chip.
+  Clicking any non-home cell adds the candidate to that role's shortlist
+  as `new` — one click, one routing move.
+- **Routing moves** — sorted by score delta. Each move shows
+  from-role(score) → to-role(score), the delta as a pill, and a
+  **why** diff: matched skills gained/lost (named), location-state
+  transition (`partial → full`), seniority match flip. Apply button
+  writes the new shortlist entry directly.
+- **Talent magnets** — candidates with a `strong` match (≥ 80) in ≥ 3
+  distinct roles. These are scarce portfolio-level assets: losing them
+  costs you N reqs, not 1, so the panel surfaces them before they stall.
+- **Lonely roles** — roles whose own shortlist has *no* match ≥ 80, but
+  at least one candidate from another role's pool would score ≥ 70 here
+  *and* the move doesn't hurt their own home fit by more than 5 pts.
+  These are the "transplant" opportunities sitting in plain sight.
+- **Portfolio lift hero** — Σ(best_alt_score − current_score) over every
+  active candidate, normalised to a conic ring and band-tinted
+  (idle · modest · meaningful · urgent based on lift + move count).
+  Plus tiles: active candidates · open roles · routing moves · avg lift
+  per move · talent magnets · lonely roles.
+- **Routing flow** — a Sankey-style SVG with source roles on the left
+  (rose, count of candidates lost) and target roles on the right
+  (emerald, count gained), with edge thickness ∝ score gain. One glance
+  shows whether your portfolio is converging or diverging.
+- **Score histogram** — every (candidate × role) cell, bucketed into
+  10-pt bins so you can see at a glance whether your pool is broadly
+  strong across roles or whether 80% of cells live below 55.
+
+**Backend mirror** — `backend/app/services/crosswind.py` is the
+byte-for-byte Python port: same thresholds (`STRONG_FLOOR=80`,
+`MISPLACE_THRESHOLD=10`, `MAGNET_ROLES=3`, `TRANSPLANT_FLOOR=70`), same
+frozen statuses (`passed`, `offer`), same diff-why builder, same
+`(skill 0.55 · loc 0.15 · sen 0.20 · base 0.10)` weights. Verified on a
+5-candidate × 3-role fixture: same `current_total=390`,
+`optimal_total=500`, `lift=110`, two routing moves at +55 each,
+identical "why" lines.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/crosswind/summary \
+  -H 'content-type: application/json' \
+  -d '{ "roles": [...], "candidates": [...], "includeBrief": true }' \
+  | jq '.lift_total, .moves[0].why, .magnets[0].candidate_name'
+```
+
+API version bumped `0.12.0 → 0.13.0`.
+
+---
+
+## What's new — Cadence Studio (Day 52)
+
+Forecast Studio (Day 47) is the **aggregate** answer: *will I hire by
+start_date?* — a Monte-Carlo over the funnel shape. It treats the pipeline
+as a population. What it *can&apos;t* answer is the question every recruiter
+opens Monday with:
+
+> Which candidates in my pipeline are about to fall off this week,
+> and what should I do about each one — today?
+
+**Cadence Studio** (`/cadence`) is the per-candidate companion. For every
+shortlist entry it computes:
+
+- **stage age** — days since the candidate entered their current stage
+  (read from a real `stageChangedAt` timestamp when present; otherwise
+  deterministically synthesised from the role+candidate+stage hash so the
+  surface lights up immediately with a realistic spread on first open).
+- **band** — `on_track ≤ 0.7×SLA`, `slowing ≤ SLA`, `at_risk ≤ 1.6×SLA`,
+  `stalled > 1.6×SLA`. SLAs are mirrored from the Forecast Studio velocity
+  priors (new 1d · outreach 3d · screening 5d · interview 7d · offer 5d),
+  so the two surfaces stay calibrated on the same physics.
+- **survive_7d** = `exp(-7 · ln 2 / median)` — a memoryless exponential
+  hazard giving the probability the candidate is still sitting in this
+  stage in a week. Summed across a stage that&apos;s the projected weekly
+  exit count.
+- **risk score** ∈ 0..100 = `0.6 · clip((age − sla)/median, 0, 1)
+  + 0.4 · clip(age/(4·median), 0, 1)` — the hot list&apos;s sort key.
+- a band-keyed plain-English **recommendation** string — what to do
+  today, written from the actual numbers.
+
+**Surface** — dark glass page at `/cadence`, sitting between Channels and
+Pipeline in the nav.
+
+- **Hero** — a conic-gradient health ring (0..100, re-tinted by band:
+  emerald ≥ 80, amber ≥ 60, orange ≥ 40, rose otherwise) flanked by four
+  metric tiles (Active · On track · At risk · Stalled), plus a right-rail
+  card showing projected exits over the next 7 days.
+- **Recommendations strip** — violet-tinted callout with band-keyed
+  bullet list ("**Bottleneck: Outreach** — 5 of 12 candidates past SLA
+  (median age 6d vs SLA 3d)" etc.).
+- **Stage swim lanes** — 5 cards (new · outreach · screening · interview
+  · offer), each showing count, median + p75 age, expected exits/7d,
+  stacked band bar with legend, and a *pulsing* rose ring on whichever
+  stage is the bottleneck (defined as stage with the largest
+  `at_risk + stalled` count where ≥ 25% of the stage is stuck).
+- **7-day exit forecast** — per-stage projection cards with the stage hue
+  and the implied attrition % for the week.
+- **Today&apos;s hot list** — top 8 candidates by risk score, ordered with
+  match-score ties, each rendered as a row with avatar, role link, stage
+  pill, age bar with SLA marker, risk chip, recommendation tagline, and a
+  ✓ Nudged button that resets the stage timer to *now* (persisted as a
+  `stageChangedAt` override in `localStorage`).
+- **By role grid** — health cards sorted ascending (worst first), each
+  with band breakdown, 4-tile band counts and a top-stalled list.
+- **Stage × age heatmap** — rows = stage, cols = age vs SLA buckets,
+  cells coloured by band hue at intensity-proportional alpha.
+- **All active candidates** — collapsible filtered list with
+  stage/band dropdowns.
+- **How cadence is computed** — collapsible explainer with the band rule,
+  survival formula, risk formula, and an SLA + median table.
+
+**Backend mirror** — `backend/app/services/cadence.py` is a byte-for-byte
+mirror of the TS engine (verified on a fixed 6-candidate fixture: same
+stage ages, same band distribution {0/3/2/1}, same health 75, same
+worstStage `offer`, same bottleneck on `outreach`, identical hot-list
+ordering [5, 3, 1]). `backend/app/routers/cadence.py` exposes:
+
+- `POST /cadence/summary` — full per-stage + per-role + hot-list +
+  recommendations payload (both `camelCase` and `snake_case` accepted via
+  Pydantic aliases). Pass `includeBrief: true` to get the markdown brief
+  inline.
+- `POST /cadence/brief` — re-render a markdown brief from a cached summary.
+- `GET /cadence/defaults` — SLA + median priors + band/survival/risk
+  formulas, so callers stay in sync without hard-coding numbers.
+
+Persistence touch: `ShortlistEntry.stageChangedAt?` was added to the
+local-storage role model, and `setStatus(...)` now stamps it on every
+transition so the engine reads real ages once the user starts moving
+candidates.
+
+API version bumped `0.11.0 → 0.12.0`.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/cadence/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "candidates": [
+      {"candidateId": 1, "candidateName": "Ananya", "roleId": "r1",
+       "roleName": "FE", "stage": "outreach", "stageAgeDays": 4.4},
+      {"candidateId": 2, "candidateName": "Aarav",  "roleId": "r1",
+       "roleName": "FE", "stage": "offer",     "stageAgeDays": 9.0}
+    ],
+    "includeBrief": true
+  }' | jq '.healthScore, .worstStage, .hotList[0].recommendation'
+```
+
+---
+
+## What's new — Forecast Studio (Day 47)
+
+Every other Credicrew surface is descriptive: who's in the funnel, who
+scored what, who's offering what comp, which channel is paying off. None
+of them answer the question that every hiring manager opens a 1-on-1
+with — *"will I have a hire by start_date?"* **Forecast Studio**
+(`/roles/:id/forecast`) is the missing predictive layer.
+
+- **Monte-Carlo pipeline simulator** — every candidate currently in the
+  funnel is walked forward, trial by trial, through Outreach → Screening
+  → Interview → Offer → Accept. Each transition has a Bernoulli outcome
+  (the conversion slider) and a LogNormal-distributed duration (the days
+  slider, σ = 0.45 — moderate variance, calibrated so a 5-day median puts
+  ~10% of trials past 9 days). A trial that produces at least one
+  accepted offer records an earliest-hire date = `accept_ts + notice_period`.
+  3,000 trials run on every render; numbers are stable because the RNG is
+  seeded by an FNV-1a hash of the funnel shape.
+- **P(hire-by-target) hero** — a conic-gradient ring stamps the headline
+  number; the band hue retints (emerald ≥ 75%, amber ≥ 40%, orange ≥ 15%,
+  rose otherwise) so the recruiter sees the verdict before reading any
+  text. A right-side strip carries any-hire probability, median hire date,
+  and expected hires per trial.
+- **P10 / P50 / P90 fan chart** — earliest-hire-date distribution
+  rendered as a gradient bar spanning P10 → P90 with a white P50 dot, a
+  vertical emerald **target** marker, and a vertical white **today**
+  marker so the user can eyeball whether the median lands before or after
+  the start date. Three percentile cards below render the actual dates in
+  human format.
+- **Funnel with expected advancers + dropout cliff** — each stage card
+  shows `here` (current count), `expected` (mean reach across trials),
+  and `→ hires` (mean # who reach hire from this stage). The
+  **bottleneck** — the stage whose `expected reach × (1 − conversion)`
+  is highest, i.e. where the most absolute candidates die — gets a rose
+  ring and a "cliff" badge so the recruiter knows which stage to fix.
+- **What-if levers** — each stage has a conversion slider (0 → 1) and a
+  velocity slider (1 → 30 days), plus a global notice-period slider, plus
+  an "inject candidates" stepper on the upstream stages (`new`,
+  `outreach`). The Monte-Carlo re-runs on every change; a closed-form
+  quick estimate is shown alongside as a sanity check.
+- **Sensitivity tornado** — for every stage, the engine reruns the MC at
+  conversion ± 15pp and velocity ± 30%, plus an "add 5 candidates" lever
+  on the upstream stages. Levers are ranked by total swing in
+  P(hire-by-target) and drawn as a centred tornado (rose left, emerald
+  right) so the biggest lever lives at the top. This is the
+  question-behind-the-question — "if I had one hour, where would I spend
+  it?" — answered numerically.
+- **Action recommendations** — the engine writes a 4-bullet action list
+  from the actual numbers: a band-keyed headline ("Strong shape — 78% to
+  close by Aug 15. Focus on keeping the top of the funnel warm." / "At
+  risk — only 22%, push the target out or escalate sourcing."), a
+  bottleneck callout ("The Interview stage is your dropout cliff —
+  tighten the bar earlier or coach the panel to convert more of them."),
+  the biggest-lever swing ("Biggest lever: Outreach conversion — pushing
+  it favourably moves P(hire-by-target) by +18 points."), and the P10 /
+  P50 / P90 dates.
+- **Backend mirror** — `POST /forecast/run` takes `{ funnel, targetDate,
+  now?, trials?, seed?, assumptions? }` and returns the same payload the
+  TS engine produces — same RNG (mulberry32), same LogNormal sampler,
+  same MC walk, **byte-identical probabilityByTarget and percentile dates
+  for the same seed** so an agentic client and the on-screen recruiter
+  never disagree about the verdict. `GET /forecast/defaults` returns the
+  baseline conversion + velocity table so a CLI client can render a
+  what-if sandbox without hard-coding industry priors.
+- **Theme** — per-stage hue tokens (`sky / indigo / violet / amber /
+  emerald` for `new / outreach / screening / interview / offer`) reused
+  across the funnel cards, the lever sliders, and the sensitivity rows so
+  the eye tracks one stage end-to-end at a glance.
 
 ---
 
@@ -747,6 +1073,72 @@ Re-render the Markdown sourcing brief from a cached summary. Takes
 `{ summary, title? }`, returns `{ markdown }`. Useful when an agentic
 client already has the analysis cached and just wants the prose.
 
+### `POST /forecast/run`
+Monte-Carlo pipeline forecast. Accepts
+`{ funnel: { new, outreach, screening, interview, offer }, targetDate,
+now?, trials?, seed?, assumptions?: { conversion?, velocity?,
+noticePeriodDays?, durationSigma? } }`. Returns
+`{ probabilityByTarget, hireDate: { p10, p50, p90, anyHireProbability },
+expectedHires, funnel: [{ key, here, expectedAdvancers, expectedHires }],
+bottleneck, sensitivity: [{ lever, label, baseline, upliftPlus,
+upliftMinus, delta }], recommendations, assumptions, trials, targetDate,
+now }`. Same RNG + sampler as the in-browser engine, so the same `seed`
++ `funnel` + `targetDate` produces byte-identical numbers wherever it
+runs.
+
+```bash
+curl -X POST http://127.0.0.1:8000/forecast/run \
+  -H 'content-type: application/json' \
+  -d '{
+    "funnel": {"new": 5, "outreach": 3, "screening": 2, "interview": 1, "offer": 1},
+    "targetDate": "2026-08-15",
+    "trials": 3000
+  }'
+```
+
+### `GET /forecast/defaults`
+Returns the baseline assumption table — `conversion`, `velocity`,
+`noticePeriodDays`, `durationSigma`, and the canonical `progression`
+order — so a CLI / agentic client can render a what-if sandbox without
+hard-coding industry priors.
+
+### `POST /cadence/summary`
+Per-candidate stage-aging + SLA engine (Cadence Studio). Accepts
+`{ candidates: [{ candidateId, candidateName, roleId, roleName, stage,
+stageAgeDays?, pipelineAgeDays?, matchScore?, location? }], horizonDays?,
+now?, includeBrief? }`. When `stageAgeDays` is omitted the engine
+synthesises a deterministic age from the `(roleId, candidateId, stage)`
+hash, matching the in-browser engine. Returns `{ totalActive,
+onTrackCount, atRiskCount, stalledCount, healthScore, expectedExits7d,
+worstStage, worstRoleId, byStage: [{ stage, count, ageMedian, ageP75,
+bands, expectedExits7d, bottleneck, health, slaDays, medianDays }],
+byRole: [...], hotList: [...], items: [...], recommendations,
+generatedAt }`. Both `camelCase` (TS-engine style) and `snake_case`
+(curl-style) payloads accepted.
+
+```bash
+curl -X POST http://127.0.0.1:8000/cadence/summary \
+  -H 'content-type: application/json' \
+  -d '{
+    "candidates": [
+      {"candidateId": 1, "candidateName": "Ananya", "roleId": "r1",
+       "roleName": "FE", "stage": "outreach", "stageAgeDays": 4.4},
+      {"candidateId": 2, "candidateName": "Aarav",  "roleId": "r1",
+       "roleName": "FE", "stage": "offer",     "stageAgeDays": 9.0}
+    ],
+    "includeBrief": true
+  }'
+```
+
+### `POST /cadence/brief`
+Re-render the Markdown brief from a cached summary payload. Body:
+`{ summary, isoDate? }`. Returns `{ markdown }`.
+
+### `GET /cadence/defaults`
+Returns the per-stage SLA + median priors, band labels, horizon (default
+7 days), and the formulas (`bandRule`, `survival7d`, `risk`) so callers
+keep the calibration in sync without hard-coding numbers.
+
 ### Endpoint map
 
 | Method | Path                          | Purpose                                                 |
@@ -774,6 +1166,11 @@ client already has the analysis cached and just wants the prose.
 | POST   | `/calibration/summary`        | panel bias + reliability + de-biased ranking            |
 | POST   | `/sources/summary`            | per-channel ROI rollup (Channel Studio)                 |
 | POST   | `/sources/brief`              | Markdown sourcing brief from a cached summary           |
+| POST   | `/forecast/run`               | Monte-Carlo pipeline forecast (Forecast Studio)         |
+| GET    | `/forecast/defaults`          | baseline conversion + velocity priors                   |
+| POST   | `/cadence/summary`            | per-candidate stage aging + SLA + hot list (Cadence)    |
+| POST   | `/cadence/brief`              | Markdown brief from a cached cadence summary            |
+| GET    | `/cadence/defaults`           | per-stage SLAs + medians + formulas                     |
 
 ---
 
@@ -793,7 +1190,9 @@ Credicrew/
 │       │   ├── peer_parity.py      # POST /peer-parity/{check,check_team} + peers CRUD
 │       │   ├── portfolio.py        # POST /portfolio/summary
 │       │   ├── calibration.py      # POST /calibration/summary
-│       │   └── sources.py          # POST /sources/{summary,brief}
+│       │   ├── sources.py          # POST /sources/{summary,brief}
+│       │   ├── forecast.py         # POST /forecast/run · GET /forecast/defaults
+│       │   └── cadence.py          # POST /cadence/{summary,brief} · GET /cadence/defaults
 │       └── services/
 │           ├── match.py            # explainable engine
 │           ├── outreach.py         # email composer
@@ -803,13 +1202,16 @@ Credicrew/
 │           ├── peer_parity.py      # regression · z-scores · inversions · suggestions
 │           ├── portfolio.py        # portfolio rollup · funnel · comp forecast · health
 │           ├── calibration.py      # rater bias · consensus · ICC · de-biased ranking
-│           └── sources.py          # channel attribution · ROI rollup · recommendations
+│           ├── sources.py          # channel attribution · ROI rollup · recommendations
+│           ├── forecast.py         # mulberry32 RNG · MC pipeline simulator · sensitivity
+│           └── cadence.py          # stage-age engine · band rule · survival · risk score
 ├── frontend/
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx            # Discover (search + composition + roles)
 │       │   ├── hq/page.tsx         # Command Center (portfolio rollup)
-│       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence — NEW)
+│       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence)
+│       │   ├── cadence/page.tsx    # Cadence Studio (stage aging + SLA — NEW)
 │       │   ├── pipeline/page.tsx   # Quick-saves
 │       │   └── roles/
 │       │       ├── page.tsx        # Roles list
@@ -857,6 +1259,9 @@ Credicrew/
 │           ├── portfolio.ts        # portfolio rollup · funnel · comp forecast · health
 │           ├── calibration.ts      # rater bias · consensus · ICC · de-biased ranking (parity w/ backend)
 │           ├── panel_seed.ts       # deterministic biased-panel seed for a role
+│           ├── sources.ts          # channel ROI · funnel · brief (parity w/ backend)
+│           ├── forecast.ts         # mulberry32 RNG · MC pipeline simulator (parity w/ backend)
+│           ├── cadence.ts          # stage-age engine · band rule · survival (parity w/ backend)
 │           ├── pipeline.ts         # quick-save ids
 │           └── roles.ts            # roles + shortlist + share-link state
 └── docs/

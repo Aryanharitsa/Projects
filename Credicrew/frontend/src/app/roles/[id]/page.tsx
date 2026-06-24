@@ -331,6 +331,18 @@ export default function RoleDetail() {
             >
               Calibration →
             </Link>
+            <Link
+              href={`/roles/${role.id}/forecast`}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                total === 0
+                  ? 'pointer-events-none border border-white/10 bg-white/5 text-white/40'
+                  : 'border border-amber-400/40 bg-gradient-to-r from-amber-400/15 to-orange-400/15 text-amber-100 hover:from-amber-400/25 hover:to-orange-400/25'
+              }`}
+              title={total === 0 ? 'Add candidates to forecast' : 'Open Forecast Studio'}
+              aria-disabled={total === 0}
+            >
+              Forecast →
+            </Link>
             <button
               onClick={onExportCsv}
               disabled={total === 0}

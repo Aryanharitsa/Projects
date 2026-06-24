@@ -1,0 +1,435 @@
+{
+  "$schema": "https://titan.dev/schemas/customer-book/1.0.0",
+  "name": "TITAN Customer Risk Profile demo book",
+  "version": "1.0.0",
+  "published": "2026-06-11",
+  "description": "12 illustrative customers spanning all four risk buckets. Each entry carries a `customer` block (the FATF CDD record) plus a pre-rolled `evidence` blob the CRP engine can score without re-running the per-surface pipelines. Names overlap deliberately with the sanctions + adverse-media corpora so a single click lights the demo end-to-end.",
+  "customers": [
+    {
+      "customer": {
+        "customer_id": "CUST-100001",
+        "display_name": "Priya Nair",
+        "customer_type": "individual",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["savings", "salary_account"],
+        "accounts": ["ACC-NAIR-01"],
+        "kyc_anchor": "2026-04-22T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 12.4,
+          "band": "low",
+          "accounts": [{"account_id": "ACC-NAIR-01", "risk_score": 12.4, "band": "low", "fired_count": 1}]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100002",
+        "display_name": "Rohan Mehta",
+        "customer_type": "individual",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["savings", "credit_card"],
+        "accounts": ["ACC-MEHTA-01"],
+        "kyc_anchor": "2025-09-18T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 18.0,
+          "band": "low",
+          "accounts": [{"account_id": "ACC-MEHTA-01", "risk_score": 18.0, "band": "low", "fired_count": 2}]
+        },
+        "drift": {
+          "overall": 0.21,
+          "verdict": "mild",
+          "change_point": null,
+          "drivers": [
+            {"key": "hour", "label": "Hour-of-day", "score": 0.42, "contribution": 0.058}
+          ]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100003",
+        "display_name": "Coastal Logistics Pvt. Ltd.",
+        "customer_type": "entity",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["current_account", "trade_finance"],
+        "accounts": ["ACC-COAST-01"],
+        "kyc_anchor": "2026-01-05T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 38.0,
+          "band": "medium",
+          "accounts": [{"account_id": "ACC-COAST-01", "risk_score": 38.0, "band": "medium", "fired_count": 3}]
+        },
+        "media": {
+          "composite": 18.0,
+          "grade": "elevated",
+          "hit_count": 1,
+          "top_articles": [{
+            "headline": "Coastal Logistics named in maritime invoice-padding probe (FT, 2025)",
+            "category": "fraud",
+            "source_tier": 2,
+            "hit_strength": 0.34
+          }]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100004",
+        "display_name": "Aurelia Shell Limited",
+        "customer_type": "entity",
+        "domicile": "AE",
+        "pep": false,
+        "products": ["correspondent_banking", "trade_finance"],
+        "accounts": ["ACC-AUR-01"],
+        "kyc_anchor": "2025-12-01T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 56.0,
+          "band": "medium",
+          "accounts": [{"account_id": "ACC-AUR-01", "risk_score": 56.0, "band": "medium", "fired_count": 4}]
+        },
+        "media": {
+          "composite": 47.0,
+          "grade": "material",
+          "hit_count": 3,
+          "top_articles": [
+            {"headline": "Aurelia Shell tied to UAE invoice-laundering ring", "category": "money_laundering", "source_tier": 1, "hit_strength": 0.71},
+            {"headline": "Free-zone shell company red-flagged by regulator", "category": "regulatory_action", "source_tier": 2, "hit_strength": 0.42}
+          ]
+        },
+        "network": {
+          "solo_risk": 56.0,
+          "network_risk": 72.0,
+          "peer_count": 4
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100005",
+        "display_name": "Trident Exports",
+        "customer_type": "entity",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["trade_finance", "fx"],
+        "accounts": ["ACC-TRIDENT-01"],
+        "kyc_anchor": "2025-10-12T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 64.0,
+          "band": "high",
+          "accounts": [{"account_id": "ACC-TRIDENT-01", "risk_score": 64.0, "band": "high", "fired_count": 5}]
+        },
+        "media": {
+          "composite": 58.0,
+          "grade": "material",
+          "hit_count": 4,
+          "top_articles": [
+            {"headline": "Trident Exports flagged in over-invoicing probe", "category": "tbml", "source_tier": 1, "hit_strength": 0.82},
+            {"headline": "Maritime documents linked to Trident raise diversion concerns", "category": "sanctions_evasion", "source_tier": 2, "hit_strength": 0.55}
+          ]
+        },
+        "typology": {
+          "matches": [
+            {"code": "TBML", "name": "Trade-based money laundering", "confidence": 0.72,
+             "severity_floor": "high", "accent": "#fb923c",
+             "summary": "Cross-border + diversity + round figures signature."}
+          ]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100006",
+        "display_name": "Devraj Industries",
+        "customer_type": "entity",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["current_account", "term_loan"],
+        "accounts": ["ACC-DEVRAJ-01"],
+        "kyc_anchor": "2025-11-20T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 41.0,
+          "band": "medium",
+          "accounts": [{"account_id": "ACC-DEVRAJ-01", "risk_score": 41.0, "band": "medium", "fired_count": 3}]
+        },
+        "drift": {
+          "overall": 0.58,
+          "verdict": "erratic",
+          "change_point": {"onset_iso": "2026-03-04T00:00:00+00:00"},
+          "drivers": [
+            {"key": "amount", "label": "Amount distribution", "score": 0.74, "contribution": 0.13},
+            {"key": "hour", "label": "Hour-of-day", "score": 0.66, "contribution": 0.09},
+            {"key": "cparty_novelty", "label": "Counterparty novelty", "score": 0.71, "contribution": 0.085}
+          ]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100007",
+        "display_name": "Aliekseii Volkov-Baranov",
+        "customer_type": "individual",
+        "domicile": "RU",
+        "pep": true,
+        "products": ["private_banking", "fx"],
+        "accounts": ["ACC-VB-01"],
+        "kyc_anchor": "2025-08-04T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 71.0,
+          "band": "high",
+          "accounts": [{"account_id": "ACC-VB-01", "risk_score": 71.0, "band": "high", "fired_count": 6}]
+        },
+        "sanctions": {
+          "best_similarity": 0.91,
+          "best_grade": "strong",
+          "hit_floor": 0.65,
+          "hit_count": 1,
+          "results": [{
+            "query": "Aliekseii Volkov-Baranov",
+            "best": {
+              "name": "Aleksey Volkov-Baranov",
+              "matched_alias": "Volkov-Baranov, A.",
+              "similarity": 0.91,
+              "grade": "strong",
+              "list": "OFAC-SDN",
+              "jurisdiction": "US"
+            }
+          }]
+        },
+        "media": {
+          "composite": 64.0,
+          "grade": "material",
+          "hit_count": 3,
+          "top_articles": [
+            {"headline": "Volkov-Baranov named in EU sanctions evasion file", "category": "sanctions_evasion", "source_tier": 1, "hit_strength": 0.89}
+          ]
+        },
+        "typology": {
+          "matches": [
+            {"code": "SANCEV", "name": "Sanctions evasion", "confidence": 0.81,
+             "severity_floor": "critical", "accent": "#ef4444",
+             "summary": "Watchlist alias + structural cover."}
+          ]
+        },
+        "network": {
+          "solo_risk": 71.0,
+          "network_risk": 84.0,
+          "peer_count": 3
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100008",
+        "display_name": "Crescent Maritime",
+        "customer_type": "entity",
+        "domicile": "AE",
+        "pep": false,
+        "products": ["trade_finance", "correspondent_banking"],
+        "accounts": ["ACC-CRES-01"],
+        "kyc_anchor": "2025-07-28T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 82.0,
+          "band": "critical",
+          "accounts": [{"account_id": "ACC-CRES-01", "risk_score": 82.0, "band": "critical", "fired_count": 6}]
+        },
+        "sanctions": {
+          "best_similarity": 0.78,
+          "best_grade": "medium",
+          "hit_floor": 0.65,
+          "hit_count": 2,
+          "results": [{
+            "query": "Crescent Maritime",
+            "best": {
+              "name": "Crescent Maritime FZE",
+              "matched_alias": "Crescent Maritime",
+              "similarity": 0.78,
+              "grade": "medium",
+              "list": "EU-CFSP",
+              "jurisdiction": "EU"
+            }
+          }]
+        },
+        "media": {
+          "composite": 72.0,
+          "grade": "severe",
+          "hit_count": 5,
+          "top_articles": [
+            {"headline": "Crescent Maritime fleet diverted to sanctioned destinations", "category": "sanctions_evasion", "source_tier": 1, "hit_strength": 0.91}
+          ]
+        },
+        "typology": {
+          "matches": [
+            {"code": "TBML", "name": "Trade-based money laundering", "confidence": 0.69,
+             "severity_floor": "high", "accent": "#fb923c", "summary": "Cross-border + diversity + round figures."}
+          ]
+        },
+        "drift": {
+          "overall": 0.62,
+          "verdict": "erratic",
+          "change_point": {"onset_iso": "2026-02-18T00:00:00+00:00"},
+          "drivers": [
+            {"key": "geo", "label": "Geographic mix", "score": 0.81, "contribution": 0.065}
+          ]
+        },
+        "network": {
+          "solo_risk": 82.0,
+          "network_risk": 91.0,
+          "peer_count": 5
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100009",
+        "display_name": "Eastvale Capital",
+        "customer_type": "entity",
+        "domicile": "HK",
+        "pep": false,
+        "products": ["private_banking"],
+        "accounts": ["ACC-EAST-01"],
+        "kyc_anchor": "2026-02-26T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 47.0,
+          "band": "medium",
+          "accounts": [{"account_id": "ACC-EAST-01", "risk_score": 47.0, "band": "medium", "fired_count": 3}]
+        },
+        "media": {
+          "composite": 31.0,
+          "grade": "elevated",
+          "hit_count": 2,
+          "top_articles": [
+            {"headline": "Eastvale Capital named in beneficial-ownership review", "category": "regulatory_action", "source_tier": 2, "hit_strength": 0.39}
+          ]
+        },
+        "drift": {
+          "overall": 0.33,
+          "verdict": "mild",
+          "drivers": [{"key": "round_rate", "label": "Round-amount tendency", "score": 0.51, "contribution": 0.026}]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100010",
+        "display_name": "Sunita Iyer",
+        "customer_type": "individual",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["savings"],
+        "accounts": ["ACC-IYER-01"],
+        "kyc_anchor": "2024-06-10T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 22.0,
+          "band": "low",
+          "accounts": [{"account_id": "ACC-IYER-01", "risk_score": 22.0, "band": "low", "fired_count": 1}]
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100011",
+        "display_name": "Pyongyang Horizon Trading",
+        "customer_type": "entity",
+        "domicile": "KP",
+        "pep": false,
+        "products": ["trade_finance", "correspondent_banking", "fx"],
+        "accounts": ["ACC-HORIZON-01"],
+        "kyc_anchor": "2025-12-30T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 78.0,
+          "band": "high",
+          "accounts": [{"account_id": "ACC-HORIZON-01", "risk_score": 78.0, "band": "high", "fired_count": 7}]
+        },
+        "sanctions": {
+          "best_similarity": 0.96,
+          "best_grade": "exact",
+          "hit_floor": 0.65,
+          "hit_count": 1,
+          "results": [{
+            "query": "Pyongyang Horizon Trading",
+            "best": {
+              "name": "Pyongyang Horizon Trading Co.",
+              "matched_alias": "Pyongyang Horizon",
+              "similarity": 0.96,
+              "grade": "exact",
+              "list": "UN-1718",
+              "jurisdiction": "UN"
+            }
+          }]
+        },
+        "media": {
+          "composite": 78.0,
+          "grade": "severe",
+          "hit_count": 4
+        },
+        "typology": {
+          "matches": [
+            {"code": "SANCEV", "name": "Sanctions evasion", "confidence": 0.92,
+             "severity_floor": "critical", "accent": "#ef4444",
+             "summary": "Pyongyang-linked trading shell."}
+          ]
+        },
+        "network": {
+          "solo_risk": 78.0,
+          "network_risk": 88.0,
+          "peer_count": 6
+        }
+      }
+    },
+    {
+      "customer": {
+        "customer_id": "CUST-100012",
+        "display_name": "Lakshmi Holdings",
+        "customer_type": "entity",
+        "domicile": "IN",
+        "pep": false,
+        "products": ["current_account", "term_loan", "fx"],
+        "accounts": ["ACC-LAK-01"],
+        "kyc_anchor": "2025-05-04T00:00:00+00:00"
+      },
+      "evidence": {
+        "transaction": {
+          "risk_score": 33.0,
+          "band": "medium",
+          "accounts": [{"account_id": "ACC-LAK-01", "risk_score": 33.0, "band": "medium", "fired_count": 2}]
+        },
+        "media": {
+          "composite": 24.0,
+          "grade": "elevated",
+          "hit_count": 1,
+          "top_articles": [{"headline": "Lakshmi Holdings named in import-duty dispute", "category": "litigation", "source_tier": 3, "hit_strength": 0.22}]
+        },
+        "drift": {
+          "overall": 0.27,
+          "verdict": "mild",
+          "drivers": []
+        }
+      }
+    }
+  ]
+}
