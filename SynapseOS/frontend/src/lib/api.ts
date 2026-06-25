@@ -22,6 +22,8 @@ import type {
   PathResult,
   PulseReport,
   SearchHit,
+  SparkKind,
+  SparkReport,
   TensionReport,
   Trail,
   TrailDraftStep,
@@ -332,5 +334,37 @@ export const api = {
       q.set("window_days", String(opts.windowDays));
     const qs = q.toString();
     return `${BASE}/pulse/export.md${qs ? `?${qs}` : ""}`;
+  },
+
+  spark: (opts?: {
+    threshold?: number;
+    topK?: number;
+    limit?: number;
+    perKind?: number;
+    kinds?: SparkKind[];
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    if (opts?.perKind !== undefined) q.set("per_kind", String(opts.perKind));
+    if (opts?.kinds && opts.kinds.length > 0)
+      q.set("kinds", opts.kinds.join(","));
+    const qs = q.toString();
+    return j<SparkReport>(`/spark${qs ? `?${qs}` : ""}`);
+  },
+
+  sparkExportUrl: (opts?: {
+    limit?: number;
+    perKind?: number;
+    kinds?: SparkKind[];
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    if (opts?.perKind !== undefined) q.set("per_kind", String(opts.perKind));
+    if (opts?.kinds && opts.kinds.length > 0)
+      q.set("kinds", opts.kinds.join(","));
+    const qs = q.toString();
+    return `${BASE}/spark/export.md${qs ? `?${qs}` : ""}`;
   },
 };

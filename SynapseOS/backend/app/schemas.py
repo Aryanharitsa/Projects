@@ -696,3 +696,54 @@ class PulseReportOut(BaseModel):
     faded_terms: list[str]
     recommendations: list[PulseRecommendationOut]
     summary: dict
+
+
+# ----------------------------------------------------------------- spark
+
+
+class SparkEvidenceOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class SparkPredictedSynapseOut(BaseModel):
+    note_id: int
+    title: str
+    strength: float
+
+
+class SparkOut(BaseModel):
+    id: str
+    kind: Literal["bridge", "distill", "counter", "frontier", "revive"]
+    priority: float
+    title: str
+    body: str
+    tags: list[str]
+    rationale: str
+    headline: str
+    cited_evidence: list[SparkEvidenceOut]
+    predicted_cluster_id: int | None = None
+    predicted_cluster_name: str | None = None
+    predicted_cluster_color: str | None = None
+    predicted_cluster_strength: float
+    predicted_synapses: list[SparkPredictedSynapseOut]
+    expected_synapse_count: int
+    bridge_cluster_a_id: int | None = None
+    bridge_cluster_a_name: str | None = None
+    bridge_cluster_a_color: str | None = None
+    bridge_cluster_b_id: int | None = None
+    bridge_cluster_b_name: str | None = None
+    bridge_cluster_b_color: str | None = None
+    bridge_centroid_cosine: float = 0.0
+
+
+class SparkReportOut(BaseModel):
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    sparks: list[SparkOut]
+    summary: dict

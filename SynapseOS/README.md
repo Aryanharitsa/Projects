@@ -3,6 +3,9 @@
 > **Watch your brain organize itself.**
 > Notes auto-link via embedding-based synapses. Clusters and their names
 > emerge automatically. Isolated thoughts surface as rescuable orphans.
+> **Spark** then turns the gaps in your graph into a queue of concrete
+> next-note drafts — title, opener, tags, predicted cluster, predicted
+> synapses — that you click to commit.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -30,8 +33,102 @@ threshold live, and watch your topical clusters discover themselves.
 
 ---
 
+## What's new — Spark (Day 64)
+
+Every other surface in SynapseOS describes *what's there*. Atlas reads
+the quadrant chart. Pulse reads the diff. Chronicle reads the temporal
+arc. Tensions reads the contradictions. Echoes reads the duplicates.
+They are all observational. **Spark inverts that.** It reads the *holes*
+in your graph and proposes the next note that would fill each one —
+title + opener + tags + cited evidence + predicted cluster + predicted
+synapse count — so the canvas stops being a snapshot of where your
+thinking has been and starts becoming a *queue* of where it could go
+next. Click **✦ use this draft** on a spark and the NoteComposer
+pre-fills; you skim, edit, and save in one keystroke.
+
+Five spark kinds, each tuned to a specific graph pathology:
+
+| Kind | Glyph | Trigger |
+|---|:-:|---|
+| **Bridge** | `⇄` | Two clusters whose centroids sit close (cosine ≥ 0.18) but have no synapse — or whose strongest cross-link is below 0.22. Drafts a "**X ↔ Y**" connector note that quotes one anchor sentence from each side. |
+| **Distill** | `❍` | A cluster with enough mass to be a real topic but no member dominant enough to act as its anchor (`max_weight < 0.55`) **or** a large+loose cluster (`size ≥ 6`, mean centrality `< 0.45`). Drafts "**What X really is**" stitching the leading sentences of the three highest-centrality members. |
+| **Counter** | `⊘` | A hub note (weight ≥ 0.45) whose cluster carries no opposing-stance signal — no antonyms over a small known map, no strong-stance markers ("against", "rebuttal", "overrated", "fallacy", …). Drafts an "**Against …**" framing that opens with the hub's leading claim. |
+| **Frontier** | `✺` | A term that appears in only the *newest* member of a cluster (≤ 30d old) and nowhere else in your graph — and clears a 6-char length + adverb filter. Drafts an "**On 'term'**" definition-note before the concept slips away. |
+| **Revive** | `☼` | A vault cluster: cohesion ≥ 0.45, activity ≤ 0.20, dormant ≥ 30d. Drafts "**Returning to X**" — a re-entry note framed around the cluster's distinctive vocabulary. |
+
+Every spark also carries:
+
+- **Predicted cluster** — the spark's draft is embedded and matched
+  against every community centroid. The card shows *which* cluster the
+  note will land in *before* you save it.
+- **Predicted synapses** — same cosine + top-K cap the live `/graph`
+  uses, run against the hypothetical draft vector. The card lists the
+  top-4 notes the draft would synapse to with a hue-ramped strength
+  bar per row — concrete plumbing rather than vague promise.
+- **Rationale** — one sentence on why this gap is worth filling now.
+- **Stable id** — `sha1` over the trigger inputs, so reloading the
+  modal returns the same queue and you can refer to a spark by its
+  6-char hex tag.
+
+Deterministic, pure-stdlib, reuses the existing graph + community +
+embed stack. Header pill shows the live spark count; portable Markdown
+export at `GET /spark/export.md` ships the whole queue as a
+paste-anywhere planning doc.
+
+### Spark API
+
+```
+GET /spark
+  ?threshold=0.14    # synapse τ (default matches /graph)
+  &top_k=5
+  &limit=12          # max sparks across all kinds
+  &per_kind=4        # soft cap per kind so one pathology doesn't dominate
+  &kinds=bridge,distill,counter,frontier,revive   # comma-separated filter
+
+GET /spark/export.md  # portable Markdown of the same queue
+```
+
+Sample card payload (`bridge` kind):
+
+```json
+{
+  "id": "8c1d3a",
+  "kind": "bridge",
+  "priority": 0.85,
+  "title": "Embeddings ↔ Atomic",
+  "body": "Bridge — connecting **Embeddings** and **Atomic** …",
+  "tags": ["embeddings", "cosine", "retrieval", "atomic"],
+  "rationale": "Embeddings and Atomic sit close in embedding space …",
+  "cited_evidence": [
+    { "note_id": 19, "title": "Cosine similarity is the substrate",
+      "snippet": "Vector embeddings turn prose into coordinates …",
+      "cluster_name": "Embeddings", "cluster_color": "#a855f7" },
+    { "note_id": 21, "title": "Atomic notes, one idea each",
+      "snippet": "One thought per note keeps your synapses honest …",
+      "cluster_name": "Atomic", "cluster_color": "#f472b6" }
+  ],
+  "predicted_cluster_id": 0,
+  "predicted_cluster_name": "Embeddings",
+  "predicted_cluster_strength": 0.45,
+  "predicted_synapses": [
+    { "note_id": 21, "title": "Atomic notes, one idea each", "strength": 0.31 },
+    { "note_id":  4, "title": "Chunking strategies",         "strength": 0.27 }
+  ],
+  "expected_synapse_count": 5,
+  "bridge_centroid_cosine": 0.28
+}
+```
+
+---
+
 ## What's in the box
 
+- **Spark — generative next-note queue.** Reads the *holes* in your
+  graph and proposes concrete draft notes (bridge / distill / counter /
+  frontier / revive). Each card carries a drafted title + opener +
+  tags, the cited evidence it draws from, the cluster it would land
+  in, and the synapses it would form on commit — click and the
+  NoteComposer pre-fills. See the **Spark** section above for details.
 - **Auto-synapse formation** via cosine similarity on embeddings
   (`τ` threshold + top-*K* neighbor cap to keep the graph from turning
   into a hairball).

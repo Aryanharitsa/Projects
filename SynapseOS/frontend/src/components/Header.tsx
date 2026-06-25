@@ -19,6 +19,8 @@ type Props = {
   chronicleBadge?: number;
   onOpenPulse?: () => void;
   pulseBadge?: number;
+  onOpenSpark?: () => void;
+  sparkBadge?: number;
 };
 
 export function Header({
@@ -38,6 +40,8 @@ export function Header({
   chronicleBadge,
   onOpenPulse,
   pulseBadge,
+  onOpenSpark,
+  sparkBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -168,6 +172,30 @@ export function Header({
               {pulseBadge !== undefined && pulseBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-lime/30 ring-1 ring-synapse-lime/60 text-[10px] text-ink-100 px-1">
                   {pulseBadge > 99 ? "99+" : pulseBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenSpark && (
+            <button
+              onClick={onOpenSpark}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-violet/25 via-synapse-cyan/15 to-synapse-amber/15 ring-1 ring-synapse-violet/45 hover:ring-synapse-violet/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(168,85,247,0.65)] hover:shadow-[0_0_28px_-6px_rgba(168,85,247,0.85)]"
+              aria-label="open spark"
+              title="What to write next — concrete draft proposals targeting the gaps in your graph"
+            >
+              <span
+                aria-hidden
+                className="text-synapse-amber animate-pulse-slow"
+              >
+                ⚡
+              </span>
+              spark
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-violet/35 to-synapse-cyan/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {sparkBadge !== undefined && sparkBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-violet/35 ring-1 ring-synapse-violet/70 text-[10px] text-ink-100 px-1">
+                  {sparkBadge > 99 ? "99+" : sparkBadge}
                 </span>
               )}
             </button>
