@@ -15,6 +15,7 @@ import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { Pulse } from "@/components/Pulse";
 import { SearchBar } from "@/components/SearchBar";
+import { Spark } from "@/components/Spark";
 import { Synthesis } from "@/components/Synthesis";
 import { Tensions } from "@/components/Tensions";
 import { TopicPalette } from "@/components/TopicPalette";
@@ -58,6 +59,8 @@ export default function Page() {
   const [chronicleCount, setChronicleCount] = useState<number | null>(null);
   const [pulseOpen, setPulseOpen] = useState(false);
   const [pulseBadge, setPulseBadge] = useState<number | null>(null);
+  const [sparkOpen, setSparkOpen] = useState(false);
+  const [sparkBadge, setSparkBadge] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -211,6 +214,28 @@ export default function Page() {
     };
   }, [graph]);
 
+  // Spark badge — total queued sparks across all five kinds. Cheap
+  // probe so the header pill shows "N writing prompts waiting" without
+  // forcing the modal-load on every page-paint.
+  useEffect(() => {
+    if (!graph || graph.nodes.length < 2) {
+      setSparkBadge(0);
+      return;
+    }
+    let cancelled = false;
+    api
+      .spark({ limit: 16, perKind: 4 })
+      .then((r) => {
+        if (!cancelled) setSparkBadge(r.sparks.length);
+      })
+      .catch(() => {
+        if (!cancelled) setSparkBadge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph]);
+
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
       const n = await api.createNote(payload);
@@ -331,6 +356,8 @@ export default function Page() {
         chronicleBadge={chronicleCount ?? undefined}
         onOpenPulse={() => setPulseOpen(true)}
         pulseBadge={pulseBadge ?? undefined}
+        onOpenSpark={() => setSparkOpen(true)}
+        sparkBadge={sparkBadge ?? undefined}
       />
 
       <DailyBrief
@@ -451,6 +478,18 @@ export default function Page() {
           setSelected(real ?? (stub as GraphNode));
           setIsolated(null);
         }}
+      />
+
+      <Spark
+        open={sparkOpen}
+        onClose={() => setSparkOpen(false)}
+        onUseDraft={(draft) => setComposerDraft(draft)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onAfterUse={() => setSparkOpen(false)}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">

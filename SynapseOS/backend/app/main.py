@@ -32,6 +32,7 @@ from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import chronicle as chronicle_engine
 from . import pulse as pulse_engine
+from . import spark as spark_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
@@ -1043,4 +1044,74 @@ def pulse_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="pulse.md"'},
+    )
+
+
+# ---------------------------------------------------------------- spark
+
+
+def _parse_spark_kinds(raw: str | None) -> list[str] | None:
+    """Comma-separated kind filter, e.g. 'bridge,distill'. ``None`` or
+    an empty value means "all kinds." Unknown values are dropped."""
+    if not raw:
+        return None
+    parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    valid = [p for p in parts if p in spark_engine.SPARK_KINDS]
+    return valid or None
+
+
+@app.get("/spark", response_model=schemas.SparkReportOut)
+def spark(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    limit: int = Query(spark_engine.DEFAULT_LIMIT, ge=1, le=40),
+    per_kind: int = Query(spark_engine.DEFAULT_PER_KIND, ge=1, le=20),
+    kinds: str | None = Query(
+        None,
+        description="comma-separated subset: bridge,distill,counter,frontier,revive",
+    ),
+) -> dict:
+    """Generate the next-note queue — concrete draft proposals targeting
+    the holes in your graph.
+
+    Five kinds: ``bridge`` (cross-cluster connector), ``distill``
+    (un-anchored cohesive cluster), ``counter`` (hub with no opposing
+    voice), ``frontier`` (single-mention concept that wants its own
+    note), ``revive`` (vault cluster cooling). Each spark ships with a
+    deterministic id, a drafted title + opener + tags, the cited notes
+    it draws from, the cluster it would join, and the predicted
+    synapses it would form. Reload returns the same queue."""
+    r = spark_engine.compute_sparks(
+        threshold=threshold,
+        top_k=top_k,
+        limit=limit,
+        per_kind=per_kind,
+        kinds=_parse_spark_kinds(kinds),
+    )
+    return spark_engine.serialize(r)
+
+
+@app.get("/spark/export.md")
+def spark_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    limit: int = Query(spark_engine.DEFAULT_LIMIT, ge=1, le=40),
+    per_kind: int = Query(spark_engine.DEFAULT_PER_KIND, ge=1, le=20),
+    kinds: str | None = Query(None),
+) -> Response:
+    """Portable Markdown export of the full spark queue — one section
+    per kind, every spark with title + rationale + opener + tags +
+    predicted cluster + cited evidence. Paste-anywhere planning doc."""
+    r = spark_engine.compute_sparks(
+        threshold=threshold,
+        top_k=top_k,
+        limit=limit,
+        per_kind=per_kind,
+        kinds=_parse_spark_kinds(kinds),
+    )
+    md = spark_engine.to_markdown(r)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="spark.md"'},
     )

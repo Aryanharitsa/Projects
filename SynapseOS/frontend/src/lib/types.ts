@@ -697,3 +697,63 @@ export type PulseReport = {
     avg_degree?: number;
   };
 };
+
+// ----------------------------------------------------------------- spark
+
+export type SparkKind = "bridge" | "distill" | "counter" | "frontier" | "revive";
+
+export type SparkEvidence = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+};
+
+export type SparkPredictedSynapse = {
+  note_id: number;
+  title: string;
+  strength: number;
+};
+
+export type Spark = {
+  id: string;
+  kind: SparkKind;
+  priority: number;
+  title: string;
+  body: string;
+  tags: string[];
+  rationale: string;
+  headline: string;
+  cited_evidence: SparkEvidence[];
+  predicted_cluster_id: number | null;
+  predicted_cluster_name: string | null;
+  predicted_cluster_color: string | null;
+  predicted_cluster_strength: number;
+  predicted_synapses: SparkPredictedSynapse[];
+  expected_synapse_count: number;
+  bridge_cluster_a_id: number | null;
+  bridge_cluster_a_name: string | null;
+  bridge_cluster_a_color: string | null;
+  bridge_cluster_b_id: number | null;
+  bridge_cluster_b_name: string | null;
+  bridge_cluster_b_color: string | null;
+  bridge_centroid_cosine: number;
+};
+
+export type SparkReport = {
+  generated_at: string;
+  total_notes: number;
+  total_clusters: number;
+  sparks: Spark[];
+  summary: {
+    bridge_count?: number;
+    distill_count?: number;
+    counter_count?: number;
+    frontier_count?: number;
+    revive_count?: number;
+    mean_predicted_synapses?: number;
+    highest_priority?: number;
+  };
+};
