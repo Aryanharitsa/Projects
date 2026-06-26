@@ -1909,3 +1909,172 @@ export function pulseExportUrl(opts: { window_days?: number; source?: "auto" | "
   qs.set("source", opts.source ?? "auto");
   return `${API_BASE}/aml/pulse/export.md?${qs.toString()}`;
 }
+
+// =====================================================================
+// Lineage — temporal fund-flow tracer (round-14, day-65)
+// =====================================================================
+
+export type LineageDirection = "forward" | "backward" | "both";
+
+export type LineageMood = "calm" | "watch" | "active" | "critical";
+
+export type LineageNode = {
+  account_id: string;
+  display_name: string;
+  depth: number;
+  direction: "seed" | "downstream" | "upstream" | "both";
+  geo: string;
+  role_tags: string[];
+  in_count: number;
+  out_count: number;
+  in_amount: number;
+  out_amount: number;
+  distinct_inflows: number;
+  distinct_outflows: number;
+  retention: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  provenance: Array<{
+    source_id: string;
+    source_label: string;
+    depth: number;
+    share: number;
+    via_hops: number;
+  }>;
+  suspicion_score: number;
+};
+
+export type LineageEdge = {
+  tx_id: string;
+  src: string;
+  dst: string;
+  amount: number;
+  timestamp: string;
+  channel: string;
+  geo_src: string;
+  geo_dst: string;
+  src_depth: number;
+  dst_depth: number;
+  traceable_fraction: number;
+  pattern_tags: string[];
+};
+
+export type LineagePattern = {
+  code:
+    | "smurf_chain"
+    | "round_trip"
+    | "pass_through"
+    | "integration"
+    | "velocity_ramp"
+    | "geo_hopping";
+  label: string;
+  accent: string;
+  confidence: number;
+  severity: "low" | "medium" | "high" | "critical";
+  action: string;
+  contributing_nodes: string[];
+  evidence: string[];
+};
+
+export type LineageFactor = {
+  key: "depth" | "amount" | "pattern" | "geo" | "suspicious_node";
+  value: number;
+  normalised: number;
+  weight: number;
+  contribution: number;
+};
+
+export type LineagePlanAction = {
+  kind: string;
+  priority: "critical" | "high" | "medium" | "low";
+  body: string;
+  href: string | null;
+};
+
+export type LineageReport = {
+  envelope: "titan.lineage.v1";
+  composed_at: string;
+  engine: string;
+  seed: string;
+  seed_label: string;
+  direction: LineageDirection;
+  max_depth: number;
+  window_days: number;
+  window_start: string;
+  window_end: string;
+  nodes: LineageNode[];
+  edges: LineageEdge[];
+  patterns: LineagePattern[];
+  trail_score: number;
+  mood: LineageMood;
+  headline: string;
+  advisory: string;
+  factors: LineageFactor[];
+  total_amount_traced: number;
+  distinct_geos: string[];
+  longest_path: string[];
+  plan_of_action: LineagePlanAction[];
+  source?: "live" | "sample";
+};
+
+export type LineageSeed = {
+  id: string;
+  label: string;
+  context: string;
+};
+
+export async function getLineageRules(): Promise<any> {
+  const r = await fetch(`${API_BASE}/aml/lineage/rules`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getLineageSeeds(): Promise<{ ok: boolean; engine: string; seeds: LineageSeed[] }> {
+  const r = await fetch(`${API_BASE}/aml/lineage/seeds`, { cache: "no-store" });
+  return jsonOrThrow(r);
+}
+
+export async function getLineageSample(opts: {
+  seed?: string;
+  direction?: LineageDirection;
+  max_depth?: number;
+  window_days?: number;
+} = {}): Promise<LineageReport> {
+  const qs = new URLSearchParams();
+  if (opts.seed) qs.set("seed", opts.seed);
+  qs.set("direction", opts.direction ?? "both");
+  qs.set("max_depth", String(opts.max_depth ?? 4));
+  qs.set("window_days", String(opts.window_days ?? 30));
+  const r = await fetch(`${API_BASE}/aml/lineage/sample?${qs.toString()}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow(r);
+}
+
+export async function traceLineage(payload: {
+  transactions: any[];
+  seed: string;
+  direction?: LineageDirection;
+  max_depth?: number;
+  window_days?: number;
+}): Promise<LineageReport> {
+  const r = await fetch(`${API_BASE}/aml/lineage/trace`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return jsonOrThrow(r);
+}
+
+export function lineageExportUrl(opts: {
+  seed?: string;
+  direction?: LineageDirection;
+  max_depth?: number;
+  window_days?: number;
+} = {}): string {
+  const qs = new URLSearchParams();
+  if (opts.seed) qs.set("seed", opts.seed);
+  qs.set("direction", opts.direction ?? "both");
+  qs.set("max_depth", String(opts.max_depth ?? 4));
+  qs.set("window_days", String(opts.window_days ?? 30));
+  return `${API_BASE}/aml/lineage/export.md?${qs.toString()}`;
+}

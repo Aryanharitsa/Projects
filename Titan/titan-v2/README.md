@@ -13,6 +13,92 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-65 — Lineage · the temporal fund-flow tracer.** Every prior
+> TITAN surface answers a *structural* or *aggregate* question — `risk`
+> scores one batch, `network` shows who an account is *connected to*,
+> `typology` names the playbook, `profile` composites the customer's
+> risk *today*, `pulse` shows what *changed* across the book. None of
+> them answer the question a real investigator opens with the moment a
+> SAR draft lands on their desk: *"where did this money come from,
+> where did it go, and how much of it can I actually trace from origin
+> to destination?"*. New `apps/ai-aml/lineage.py` (~900 LOC, pure
+> stdlib, **zero new ML deps**) is a single deterministic function
+> `compute_lineage(transactions, seed, direction, max_depth,
+> window_days) → LineageReport`. It walks the transaction graph
+> outwards from the seed (`forward` = downstream, `backward` =
+> upstream, `both` = the union), bounded by depth and time window;
+> runs a **FIFO lot tracer** over every account (the same convention
+> every forensic accountant uses for commingled funds — when a lot
+> leaves, it consumes the oldest inflow first, splitting the upstream
+> attribution proportionally onto the outflow); and emits a per-account
+> `provenance` map showing what fraction of *current* balance is
+> attributable to each upstream source.
+>
+> Six **flow-shape detectors** then run over the built DAG — patterns
+> single-account scoring *can't* see because they only exist *across*
+> the trail: `smurf_chain` (≥5 sub-threshold senders → funnel → ₹1L+
+> wire out), `round_trip` (≥20% of seed outflow returns via ≥2 hops),
+> `pass_through` (high fan-in + fan-out + ≤12% retention = mule),
+> `integration` (round-amount transfer into clean-asset venue —
+> real-estate, jewellery, auto), `velocity_ramp` (mean hop interval
+> shrinks across the trail — rush-to-layer signal), `geo_hopping` (≥3
+> distinct jurisdictions touched). Each match emits a 0..1 confidence,
+> ranked evidence chips, contributing-node ids, and a recommended
+> action.
+>
+> | Code | Pattern | Severity floor |
+> |---|---|---|
+> | `smurf_chain`   | Many sub-threshold senders → funnel → wire out | high |
+> | `round_trip`    | Layering loop — funds return to seed | critical |
+> | `pass_through`  | Mule — fan-in + fan-out, retention ≤12% | medium |
+> | `integration`   | Round-amount transfer into a clean-asset venue | medium |
+> | `velocity_ramp` | Hop interval shrinks across the trail (rush-to-layer) | medium |
+> | `geo_hopping`   | ≥3 distinct jurisdictions touched | high |
+>
+> **Trail score** composes five normalised factors —
+> `0.40·depth + 0.25·amount + 0.15·pattern + 0.10·geo + 0.10·suspicious_node` —
+> with each sub-score, weight, and contribution echoed back so an
+> auditor can see *why* it scored what it did. A first-match-wins
+> mood ladder (`calm < watch < active < critical`) writes the
+> headline and advisory line. The **plan-of-action** is the action
+> layer: prioritised checklist that *names the TITAN tab each step
+> lives in* — freeze in **Cases**, re-anchor in **Profile**, confirm
+> structure in **Network** — so the analyst can click straight from
+> the trail into the next surface.
+>
+> Five new endpoints in the AML service: `GET /aml/lineage/rules`
+> (every threshold + score weight, auditor-facing), `GET
+> /aml/lineage/seeds` (curated picker for the bundled sample),
+> `GET /aml/lineage/sample` (28-tx three-arm laundering demo —
+> placement → layering → integration plus a partial round-trip and a
+> velocity ramp, lights up at least four of the six detectors), `POST
+> /aml/lineage/trace` (full trace with caller-supplied transactions),
+> `GET /aml/lineage/export.md` (paste-able SAR §3 exhibit, ~2.5 KB).
+> Mirrored through the gateway in `apps/api/main.py` so the frontend
+> has one origin. AML service version bumped `1.11.0 → 1.12.0`.
+>
+> **Surface** — new `/lineage` route between **Network** and **Drift**
+> in the nav. Hero panel with a mood-tinted breathing conic ring,
+> headline, seed picker, direction + depth + window controls, markdown
+> exhibit download. 6-tile vital-signs strip (nodes · edges · depth ·
+> amount · jurisdictions · patterns). **Temporal DAG canvas** — the
+> centrepiece: X axis = time (window-start → end), Y axis = hop depth
+> from seed, circles = accounts sized by amount and ringed by
+> suspicion + role (funnel · mule · layer · integration), edges =
+> animated dashed bézier curves with thickness ∝ amount and colour by
+> pattern tag (rose for round-trip, orange for smurf, gold for
+> pass-through, violet for integration, sky for geo-hop). Click any
+> node → opens the **provenance drawer** with role chips, inflow /
+> outflow / retention stats, active range, and the FIFO-traced
+> source-attribution bars (each bar clickable to drill into that
+> upstream account). **Pattern panel** ranks every detected pattern
+> with confidence + evidence chips + recommended action + contributing
+> node pills. **Trail-score breakdown** explains the composite as
+> five labelled bars. **Plan-of-action** numbered list deep-links into
+> the next TITAN tab. All deterministic — same `(transactions, seed,
+> direction, depth, window)` in → identical bytes out, identical
+> coordinates, identical bar widths. Engine: `titan-lineage/1.0.0`.
+
 > **Day-60 — Pulse · the compliance officer's morning brief.** Every
 > prior surface in TITAN measures *right now*: `risk` & `typology` score
 > one batch, `profile` composites a customer's surfaces into one number,

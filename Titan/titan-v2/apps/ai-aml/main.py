@@ -77,6 +77,14 @@ GET    /aml/pulse/rules            window bounds, signal weights, mood ladder
 GET    /aml/pulse/sample           rich demo pulse from the bundled customer book
 GET    /aml/pulse                  LIVE composer over persisted profiles + cases
 GET    /aml/pulse/export.md        markdown brief (paste into Slack / email)
+
+Lineage — temporal fund-flow tracer (round-14, day-65)
+------------------------------------------------------
+GET    /aml/lineage/rules          pattern thresholds + score weights + mood ladder
+GET    /aml/lineage/sample         bundled 28-tx three-arm laundering demo
+GET    /aml/lineage/seeds          curated seed-account picker for the sample
+POST   /aml/lineage/trace          full trace with caller-supplied transactions
+GET    /aml/lineage/export.md      markdown SAR §3 exhibit
 """
 
 from __future__ import annotations
@@ -90,6 +98,7 @@ from pydantic import BaseModel, Field
 import backtest as backtest_engine
 import cases as case_store
 import drift as drift_engine
+import lineage as lineage_engine
 import media as media_engine
 import network as network_engine
 import peer as peer_engine
@@ -100,7 +109,7 @@ import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.11.0"
+ENGINE_VERSION = "titan-aml/1.12.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1114,5 +1123,104 @@ def pulse_export_md(
             report = pulse_engine.get_sample_pulse(window_days=window_days)
     return PlainTextResponse(
         pulse_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lineage — temporal fund-flow tracer (round-14, day-65)
+# ---------------------------------------------------------------------------
+
+
+class LineageTraceReq(BaseModel):
+    transactions: List[Dict[str, Any]] = Field(default_factory=list)
+    seed: str = Field(..., min_length=1)
+    direction: str = Field(default="both", pattern="^(forward|backward|both)$")
+    max_depth: int = Field(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    )
+    window_days: int = Field(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    )
+
+
+@app.get("/aml/lineage/rules")
+def lineage_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **lineage_engine.get_rules()}
+
+
+@app.get("/aml/lineage/seeds")
+def lineage_seeds() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "seeds": lineage_engine.sample_seed_choices(),
+    }
+
+
+@app.get("/aml/lineage/sample")
+def lineage_sample(
+    seed: Optional[str] = Query(default=None),
+    direction: str = Query(default="both", pattern="^(forward|backward|both)$"),
+    max_depth: int = Query(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    ),
+    window_days: int = Query(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    ),
+) -> Dict[str, Any]:
+    """Sample lineage from the bundled 28-tx three-arm laundering fixture."""
+    report = lineage_engine.get_sample_trace(
+        seed=seed, direction=direction, max_depth=max_depth, window_days=window_days,
+    )
+    return {"ok": True, **report.to_dict()}
+
+
+@app.post("/aml/lineage/trace")
+def lineage_trace(req: LineageTraceReq) -> Dict[str, Any]:
+    """Trace fund-flow lineage from caller-supplied transactions."""
+    try:
+        report = lineage_engine.compute_lineage(
+            transactions=req.transactions,
+            seed=req.seed,
+            direction=req.direction,
+            max_depth=req.max_depth,
+            window_days=req.window_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, **report.to_dict()}
+
+
+@app.get("/aml/lineage/export.md", response_class=None)
+def lineage_export_md(
+    seed: Optional[str] = Query(default=None),
+    direction: str = Query(default="both", pattern="^(forward|backward|both)$"),
+    max_depth: int = Query(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    ),
+    window_days: int = Query(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    ),
+):
+    """Paste-able SAR §3 exhibit (markdown) — defaults to the bundled sample."""
+    from fastapi.responses import PlainTextResponse
+    report = lineage_engine.get_sample_trace(
+        seed=seed, direction=direction, max_depth=max_depth, window_days=window_days,
+    )
+    return PlainTextResponse(
+        lineage_engine.to_markdown(report),
         media_type="text/markdown; charset=utf-8",
     )

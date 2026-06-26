@@ -976,3 +976,32 @@ body::before {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.025); opacity: 0.88; }
 }
+
+/* ---------- Lineage (round-14, day-65) ---------- */
+@keyframes lineage-flow {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -16; }
+}
+@keyframes lineage-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.78; transform: scale(1.04); }
+}
+.lineage-flow-line {
+  stroke-dasharray: 4 4;
+  animation: lineage-flow 1.6s linear infinite;
+}
+.lineage-flow-line-fast {
+  stroke-dasharray: 4 4;
+  animation: lineage-flow 0.9s linear infinite;
+}
+.lineage-node-pulse circle {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: lineage-pulse 2.4s ease-in-out infinite;
+}
+.lineage-hero {
+  background:
+    radial-gradient(620px 280px at 88% -10%, rgba(239, 68, 68, 0.16), transparent 60%),
+    radial-gradient(520px 240px at -8% 110%, rgba(96, 165, 250, 0.14), transparent 62%),
+    radial-gradient(360px 160px at 50% 0%, rgba(167, 139, 250, 0.10), transparent 68%);
+}

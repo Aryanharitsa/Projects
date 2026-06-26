@@ -736,3 +736,80 @@ async def aml_pulse_export(window_days: int = 1, source: str = "auto"):
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
+
+
+# ----- Lineage pass-through (round-14, day-65)
+
+
+@app.get("/aml/lineage/rules")
+async def aml_lineage_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/lineage/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/lineage/seeds")
+async def aml_lineage_seeds() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/lineage/seeds")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/lineage/sample")
+async def aml_lineage_sample(
+    seed: Optional[str] = None,
+    direction: str = "both",
+    max_depth: int = 4,
+    window_days: int = 30,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {
+        "direction": direction,
+        "max_depth": max_depth,
+        "window_days": window_days,
+    }
+    if seed:
+        params["seed"] = seed
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(f"{AML_SVC}/aml/lineage/sample", params=params)
+        if r.status_code >= 400:
+            raise HTTPException(
+                status_code=r.status_code,
+                detail=r.json().get("detail", r.text),
+            )
+        return r.json()
+
+
+@app.post("/aml/lineage/trace")
+async def aml_lineage_trace(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/lineage/trace", json=payload)
+        if r.status_code >= 400:
+            raise HTTPException(
+                status_code=r.status_code,
+                detail=r.json().get("detail", r.text),
+            )
+        return r.json()
+
+
+@app.get("/aml/lineage/export.md")
+async def aml_lineage_export(
+    seed: Optional[str] = None,
+    direction: str = "both",
+    max_depth: int = 4,
+    window_days: int = 30,
+):
+    from fastapi.responses import PlainTextResponse
+    params: Dict[str, Any] = {
+        "direction": direction,
+        "max_depth": max_depth,
+        "window_days": window_days,
+    }
+    if seed:
+        params["seed"] = seed
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(f"{AML_SVC}/aml/lineage/export.md", params=params)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
