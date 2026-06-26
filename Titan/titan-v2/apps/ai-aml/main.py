@@ -13,6 +13,13 @@ POST /aml/sar                   generate a SAR draft from one account report
 POST /aml/sanctions/screen      fuzzy-match one or more names against the watchlist
 GET  /aml/sanctions/list        full bundled watchlist (paged)
 
+Adverse-media OSINT (round-9, day-45)
+-------------------------------------
+GET  /aml/media/rules           corpus + engine knobs (auditor-facing)
+POST /aml/media/screen          batch-screen names against the adverse-media corpus
+GET  /aml/media/articles        browse the corpus (category/tier/q filters)
+GET  /aml/media/articles/{id}   single article + severity/tier weights
+
 Case-management surface (round-3, day-15)
 -----------------------------------------
 GET    /aml/cases               queue with priority/status/assignee filters
@@ -56,6 +63,28 @@ GET    /aml/drift/rules            weights + verdict bands + every tunable knob
 GET    /aml/drift/sample           three-account demo (stable + mild + sleeper-burst)
 POST   /aml/drift                  account-vs-self drift across 10 axes → verdict
                                    + driver ranking + change-point + per-cparty view
+
+Peer Lens — peer-group anomaly (round-12, day-55)
+-------------------------------------------------
+GET    /aml/peer/rules             metric list, direction gates, cohort fallback chain
+GET    /aml/peer/sample            bundled six-cohort demo portfolio
+POST   /aml/peer/analyze           customer-vs-cohort outlier scoring across 9 axes →
+                                   robust z-scores (MAD), top drivers, cohort context
+
+Pulse — compliance officer's morning brief (round-13, day-60)
+-------------------------------------------------------------
+GET    /aml/pulse/rules            window bounds, signal weights, mood ladder
+GET    /aml/pulse/sample           rich demo pulse from the bundled customer book
+GET    /aml/pulse                  LIVE composer over persisted profiles + cases
+GET    /aml/pulse/export.md        markdown brief (paste into Slack / email)
+
+Lineage — temporal fund-flow tracer (round-14, day-65)
+------------------------------------------------------
+GET    /aml/lineage/rules          pattern thresholds + score weights + mood ladder
+GET    /aml/lineage/sample         bundled 28-tx three-arm laundering demo
+GET    /aml/lineage/seeds          curated seed-account picker for the sample
+POST   /aml/lineage/trace          full trace with caller-supplied transactions
+GET    /aml/lineage/export.md      markdown SAR §3 exhibit
 """
 
 from __future__ import annotations
@@ -69,13 +98,18 @@ from pydantic import BaseModel, Field
 import backtest as backtest_engine
 import cases as case_store
 import drift as drift_engine
+import lineage as lineage_engine
+import media as media_engine
 import network as network_engine
+import peer as peer_engine
+import profile as profile_engine
+import pulse as pulse_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.7.0"
+ENGINE_VERSION = "titan-aml/1.12.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -205,6 +239,83 @@ def sanctions_list(limit: int = 50) -> Dict[str, Any]:
         "watchlist": sanctions_engine.get_metadata(),
         "entries": sanctions_engine.list_entries(limit=limit),
     }
+
+
+# ---------------------------------------------------------------------------
+# Adverse-media OSINT (round-9, day-45)
+# ---------------------------------------------------------------------------
+
+
+class MediaScreenReq(BaseModel):
+    names: List[str] = Field(..., min_length=1)
+    jurisdiction: Optional[str] = None
+    similarity_floor: float = Field(
+        default=media_engine.DEFAULT_SIMILARITY_FLOOR, ge=0.0, le=1.0,
+        description="Fuzzy-match floor for entity-name matching against article mentions.",
+    )
+    half_life_days: float = Field(
+        default=media_engine.DEFAULT_HALF_LIFE_DAYS, ge=30.0, le=3650.0,
+        description="Recency half-life in days for exponential decay (default 365).",
+    )
+    top_k: int = Field(default=media_engine.DEFAULT_TOP_K, ge=1, le=40)
+
+
+@app.get("/aml/media/rules")
+def media_rules() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "corpus": media_engine.get_metadata(),
+    }
+
+
+@app.post("/aml/media/screen")
+def media_screen(req: MediaScreenReq = Body(...)) -> Dict[str, Any]:
+    results = media_engine.screen_batch(
+        req.names,
+        jurisdiction=req.jurisdiction,
+        similarity_floor=req.similarity_floor,
+        half_life_days=req.half_life_days,
+        top_k=req.top_k,
+    )
+    grade_counts: Dict[str, int] = {}
+    for r in results:
+        grade_counts[r["grade"]] = grade_counts.get(r["grade"], 0) + 1
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "corpus": media_engine.get_metadata(),
+        "queried": len(req.names),
+        "screened": len(results),
+        "matched": sum(1 for r in results if r["hit_count"] > 0),
+        "by_grade": grade_counts,
+        "results": results,
+    }
+
+
+@app.get("/aml/media/articles")
+def media_articles(
+    category: Optional[str] = None,
+    tier: Optional[int] = Query(default=None, ge=1, le=3),
+    q: Optional[str] = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Dict[str, Any]:
+    rows = media_engine.list_articles(category=category, tier=tier, q=q, limit=limit)
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "count": len(rows),
+        "filters": {"category": category, "tier": tier, "q": q, "limit": limit},
+        "articles": rows,
+    }
+
+
+@app.get("/aml/media/articles/{article_id}")
+def media_article(article_id: str) -> Dict[str, Any]:
+    article = media_engine.get_article(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return {"ok": True, "engine": ENGINE_VERSION, "article": article}
 
 
 # ---------------------------------------------------------------------------
@@ -743,3 +854,373 @@ def cases_network_clearing(
     panel["case_id"] = case_id
     panel["source"] = "client-supplied"
     return panel
+
+
+# ---------------------------------------------------------------------------
+# Customer Risk Profile (round-10, day-50)
+# ---------------------------------------------------------------------------
+
+
+class ProfileComputeReq(BaseModel):
+    customer: Dict[str, Any]
+    evidence: Optional[Dict[str, Any]] = None
+    transactions: Optional[List[Tx]] = Field(
+        default=None,
+        description=(
+            "Optional. When present, the engine runs the AML score + drift + "
+            "network pipelines and builds the evidence blob automatically "
+            "before composing the profile."
+        ),
+    )
+    weights: Optional[Dict[str, float]] = None
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class ProfileRefreshReq(ProfileComputeReq):
+    refreshed_by: Optional[str] = "TITAN-ANALYST"
+    note: Optional[str] = None
+
+
+class ProfileOverrideReq(BaseModel):
+    locked_bucket: str = Field(..., description="One of low | medium | high | critical")
+    justification: str = Field(..., min_length=4, max_length=600)
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    expires_iso: Optional[str] = None
+
+
+class ProfileClearOverrideReq(BaseModel):
+    actor: str = Field(default="TITAN-ANALYST", min_length=1)
+    note: Optional[str] = None
+
+
+@app.get("/aml/profile/rules")
+def profile_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **profile_engine.get_rules()}
+
+
+@app.get("/aml/profile/sample")
+def profile_sample() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **profile_engine.get_sample()}
+
+
+@app.post("/aml/profile/seed")
+def profile_seed(force: bool = False) -> Dict[str, Any]:
+    return profile_engine.seed_sample(force=force)
+
+
+@app.post("/aml/profile/compute")
+def profile_compute(req: ProfileComputeReq = Body(...)) -> Dict[str, Any]:
+    if not isinstance(req.customer, dict) or not req.customer.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer.customer_id is required")
+    evidence = req.evidence or {}
+    if req.transactions:
+        threshold = (
+            req.sanctions_threshold
+            if req.sanctions_threshold is not None
+            else risk_engine.SANCTIONS_HIT_THRESHOLD
+        )
+        rows = [t.model_dump() for t in req.transactions]
+        built = profile_engine.build_evidence(
+            req.customer, rows, sanctions_threshold=threshold,
+        )
+        for k, v in built.items():
+            evidence.setdefault(k, v)
+    try:
+        out = profile_engine.compute_profile(
+            req.customer, evidence=evidence, weights_override=req.weights,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    out["ok"] = True
+    return out
+
+
+@app.post("/aml/profile/refresh")
+def profile_refresh(req: ProfileRefreshReq = Body(...)) -> Dict[str, Any]:
+    if not isinstance(req.customer, dict) or not req.customer.get("customer_id"):
+        raise HTTPException(status_code=400, detail="customer.customer_id is required")
+    evidence = req.evidence or {}
+    if req.transactions:
+        threshold = (
+            req.sanctions_threshold
+            if req.sanctions_threshold is not None
+            else risk_engine.SANCTIONS_HIT_THRESHOLD
+        )
+        rows = [t.model_dump() for t in req.transactions]
+        built = profile_engine.build_evidence(
+            req.customer, rows, sanctions_threshold=threshold,
+        )
+        for k, v in built.items():
+            evidence.setdefault(k, v)
+    try:
+        out = profile_engine.upsert_profile(
+            req.customer,
+            evidence=evidence,
+            weights_override=req.weights,
+            refreshed_by=req.refreshed_by or "TITAN-ANALYST",
+            note=req.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "profile": out}
+
+
+@app.get("/aml/profile/portfolio")
+def profile_portfolio(
+    bucket: Optional[str] = None,
+    refresh_label: Optional[str] = None,
+    domicile: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    listed = profile_engine.list_profiles(
+        bucket=bucket, refresh_label=refresh_label,
+        domicile=domicile, q=q, limit=limit, offset=offset,
+    )
+    stats = profile_engine.portfolio_stats()
+    return {"ok": True, "engine": ENGINE_VERSION, **listed, "stats": stats}
+
+
+@app.get("/aml/profile/{customer_id}")
+def profile_get(customer_id: str) -> Dict[str, Any]:
+    out = profile_engine.get_profile(customer_id)
+    if not out:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "profile": out}
+
+
+@app.post("/aml/profile/{customer_id}/override")
+def profile_override(customer_id: str, req: ProfileOverrideReq = Body(...)) -> Dict[str, Any]:
+    try:
+        out = profile_engine.set_override(
+            customer_id,
+            locked_bucket=req.locked_bucket,
+            justification=req.justification,
+            actor=req.actor,
+            expires_iso=req.expires_iso,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="customer not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "profile": out}
+
+
+@app.post("/aml/profile/{customer_id}/clear_override")
+def profile_clear_override(customer_id: str, req: ProfileClearOverrideReq = Body(...)) -> Dict[str, Any]:
+    try:
+        out = profile_engine.clear_override(customer_id, actor=req.actor, note=req.note)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "profile": out}
+
+
+@app.delete("/aml/profile/{customer_id}")
+def profile_delete(customer_id: str) -> Dict[str, Any]:
+    deleted = profile_engine.delete_profile(customer_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="customer not found")
+    return {"ok": True, "deleted": True, "customer_id": customer_id}
+
+
+# ---------------------------------------------------------------------------
+# Peer Lens — peer-group anomaly studio (round-12, day-55)
+# ---------------------------------------------------------------------------
+
+
+class PeerCustomerIn(BaseModel):
+    customer_id: str = Field(..., min_length=1)
+    display_name: Optional[str] = None
+    industry: Optional[str] = "unknown"
+    domicile: Optional[str] = None
+    accounts: Optional[List[str]] = None
+
+
+class PeerAnalyzeReq(BaseModel):
+    customers: List[PeerCustomerIn] = Field(..., min_length=1)
+    transactions: List[Tx] = Field(default_factory=list)
+
+
+@app.get("/aml/peer/rules")
+def peer_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **peer_engine.get_rules()}
+
+
+@app.get("/aml/peer/sample")
+def peer_sample() -> Dict[str, Any]:
+    sample = peer_engine.get_sample()
+    return {"ok": True, "engine": ENGINE_VERSION, **sample}
+
+
+@app.post("/aml/peer/analyze")
+def peer_analyze(req: PeerAnalyzeReq = Body(...)) -> Dict[str, Any]:
+    customers = [c.model_dump() for c in req.customers]
+    transactions = [t.model_dump() for t in req.transactions]
+    out = peer_engine.analyze(customers, transactions)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Pulse — compliance officer's morning brief (round-13, day-60)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/pulse/rules")
+def pulse_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **pulse_engine.get_rules()}
+
+
+@app.get("/aml/pulse/sample")
+def pulse_sample(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+) -> Dict[str, Any]:
+    """Rich demo pulse from the bundled customer book + synthetic priors.
+
+    Used by the frontend on first load so the surface lights up without
+    the analyst having to seed the store first.
+    """
+    report = pulse_engine.get_sample_pulse(window_days=window_days)
+    return {"ok": True, **report.to_dict()}
+
+
+@app.get("/aml/pulse")
+def pulse_live(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+) -> Dict[str, Any]:
+    """LIVE pulse — composes over the persisted profile + cases stores.
+
+    Falls back to the sample pulse when the profile store is empty so the
+    surface never renders a depressing "no data" state. The response
+    carries ``source: live|sample`` so the UI can hint at the difference.
+    """
+    report = pulse_engine.build_live(window_days=window_days)
+    if report.portfolio_size == 0:
+        report = pulse_engine.get_sample_pulse(window_days=window_days)
+        return {"ok": True, "source": "sample", **report.to_dict()}
+    return {"ok": True, "source": "live", **report.to_dict()}
+
+
+@app.get("/aml/pulse/export.md", response_class=None)
+def pulse_export_md(
+    window_days: int = Query(default=pulse_engine.DEFAULT_WINDOW_DAYS,
+                             ge=pulse_engine.MIN_WINDOW_DAYS,
+                             le=pulse_engine.MAX_WINDOW_DAYS),
+    source: str = Query(default="auto", pattern="^(auto|live|sample)$"),
+):
+    from fastapi.responses import PlainTextResponse
+    if source == "sample":
+        report = pulse_engine.get_sample_pulse(window_days=window_days)
+    elif source == "live":
+        report = pulse_engine.build_live(window_days=window_days)
+    else:
+        report = pulse_engine.build_live(window_days=window_days)
+        if report.portfolio_size == 0:
+            report = pulse_engine.get_sample_pulse(window_days=window_days)
+    return PlainTextResponse(
+        pulse_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lineage — temporal fund-flow tracer (round-14, day-65)
+# ---------------------------------------------------------------------------
+
+
+class LineageTraceReq(BaseModel):
+    transactions: List[Dict[str, Any]] = Field(default_factory=list)
+    seed: str = Field(..., min_length=1)
+    direction: str = Field(default="both", pattern="^(forward|backward|both)$")
+    max_depth: int = Field(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    )
+    window_days: int = Field(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    )
+
+
+@app.get("/aml/lineage/rules")
+def lineage_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **lineage_engine.get_rules()}
+
+
+@app.get("/aml/lineage/seeds")
+def lineage_seeds() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "seeds": lineage_engine.sample_seed_choices(),
+    }
+
+
+@app.get("/aml/lineage/sample")
+def lineage_sample(
+    seed: Optional[str] = Query(default=None),
+    direction: str = Query(default="both", pattern="^(forward|backward|both)$"),
+    max_depth: int = Query(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    ),
+    window_days: int = Query(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    ),
+) -> Dict[str, Any]:
+    """Sample lineage from the bundled 28-tx three-arm laundering fixture."""
+    report = lineage_engine.get_sample_trace(
+        seed=seed, direction=direction, max_depth=max_depth, window_days=window_days,
+    )
+    return {"ok": True, **report.to_dict()}
+
+
+@app.post("/aml/lineage/trace")
+def lineage_trace(req: LineageTraceReq) -> Dict[str, Any]:
+    """Trace fund-flow lineage from caller-supplied transactions."""
+    try:
+        report = lineage_engine.compute_lineage(
+            transactions=req.transactions,
+            seed=req.seed,
+            direction=req.direction,
+            max_depth=req.max_depth,
+            window_days=req.window_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, **report.to_dict()}
+
+
+@app.get("/aml/lineage/export.md", response_class=None)
+def lineage_export_md(
+    seed: Optional[str] = Query(default=None),
+    direction: str = Query(default="both", pattern="^(forward|backward|both)$"),
+    max_depth: int = Query(
+        default=lineage_engine.DEFAULT_MAX_DEPTH,
+        ge=lineage_engine.MIN_MAX_DEPTH,
+        le=lineage_engine.MAX_MAX_DEPTH,
+    ),
+    window_days: int = Query(
+        default=lineage_engine.DEFAULT_WINDOW_DAYS,
+        ge=lineage_engine.MIN_WINDOW_DAYS,
+        le=lineage_engine.MAX_WINDOW_DAYS,
+    ),
+):
+    """Paste-able SAR §3 exhibit (markdown) — defaults to the bundled sample."""
+    from fastapi.responses import PlainTextResponse
+    report = lineage_engine.get_sample_trace(
+        seed=seed, direction=direction, max_depth=max_depth, window_days=window_days,
+    )
+    return PlainTextResponse(
+        lineage_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )

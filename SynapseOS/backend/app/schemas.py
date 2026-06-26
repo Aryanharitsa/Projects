@@ -422,3 +422,328 @@ class TensionReportOut(BaseModel):
     tension_count: int
     tensions: list[TensionOut]
     stats: dict
+
+
+# ------------------------------------------------------------------ echo
+
+
+class EchoMemberOut(BaseModel):
+    note_id: int
+    title: str
+    body: str
+    tags: list[str]
+    created_at: str
+    body_len: int
+    is_canonical: bool
+    centrality: float
+
+
+class EchoPairOut(BaseModel):
+    a_id: int
+    b_id: int
+    cosine: float
+
+
+class EchoSentenceOut(BaseModel):
+    text: str
+    note_ids: list[int]
+    is_duplicate: bool
+    is_canonical_source: bool
+
+
+class EchoClusterOut(BaseModel):
+    cluster_id: str
+    size: int
+    redundancy: float
+    peak_cosine: float
+    wasted_chars: int
+    chars_total: int
+    chars_unique: int
+    canonical_id: int
+    members: list[EchoMemberOut]
+    pairs: list[EchoPairOut]
+    merged_title: str
+    merged_body: str
+    merged_tags: list[str]
+    sentences: list[EchoSentenceOut]
+    overlap_ratio: float
+
+
+class EchoReportOut(BaseModel):
+    threshold: float
+    total_notes: int
+    candidate_pairs: int
+    cluster_count: int
+    skipped_pair_count: int
+    clusters: list[EchoClusterOut]
+    stats: dict
+
+
+class EchoPreviewRequest(BaseModel):
+    note_ids: list[int] = Field(..., min_length=2, max_length=8)
+    canonical_id: int | None = Field(default=None, ge=1)
+
+
+class EchoMergeRequest(BaseModel):
+    note_ids: list[int] = Field(..., min_length=2, max_length=8)
+    canonical_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, min_length=1, max_length=140)
+    body: str | None = Field(default=None, min_length=1, max_length=12000)
+    tags: list[str] | None = None
+
+
+class EchoMergeResult(BaseModel):
+    merged_note_id: int
+    merged_title: str
+    deleted_ids: list[int]
+    wasted_chars_recovered: int
+    final_synapses: int
+
+
+class EchoSkipRequest(BaseModel):
+    pairs: list[tuple[int, int]] = Field(..., min_length=1, max_length=64)
+    reason: str = Field(default="", max_length=400)
+
+
+class EchoSkipResult(BaseModel):
+    inserted: int
+    total_skips: int
+
+
+class EchoSkipEntry(BaseModel):
+    a_id: int
+    b_id: int
+    reason: str
+    created_at: str
+
+
+# ----------------------------------------------------------------- atlas
+
+
+class AtlasClusterOut(BaseModel):
+    id: int
+    name: str
+    color: str
+    size: int
+    terms: list[str]
+    cohesion: float
+    internal_density: float
+    activity: float
+    growth_velocity: int
+    last_touched_days: int | None = None
+    newest_age_days: int
+    mean_age_days: float
+    bridge_count: int
+    has_synapses: bool
+    quadrant: Literal["stronghold", "frontier", "vault", "drift"]
+
+
+class AtlasRecommendationOut(BaseModel):
+    cluster_id: int
+    cluster_name: str
+    cluster_color: str
+    kind: Literal["synthesize", "split", "revisit", "dissolve", "bridge"]
+    priority: float
+    headline: str
+    detail: str
+
+
+class AtlasReportOut(BaseModel):
+    window_days: int
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    clusters: list[AtlasClusterOut]
+    recommendations: list[AtlasRecommendationOut]
+    summary: dict
+
+
+# ------------------------------------------------------------- chronicle
+
+
+class ChronicleChapterOut(BaseModel):
+    index: int
+    date_start: str
+    date_end: str
+    span_days: int
+    count: int
+    terms: list[str]
+    anchor_id: int
+    anchor_title: str
+    anchor_sentence: str
+    member_ids: list[int]
+    drift_in: float
+
+
+class ChronicleClusterOut(BaseModel):
+    cluster_id: int
+    name: str
+    color: str
+    size: int
+    chapter_count: int
+    total_drift: float
+    peak_drift: float
+    pivot_index: int | None = None
+    stability: float
+    category: Literal["calm", "shifting", "pivoting"]
+    span_days: int
+    cadence_days: float
+    emerged_terms: list[str]
+    faded_terms: list[str]
+    headline: str
+    chapters: list[ChronicleChapterOut]
+
+
+class ChronicleReportOut(BaseModel):
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    eligible_clusters: int
+    target_chapters: int
+    min_cluster_notes: int
+    min_span_days: float
+    clusters: list[ChronicleClusterOut]
+    summary: dict
+
+
+# ----------------------------------------------------------------- pulse
+
+
+class PulseDayOut(BaseModel):
+    date: str
+    created: int
+    revisited: int
+
+
+class PulseClusterOut(BaseModel):
+    cluster_id: int
+    name: str
+    color: str
+    size: int
+    new_count: int
+    revisits_count: int
+    share_new: float
+    momentum: float
+    centroid_drift: float | None = None
+    status: Literal["born", "emerging", "hot", "warm", "dormant"]
+    last_touched_days: int | None = None
+    new_terms: list[str]
+    hot_titles: list[str]
+
+
+class PulseBridgeOut(BaseModel):
+    source_id: int
+    source_title: str
+    target_id: int
+    target_title: str
+    source_cluster_id: int
+    source_cluster_name: str
+    source_cluster_color: str
+    target_cluster_id: int
+    target_cluster_name: str
+    target_cluster_color: str
+    strength: float
+    source_is_new: bool
+    target_is_new: bool
+
+
+class PulseHubOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    degree: int
+    weight: float
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    days_old: int
+
+
+class PulseRecommendationOut(BaseModel):
+    kind: Literal["synthesize", "name", "revisit", "bridge", "hub"]
+    headline: str
+    detail: str
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    note_id: int | None = None
+    priority: float
+
+
+class PulseReportOut(BaseModel):
+    window_days: int
+    generated_at: str
+    window_start: str
+    headline: str
+    total_notes: int
+    new_notes: int
+    revisited_notes: int
+    words_written: int
+    streak_days: int
+    synapses_total: int
+    bridges_born: int
+    hubs_born: int
+    clusters_total: int
+    clusters_hot: int
+    clusters_emerging: int
+    clusters_dormant: int
+    activity: list[PulseDayOut]
+    clusters: list[PulseClusterOut]
+    bridges: list[PulseBridgeOut]
+    hubs: list[PulseHubOut]
+    emerged_terms: list[str]
+    faded_terms: list[str]
+    recommendations: list[PulseRecommendationOut]
+    summary: dict
+
+
+# ----------------------------------------------------------------- spark
+
+
+class SparkEvidenceOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class SparkPredictedSynapseOut(BaseModel):
+    note_id: int
+    title: str
+    strength: float
+
+
+class SparkOut(BaseModel):
+    id: str
+    kind: Literal["bridge", "distill", "counter", "frontier", "revive"]
+    priority: float
+    title: str
+    body: str
+    tags: list[str]
+    rationale: str
+    headline: str
+    cited_evidence: list[SparkEvidenceOut]
+    predicted_cluster_id: int | None = None
+    predicted_cluster_name: str | None = None
+    predicted_cluster_color: str | None = None
+    predicted_cluster_strength: float
+    predicted_synapses: list[SparkPredictedSynapseOut]
+    expected_synapse_count: int
+    bridge_cluster_a_id: int | None = None
+    bridge_cluster_a_name: str | None = None
+    bridge_cluster_a_color: str | None = None
+    bridge_cluster_b_id: int | None = None
+    bridge_cluster_b_name: str | None = None
+    bridge_cluster_b_color: str | None = None
+    bridge_centroid_cosine: float = 0.0
+
+
+class SparkReportOut(BaseModel):
+    generated_at: str
+    total_notes: int
+    total_clusters: int
+    sparks: list[SparkOut]
+    summary: dict

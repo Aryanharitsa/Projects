@@ -12,6 +12,15 @@ type Props = {
   onOpenDistill?: () => void;
   onOpenTensions?: () => void;
   tensionsBadge?: number;
+  onOpenEcho?: () => void;
+  echoBadge?: number;
+  onOpenAtlas?: () => void;
+  onOpenChronicle?: () => void;
+  chronicleBadge?: number;
+  onOpenPulse?: () => void;
+  pulseBadge?: number;
+  onOpenSpark?: () => void;
+  sparkBadge?: number;
 };
 
 export function Header({
@@ -24,6 +33,15 @@ export function Header({
   onOpenDistill,
   onOpenTensions,
   tensionsBadge,
+  onOpenEcho,
+  echoBadge,
+  onOpenAtlas,
+  onOpenChronicle,
+  chronicleBadge,
+  onOpenPulse,
+  pulseBadge,
+  onOpenSpark,
+  sparkBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -95,6 +113,89 @@ export function Header({
               {tensionsBadge !== undefined && tensionsBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-rose-500/30 ring-1 ring-rose-300/60 text-[10px] text-rose-100 px-1">
                   {tensionsBadge > 99 ? "99+" : tensionsBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenEcho && (
+            <button
+              onClick={onOpenEcho}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-cyan/20 to-synapse-amber/15 ring-1 ring-synapse-cyan/40 hover:ring-synapse-cyan/70 px-3 py-1 font-mono text-[11px] text-synapse-cyan hover:text-ink-100 transition"
+              aria-label="open echo"
+              title="Find and merge near-duplicate notes"
+            >
+              <span aria-hidden>⌬</span>
+              echoes
+              {echoBadge !== undefined && echoBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-cyan/30 ring-1 ring-synapse-cyan/60 text-[10px] text-ink-100 px-1">
+                  {echoBadge > 99 ? "99+" : echoBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenAtlas && (
+            <button
+              onClick={onOpenAtlas}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-lime/15 to-synapse-violet/15 ring-1 ring-synapse-lime/40 hover:ring-synapse-lime/70 px-3 py-1 font-mono text-[11px] text-synapse-lime hover:text-ink-100 transition"
+              aria-label="open atlas"
+              title="Executive map of every cluster — cohesion × activity quadrant + recommendations"
+            >
+              <span aria-hidden>⌖</span>
+              atlas
+            </button>
+          )}
+          {onOpenChronicle && (
+            <button
+              onClick={onOpenChronicle}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-pink/20 to-synapse-violet/15 ring-1 ring-synapse-pink/40 hover:ring-synapse-pink/70 px-3 py-1 font-mono text-[11px] text-synapse-pink hover:text-ink-100 transition"
+              aria-label="open chronicle"
+              title="Watch each topic evolve over time — chapters, drift, pivots, emerged & faded terms"
+            >
+              <span aria-hidden>⟿</span>
+              chronicle
+              {chronicleBadge !== undefined && chronicleBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-pink/30 ring-1 ring-synapse-pink/60 text-[10px] text-ink-100 px-1">
+                  {chronicleBadge > 99 ? "99+" : chronicleBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenPulse && (
+            <button
+              onClick={onOpenPulse}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-pink/20 via-synapse-lime/15 to-synapse-cyan/15 ring-1 ring-synapse-pink/40 hover:ring-synapse-pink/70 px-3 py-1 font-mono text-[11px] text-synapse-pink hover:text-ink-100 transition"
+              aria-label="open pulse"
+              title="What changed in your second brain this week — new notes, bridges, hubs, vocabulary delta"
+            >
+              <span aria-hidden>⩘</span>
+              pulse
+              {pulseBadge !== undefined && pulseBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-lime/30 ring-1 ring-synapse-lime/60 text-[10px] text-ink-100 px-1">
+                  {pulseBadge > 99 ? "99+" : pulseBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenSpark && (
+            <button
+              onClick={onOpenSpark}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-violet/25 via-synapse-cyan/15 to-synapse-amber/15 ring-1 ring-synapse-violet/45 hover:ring-synapse-violet/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(168,85,247,0.65)] hover:shadow-[0_0_28px_-6px_rgba(168,85,247,0.85)]"
+              aria-label="open spark"
+              title="What to write next — concrete draft proposals targeting the gaps in your graph"
+            >
+              <span
+                aria-hidden
+                className="text-synapse-amber animate-pulse-slow"
+              >
+                ⚡
+              </span>
+              spark
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-violet/35 to-synapse-cyan/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {sparkBadge !== undefined && sparkBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-violet/35 ring-1 ring-synapse-violet/70 text-[10px] text-ink-100 px-1">
+                  {sparkBadge > 99 ? "99+" : sparkBadge}
                 </span>
               )}
             </button>

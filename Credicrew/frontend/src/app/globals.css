@@ -234,6 +234,79 @@ body::before {
   to   { transform: translateX(0); opacity: 1; }
 }
 
+/* ---------- Cadence Studio (Pipeline Velocity & SLA) ---------- */
+
+.cc-cad-hero {
+  background-image:
+    radial-gradient(520px 220px at 110% -30%, rgba(251,113,133,0.10), transparent 60%),
+    radial-gradient(420px 200px at -10% 130%, rgba(52,211,153,0.08), transparent 60%);
+}
+
+.cc-cad-ring { transition: filter 240ms ease, transform 240ms ease; }
+.cc-cad-ring:hover { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--cad-accent, #fb7185) 60%, transparent)); transform: scale(1.02); }
+
+.cc-cad-tile { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-cad-tile:hover { transform: translateY(-1px); }
+
+.cc-cad-stage {
+  background-image:
+    radial-gradient(360px 120px at 100% -40%, color-mix(in srgb, var(--cad-accent, #fb7185) 12%, transparent), transparent 60%);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+.cc-cad-stage:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.16); }
+
+.cc-cad-stage.bottleneck {
+  box-shadow: 0 0 0 1px rgba(251,113,133,0.45), 0 0 22px rgba(251,113,133,0.18);
+}
+
+.cc-cad-bar { transition: width 180ms ease; }
+
+.cc-cad-row { transition: transform 130ms ease, background 130ms ease, border-color 130ms ease; }
+.cc-cad-row:hover { transform: translateX(2px); background: rgba(255,255,255,0.035); border-color: rgba(255,255,255,0.16); }
+
+.cc-cad-pulse {
+  animation: cc-cad-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cc-cad-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,113,133,0.45); }
+  50%      { box-shadow: 0 0 0 6px rgba(251,113,133,0); }
+}
+
+.cc-cad-heat-cell { transition: transform 120ms ease, filter 120ms ease; }
+.cc-cad-heat-cell:hover { transform: scale(1.06); filter: brightness(1.15); }
+
+.cc-cad-recs { background-image: radial-gradient(360px 140px at 0% -20%, rgba(167,139,250,0.08), transparent 60%); }
+
+.cc-cad-spark {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+}
+
+/* ---------- Crosswind (Cross-Role Candidate Router) ---------- */
+
+.cc-xw-hero {
+  background-image:
+    radial-gradient(520px 220px at 110% -30%, color-mix(in srgb, var(--xw-accent, #a78bfa) 14%, transparent), transparent 60%),
+    radial-gradient(420px 200px at -10% 130%, rgba(56,189,248,0.07), transparent 60%);
+}
+
+.cc-xw-ring { transition: filter 240ms ease, transform 240ms ease; }
+.cc-xw-ring:hover { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--xw-accent, #a78bfa) 60%, transparent)); transform: scale(1.02); }
+
+.cc-xw-tile { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-xw-tile:hover { transform: translateY(-1px); }
+
+.cc-xw-matrix table { border-collapse: separate; }
+.cc-xw-matrix tbody tr:hover td { background-color: rgba(255,255,255,0.015); }
+
+.cc-xw-cell { transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease; cursor: pointer; }
+.cc-xw-cell:hover { transform: scale(1.08); filter: brightness(1.12); box-shadow: 0 0 0 2px rgba(255,255,255,0.18) inset, 0 4px 10px rgba(0,0,0,0.25); z-index: 1; }
+.cc-xw-cell:focus { outline: none; box-shadow: 0 0 0 2px rgba(167,139,250,0.55) inset; }
+
+.cc-xw-row { transition: background 120ms ease; }
+
+.cc-xw-move { transition: transform 130ms ease, border-color 130ms ease, background 130ms ease; }
+.cc-xw-move:hover { transform: translateX(2px); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); }
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }

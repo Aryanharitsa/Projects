@@ -1076,6 +1076,7 @@ def _minimal_snapshot(account_report: Dict[str, Any]) -> Dict[str, Any]:
         "band": account_report.get("band"),
         "factors": account_report.get("factors") or [],
         "sanctions_hits": account_report.get("sanctions_hits") or [],
+        "adverse_media": account_report.get("adverse_media"),
         "edges": edges,
         "counterparty_count": account_report.get("counterparty_count"),
         "inbound_total": account_report.get("inbound_total"),

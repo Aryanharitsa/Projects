@@ -3,6 +3,9 @@
 > **Watch your brain organize itself.**
 > Notes auto-link via embedding-based synapses. Clusters and their names
 > emerge automatically. Isolated thoughts surface as rescuable orphans.
+> **Spark** then turns the gaps in your graph into a queue of concrete
+> next-note drafts — title, opener, tags, predicted cluster, predicted
+> synapses — that you click to commit.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -30,8 +33,102 @@ threshold live, and watch your topical clusters discover themselves.
 
 ---
 
+## What's new — Spark (Day 64)
+
+Every other surface in SynapseOS describes *what's there*. Atlas reads
+the quadrant chart. Pulse reads the diff. Chronicle reads the temporal
+arc. Tensions reads the contradictions. Echoes reads the duplicates.
+They are all observational. **Spark inverts that.** It reads the *holes*
+in your graph and proposes the next note that would fill each one —
+title + opener + tags + cited evidence + predicted cluster + predicted
+synapse count — so the canvas stops being a snapshot of where your
+thinking has been and starts becoming a *queue* of where it could go
+next. Click **✦ use this draft** on a spark and the NoteComposer
+pre-fills; you skim, edit, and save in one keystroke.
+
+Five spark kinds, each tuned to a specific graph pathology:
+
+| Kind | Glyph | Trigger |
+|---|:-:|---|
+| **Bridge** | `⇄` | Two clusters whose centroids sit close (cosine ≥ 0.18) but have no synapse — or whose strongest cross-link is below 0.22. Drafts a "**X ↔ Y**" connector note that quotes one anchor sentence from each side. |
+| **Distill** | `❍` | A cluster with enough mass to be a real topic but no member dominant enough to act as its anchor (`max_weight < 0.55`) **or** a large+loose cluster (`size ≥ 6`, mean centrality `< 0.45`). Drafts "**What X really is**" stitching the leading sentences of the three highest-centrality members. |
+| **Counter** | `⊘` | A hub note (weight ≥ 0.45) whose cluster carries no opposing-stance signal — no antonyms over a small known map, no strong-stance markers ("against", "rebuttal", "overrated", "fallacy", …). Drafts an "**Against …**" framing that opens with the hub's leading claim. |
+| **Frontier** | `✺` | A term that appears in only the *newest* member of a cluster (≤ 30d old) and nowhere else in your graph — and clears a 6-char length + adverb filter. Drafts an "**On 'term'**" definition-note before the concept slips away. |
+| **Revive** | `☼` | A vault cluster: cohesion ≥ 0.45, activity ≤ 0.20, dormant ≥ 30d. Drafts "**Returning to X**" — a re-entry note framed around the cluster's distinctive vocabulary. |
+
+Every spark also carries:
+
+- **Predicted cluster** — the spark's draft is embedded and matched
+  against every community centroid. The card shows *which* cluster the
+  note will land in *before* you save it.
+- **Predicted synapses** — same cosine + top-K cap the live `/graph`
+  uses, run against the hypothetical draft vector. The card lists the
+  top-4 notes the draft would synapse to with a hue-ramped strength
+  bar per row — concrete plumbing rather than vague promise.
+- **Rationale** — one sentence on why this gap is worth filling now.
+- **Stable id** — `sha1` over the trigger inputs, so reloading the
+  modal returns the same queue and you can refer to a spark by its
+  6-char hex tag.
+
+Deterministic, pure-stdlib, reuses the existing graph + community +
+embed stack. Header pill shows the live spark count; portable Markdown
+export at `GET /spark/export.md` ships the whole queue as a
+paste-anywhere planning doc.
+
+### Spark API
+
+```
+GET /spark
+  ?threshold=0.14    # synapse τ (default matches /graph)
+  &top_k=5
+  &limit=12          # max sparks across all kinds
+  &per_kind=4        # soft cap per kind so one pathology doesn't dominate
+  &kinds=bridge,distill,counter,frontier,revive   # comma-separated filter
+
+GET /spark/export.md  # portable Markdown of the same queue
+```
+
+Sample card payload (`bridge` kind):
+
+```json
+{
+  "id": "8c1d3a",
+  "kind": "bridge",
+  "priority": 0.85,
+  "title": "Embeddings ↔ Atomic",
+  "body": "Bridge — connecting **Embeddings** and **Atomic** …",
+  "tags": ["embeddings", "cosine", "retrieval", "atomic"],
+  "rationale": "Embeddings and Atomic sit close in embedding space …",
+  "cited_evidence": [
+    { "note_id": 19, "title": "Cosine similarity is the substrate",
+      "snippet": "Vector embeddings turn prose into coordinates …",
+      "cluster_name": "Embeddings", "cluster_color": "#a855f7" },
+    { "note_id": 21, "title": "Atomic notes, one idea each",
+      "snippet": "One thought per note keeps your synapses honest …",
+      "cluster_name": "Atomic", "cluster_color": "#f472b6" }
+  ],
+  "predicted_cluster_id": 0,
+  "predicted_cluster_name": "Embeddings",
+  "predicted_cluster_strength": 0.45,
+  "predicted_synapses": [
+    { "note_id": 21, "title": "Atomic notes, one idea each", "strength": 0.31 },
+    { "note_id":  4, "title": "Chunking strategies",         "strength": 0.27 }
+  ],
+  "expected_synapse_count": 5,
+  "bridge_centroid_cosine": 0.28
+}
+```
+
+---
+
 ## What's in the box
 
+- **Spark — generative next-note queue.** Reads the *holes* in your
+  graph and proposes concrete draft notes (bridge / distill / counter /
+  frontier / revive). Each card carries a drafted title + opener +
+  tags, the cited evidence it draws from, the cluster it would land
+  in, and the synapses it would form on commit — click and the
+  NoteComposer pre-fills. See the **Spark** section above for details.
 - **Auto-synapse formation** via cosine similarity on embeddings
   (`τ` threshold + top-*K* neighbor cap to keep the graph from turning
   into a hairball).
@@ -68,6 +165,98 @@ threshold live, and watch your topical clusters discover themselves.
   disagreement between topics). The header badge tells you how many
   unresolved contradictions your second brain is currently carrying.
   Pure stdlib · deterministic · portable Markdown export.
+- **Atlas — a cartographer's view of your second brain.**
+  Every other surface looks at one cluster, one pair, one note. Atlas
+  zooms out and reads the whole map. It plots every cluster on a
+  **cohesion × activity** quadrant chart and classifies each into one of
+  four shapes: **Strongholds** (high cohesion + high activity — your
+  bread-and-butter), **Frontiers** (still forming, actively growing — the
+  topics where you're currently thinking hardest), **Vaults** (tight but
+  cooling — solid clusters that haven't been touched in a while), and
+  **Drift** (stale and unfocused — refactor candidates). Each cluster
+  ships with its size, internal density, growth velocity over a
+  configurable window (7/30/90/180d), days-since-touched, and a count of
+  **bridge candidates** — notes elsewhere with cosine ≥ 0.16 to this
+  cluster's centroid that the synapse graph hasn't drawn yet. A
+  prioritized **recommendations** panel translates those signals into
+  one-click moves: "*Synthesize X while it's hot*", "*Y may be two
+  topics*", "*Z hasn't been touched in 31d*", "*3 potential bridges into
+  W*". Click a bubble to inspect a cluster; click ✦ to jump straight into
+  Synthesis; click ⊙ to isolate it on the canvas. Pure stdlib,
+  deterministic, exportable to portable Markdown.
+- **Pulse — what changed in your second brain this week.**
+  Atlas is the snapshot of *where* every cluster sits right now.
+  Chronicle is the biography of *one* cluster, chapter by chapter.
+  Daily Brief is *today's* revisit picks. **Pulse fills the gap between
+  them — the cross-cluster, time-windowed diff.** Pick a window
+  (1d / 7d / 30d / 90d) and Pulse reads the whole graph as a story:
+  **new notes** written, ≈ **words shipped**, **revisits**, a
+  consecutive-day **writing streak**, the current
+  **synapse / hub / bridge** counts, and a daily activity
+  **sparkline** that splits creation vs revisits. Per cluster: a
+  **status badge** (``born`` if every member is in-window · ``hot``
+  if ≥ 3 new · ``emerging`` if the new majority crossed 50% · ``warm``
+  for minor moves · ``dormant`` for silence), a **momentum bar**,
+  **share-new %**, **centroid drift** between the pre-window and
+  in-window halves (when both are populated — same `1 − cosine` move
+  Chronicle uses), the **new vocabulary** the latest notes pulled in
+  scored against the rest of the cluster, and the in-window note
+  titles. **Bridges born** lists every fresh cross-cluster synapse
+  whose two ends sit in *different* communities and where at least
+  one end is a new note — the cross-pollination you just drew. **Hubs
+  born** lists new notes that already pull ≥ 3 synapses (instant
+  centrality is rare and worth surfacing). A library-wide **vocabulary
+  delta** prints emerged vs faded terms across the whole graph using
+  the same forgiveness factor as Chronicle so a slowly-mutating
+  lexicon still registers. A prioritized **recommendations** panel
+  distils the signals into one-click moves: *synthesize a hot cluster
+  before it scatters*, *name an emerging one*, *re-read a brand-new
+  hub*, *write a connector note for a fresh bridge*, *revisit a
+  long-dormant cluster*. Pure stdlib, deterministic, portable
+  Markdown export. Header badge counts new notes + bridges in the
+  last 7d so the surface signals when there's a story to read.
+- **Chronicle — watch your topics evolve.**
+  Every other surface in SynapseOS is a snapshot of *right now*. Chronicle
+  is the only one that asks *how has your thinking on this topic changed
+  over time?* For every eligible cluster (≥ 4 notes, non-zero time span),
+  it sorts members chronologically and carves them into **equal-time
+  chapters** (3–6 by default, configurable; thin chapters are merged
+  hierarchically into their smaller neighbor so the chapter count is
+  adaptive to your actual writing cadence). Per chapter you get the
+  **date range**, an **anchor note** (highest cosine to chapter centroid)
+  + its first sentence, and a chapter-aware **TF-IDF** ranking that names
+  each chapter by its own distinctive voice without being drowned by the
+  cluster-wide vocabulary. Inter-chapter **drift velocity** = `1 −
+  cosine(centroid_i, centroid_{i+1})` — angular distance in embedding
+  space; the **pivot** is the inter-chapter gap with the largest velocity
+  (the inflection moment). Cluster-level **total drift** = start-to-end
+  cosine distance; categorizes as **calm** (< 0.10), **shifting**
+  (0.10–0.25), or **pivoting** (≥ 0.25). The vocabulary delta panel
+  surfaces **emerged** terms (top in the last chapter that were rare or
+  absent at the start) and **faded** terms (the inverse) so the prose
+  movement is explicit, not vibes. A horizontal **drift bar** per cluster
+  reads the shape at a glance — chapter widths proportional to note count,
+  pivot chapter highlighted. One-click jumps into **Synthesis** (read the
+  whole cluster) or canvas isolation (see just this cluster's nodes), and
+  any anchor opens its source note. Pure stdlib, deterministic, exportable
+  to portable Markdown. Header badge counts pivoting clusters.
+- **Echoes — collapse the duplicates your second brain quietly accrued.**
+  Every other SynapseOS surface treats similarity as a virtue. Echoes
+  flips the sign. Pairs above a tunable cosine `τ` (default 0.72) form
+  single-linkage **dedup clusters**; each cluster reports its
+  **redundancy %**, the **chars you'd recover by merging**, the
+  auto-picked **canonical "merge-into" target** (highest centrality +
+  longest body), and a **sentence-level overlap ledger**. The modal
+  paints duplicate phrases in cyan inside each member's body
+  (substring-matched against fuzzy-bucketed sentence groups, so
+  re-phrasings collapse — Jaccard ≥ 0.55 over content words). A live
+  **merge preview** rebuilds server-side whenever you flip canonical,
+  drop a member, or edit the title/body — the resulting merge replaces
+  the canonical note **in-place** (id preserved so external links
+  resolve) and deletes the duplicates. A **Mark distinct** button
+  persists `(a, b)` pairs to a `dedupe_skips` table so a "no, those two
+  are different" decision sticks forever. Header badge counts active
+  clusters; deterministic; portable Markdown export.
 - **Orphan rescue.** Notes with no synapses surface in their own panel
   alongside their strongest near-miss neighbor and the exact `τ` value
   that would attach them. Lower the threshold, or refine the note —
@@ -141,7 +330,7 @@ threshold live, and watch your topical clusters discover themselves.
 │  │ OrphanRescue │ + isolation overlay │       Inspector             │    │
 │  │ PathFinder   │ + chat traversal    │  neighbors + body           │    │
 │  └──────────────┴─────────────────────┴─────────────────────────────┘    │
-│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions modals      │
+│  · DailyBrief · Distill · TrailPlayer · Synthesis · Tensions · Echo · Atlas · Chronicle · Pulse modals │
 └─────────────────────────────────┬────────────────────────────────────────┘
                                   │ REST / JSON
                                   ▼
@@ -168,6 +357,10 @@ threshold live, and watch your topical clusters discover themselves.
 │                                                 (polarity · antonyms ·   │
 │                                                  contrast · title-clash ·│
 │                                                  bridge-prompt + md export) │
+│                                                 echo.py                  │
+│                                                 (single-linkage dedup ·  │
+│                                                  fuzzy sentence buckets ·│
+│                                                  in-place merge + skips) │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -531,6 +724,64 @@ constant-time.
 
 ---
 
+## Echoes — collapse the duplicates your second brain quietly accrued
+
+Every other surface in SynapseOS treats *similarity* as a virtue:
+synapses draw it, communities cluster it, Synthesis paraphrases the
+consensus inside one. **Echo flips the sign.** The same property that
+powers all the good stuff is also a tax — as your store grows you
+naturally restate the same insight in different words, weeks apart.
+Those near-duplicates pollute the graph (hub nodes that shouldn't be
+hubs), inflate cluster sizes, and make search noisier.
+
+Click **⌬ echoes** in the header. The modal lists every near-duplicate
+cluster with a redundancy bar, recoverable-chars badge, and pairwise
+cosine ladder. For each cluster:
+
+```
+threshold   pairs with cosine ≥ τ (default 0.72) form edges; union-find
+            yields connected components of size ≥ 2. Single-linkage is
+            intentional — if A≈B and B≈C, you want A and C in the same
+            merge UI even if A and C only just miss the bar themselves.
+
+canonical   the member with highest centrality (sum of cosine to the
+            rest of the cluster), tie-broken by longest body then
+            oldest id. That's "the one that already says most of what
+            the others say" — the natural merge target.
+
+sentences   every sentence across every member is fuzzy-bucketed by
+            content-word Jaccard (≥ 0.55, stop-words stripped) so
+            rephrasings collapse. Each bucket's representative becomes
+            one sentence in the merged body; ``note_ids`` records every
+            member that contributed so the UI can paint
+            "appears in 3 notes" badges.
+
+merged_body canonical's sentences first (in original order), then any
+            *new* sentences contributed by each other member appended
+            afterwards. The output reads like the canonical augmented
+            with what the duplicates added — not a Frankenstein
+            paragraph.
+```
+
+The **live merge preview** rebuilds server-side every time you flip the
+canonical, drop a member out of the merge, or edit the title/body, so
+the recoverable-char count and merged-tag union always reflect what
+*Merge* would actually persist. **Merge** replaces the canonical note
+**in-place** — its id is preserved so any external bookmarks keep
+resolving — and deletes the other duplicates.
+
+**Mark distinct** persists every pair in the cluster to a
+`dedupe_skips` table; subsequent `/echo` calls filter them out forever,
+so a "no, those two are different" decision sticks. `DELETE /echo/skip`
+forgets a single skip if you change your mind.
+
+Pure stdlib, deterministic, pure function of `(notes, embeddings,
+threshold, skips)`. Cheap enough that the header probe runs on every
+graph refresh — so the badge always reflects "your second brain has N
+duplicate clusters waiting to be merged" without forcing a modal load.
+
+---
+
 ## API surface
 
 | Method | Path                         | Purpose                                              |
@@ -564,6 +815,13 @@ constant-time.
 | `GET`  | `/digest/export.md?cluster_id=…` | Self-contained Markdown brief for one cluster (synthesis · claims · open threads · bridges · sources). |
 | `GET`  | `/tensions?floor=&limit=&threshold=&top_k=` | Detected contradictions: `{ threshold, floor, total_pairs_scanned, candidate_count, tension_count, tensions: [ { a_id, a_title, b_id, b_title, cosine, magnitude, signals: [{ kind, weight, detail }], evidence: [{ note_id, title, sentence, polarity }], bridge_title, bridge_prompt, bridge_tags[], kind: "internal"\|"cross", cluster_a/b/_name/_color } ], stats }`. |
 | `GET`  | `/tensions/export.md?floor=&limit=` | Tensions brief as portable Markdown, sectioned by `internal` / `cross` with both quotes and the bridge prompt per tension. |
+| `GET`  | `/echo?threshold=&limit=`    | Near-duplicate clusters: `{ threshold, total_notes, candidate_pairs, cluster_count, skipped_pair_count, clusters: [ { cluster_id, size, redundancy, peak_cosine, wasted_chars, chars_total/unique, canonical_id, members[], pairs[], merged_title, merged_body, merged_tags[], sentences: [{ text, note_ids[], is_duplicate, is_canonical_source }], overlap_ratio } ], stats }`. |
+| `POST` | `/echo/preview`              | Live merge preview for `{ note_ids[], canonical_id? }` — recomputed when the user flips the canonical or drops a member. No DB writes. |
+| `POST` | `/echo/merge`                | Collapse the cluster: replace canonical in-place (id preserved), delete the duplicates. Body: `{ note_ids[], canonical_id?, title?, body?, tags? }`. Returns `{ merged_note_id, merged_title, deleted_ids[], wasted_chars_recovered, final_synapses }`. |
+| `POST` | `/echo/skip`                 | Mark `(a, b)` pair(s) as intentionally distinct. Body: `{ pairs: [[a,b], …], reason? }`. Persisted to `dedupe_skips`; subsequent `/echo` calls filter them out forever. |
+| `GET`  | `/echo/skips`                | List all currently-skipped pairs.                                                 |
+| `DEL`  | `/echo/skip?a=&b=`           | Forget a single skip so the pair can resurface in the dedup brief.                |
+| `GET`  | `/echo/export.md?threshold=&limit=` | The dedup brief as portable Markdown — one section per cluster with all bodies + the suggested merged body. |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -634,6 +892,23 @@ Incremental moves for future rotation days:
 - [x] **Synthesis** — auto-written, cited topic briefings per cluster
       (synthesis prose · key claims · open threads · cross-cluster
       bridges · cohesion score · portable Markdown export) *(shipped)*
+- [x] **Atlas** — executive cartography over every cluster: cohesion ×
+      activity quadrant chart (Strongholds · Frontiers · Vaults · Drift),
+      per-cluster metrics, prioritized recommendations, portable Markdown
+      export *(shipped)*
+- [x] **Chronicle** — temporal narrative of how each cluster evolved:
+      equal-time chapters with within-cluster TF-IDF chapter names,
+      per-chapter anchor + sentence, inter-chapter drift velocity, pivot
+      detection, emerged/faded vocabulary deltas, calm/shifting/pivoting
+      categorization, portable Markdown export *(shipped)*
+- [x] **Pulse** — cross-cluster, time-windowed diff of the whole graph:
+      headline + metrics (new notes · words · revisits · streak),
+      daily activity sparkline (created vs revisited), per-cluster
+      status (born / hot / emerging / warm / dormant) with momentum bar,
+      share-new, centroid drift, new-vocabulary chips and hot titles,
+      cross-cluster bridges born, hubs born (new notes with degree ≥ 3),
+      library-wide vocabulary delta, prioritized recommendations,
+      portable Markdown export *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 
