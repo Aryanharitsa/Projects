@@ -32,6 +32,7 @@ from theme import (
     render_staysafe, render_staysafe_empty,
     render_refuge, render_refuge_empty,
     render_tempo, render_tempo_empty,
+    render_echo, render_echo_empty,
 )
 import companion as cp
 import itinerary as itn
@@ -41,6 +42,7 @@ import compass as cmp
 import stays as sts
 import refuge as rfg
 import tempo as tmp
+import echo as ech
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -333,7 +335,7 @@ if role == "Tourist App":
     tab_labels = [
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
-        "Report Hazard", "Alerts", "SOS", "Trip Log",
+        "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -2443,6 +2445,154 @@ if role == "Tourist App":
                 f'<a download="trip_report.pdf" href="data:application/pdf;base64,{b64}">Download Trip PDF</a>',
                 unsafe_allow_html=True,
             )
+
+    # ---------------- Echo — Post-Trip Debrief (Day 66)
+    # The retrospective lens that completes the temporal loop. Pulse opens
+    # the day (forward-looking), Tempo picks when to leave, Live Trip
+    # streams alerts during, Echo debriefs the trip after. Pure
+    # composition over the existing physics — see `echo.py` for the
+    # composite formula and counterfactual recipe.
+    with tabs[17]:
+        st.subheader("Echo — Post-Trip Debrief")
+        st.caption(
+            "The *retrospective* lens. Pulse opens the day, Tempo picks the "
+            "depart-minute, Live Trip streams alerts during. Echo composes the "
+            "verdict after — composite trip score, counterfactual flavors at "
+            "the same depart, calibration of the alert system against the "
+            "trace, and a checklist of lessons. Pure composition over the "
+            "existing physics; zero new physics."
+        )
+
+        live_trip = st.session_state.get("trip")
+        echo_subject = None
+        subject_label = ""
+        if live_trip is not None:
+            echo_subject = live_trip
+            subject_label = (
+                f"current trip · {live_trip.plan.origin_label} → "
+                f"{live_trip.plan.dest_label} · status {live_trip.status}"
+            )
+
+        # Demo-trip launcher — synthesizes a quick Aguada → Baga journey at the
+        # current depart-time so the surface has *something* to debrief on a
+        # fresh app load (no need to run the Live Trip flow first).
+        col_demo_l, col_demo_r = st.columns([3, 2])
+        with col_demo_l:
+            if echo_subject is None:
+                st.markdown(
+                    "<small style='color:#8892A6;'>No active trip in session. "
+                    "Run a journey in the <b>Live Trip</b> tab, or click "
+                    "<b>Run seeded demo trip</b> to debrief a canonical "
+                    "Aguada → Baga route at the current time.</small>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<small style='color:#8892A6;'>Debriefing the "
+                    f"<b>{subject_label}</b>. Refresh after the trip completes "
+                    f"for the full verdict.</small>",
+                    unsafe_allow_html=True,
+                )
+        with col_demo_r:
+            if st.button(
+                "Run seeded demo trip",
+                use_container_width=True,
+                key="echo_demo_run",
+                help=(
+                    "Plans a safest route Aguada cliffs → Baga at Sat 22:00 "
+                    "and simulates it to completion so Echo can debrief it."
+                ),
+            ):
+                inc_rec = inc_df.to_dict("records") if not inc_df.empty else []
+                poi_rec = poi_df.to_dict("records") if not poi_df.empty else []
+                demo_depart = datetime(2026, 6, 27, 22, 0)
+                demo_origin = (15.4925, 73.7825)
+                demo_dest = (15.5550, 73.7700)
+                demo_route = plan_safest_route(
+                    demo_origin, demo_dest,
+                    inc_rec, GEOFENCES, poi_rec, now=demo_depart,
+                )
+                demo_trip = cp.start_trip(
+                    demo_route,
+                    origin_label="Aguada cliffs",
+                    dest_label="Baga",
+                    now=demo_depart,
+                )
+                _now = demo_depart
+                _steps = 0
+                while demo_trip.status == "active" and _steps < 1000:
+                    _now = _now + timedelta(seconds=30)
+                    cp.tick(
+                        demo_trip,
+                        incidents=inc_rec, geofences=GEOFENCES, pois=poi_rec,
+                        now=_now,
+                    )
+                    _steps += 1
+                st.session_state["echo_demo_trip"] = demo_trip
+                st.session_state["echo_demo_broadcasts"] = (
+                    1 + (3 if demo_trip.auto_sos_fired else 0)
+                )
+                st.rerun()
+
+        # Pick the subject: live trip wins; demo trip is the fallback.
+        demo_trip = st.session_state.get("echo_demo_trip")
+        if echo_subject is None and demo_trip is not None:
+            echo_subject = demo_trip
+
+        if echo_subject is None:
+            render_echo_empty()
+        else:
+            inc_rec = inc_df.to_dict("records") if not inc_df.empty else []
+            poi_rec = poi_df.to_dict("records") if not poi_df.empty else []
+            try:
+                forecaster_for_echo = get_forecaster()
+            except Exception:
+                forecaster_for_echo = None
+            broadcasts_n = (
+                len(st.session_state.get("trip_broadcasts", []))
+                if echo_subject is live_trip
+                else int(st.session_state.get("echo_demo_broadcasts", 0))
+            )
+            report = ech.compute_echo(
+                echo_subject,
+                incidents=inc_rec,
+                geofences=GEOFENCES,
+                pois=poi_rec,
+                forecaster=forecaster_for_echo,
+                broadcasts_count=broadcasts_n,
+                now=datetime.utcnow(),
+            )
+            render_echo(report)
+
+            st.markdown("---")
+            colj, colm = st.columns(2)
+            with colj:
+                st.download_button(
+                    "Download JSON (waysafe.echo.v1)",
+                    data=report.to_json(),
+                    file_name=f"waysafe_echo_{report.trip_id[:8]}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with colm:
+                st.download_button(
+                    "Download Markdown debrief",
+                    data=report.to_markdown(),
+                    file_name=f"waysafe_echo_{report.trip_id[:8]}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+            t_md, t_json = st.tabs(["Markdown preview", "JSON preview"])
+            with t_md:
+                st.markdown(report.to_markdown())
+            with t_json:
+                st.code(report.to_json(indent=2), language="json")
+
+            if demo_trip is not None and echo_subject is demo_trip:
+                if st.button("Clear demo trip", key="echo_demo_clear"):
+                    st.session_state.pop("echo_demo_trip", None)
+                    st.session_state.pop("echo_demo_broadcasts", None)
+                    st.rerun()
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")

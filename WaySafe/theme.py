@@ -5194,3 +5194,717 @@ def render_beacon_empty(
         """,
         unsafe_allow_html=True,
     )
+
+
+# ===================================================================
+# Echo — Post-Trip Debrief (Day 66)
+# ===================================================================
+
+_ECHO_BAND_HUE = {
+    "All-clear": "#53E3A6",
+    "Caution":   "#F9C440",
+    "Elevated":  "#FF9F43",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+}
+
+_ECHO_MOOD_HUE = {
+    "Smooth":   "#53E3A6",
+    "Watch":    "#F9C440",
+    "Rough":    "#FF7F50",
+    "Critical": "#FF3D60",
+}
+
+_ECHO_MOOD_GLYPH = {
+    "Smooth":   "🟢",
+    "Watch":    "🟡",
+    "Rough":    "🟠",
+    "Critical": "🔴",
+}
+
+_ECHO_CALIB_HUE = {
+    "Sharp": "#53E3A6",
+    "OK":    "#9FD3FF",
+    "Noisy": "#F9C440",
+    "Off":   "#FF7F50",
+}
+
+_ECHO_SCENARIO_GLYPH = {
+    "actual":           "🛣",
+    "fastest":          "🏁",
+    "safest":           "🛡",
+    "forecast-safest":  "🔮",
+}
+
+_ECHO_CSS = """
+<style>
+.ws-echo-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 178px 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 24px;
+  margin: 8px 0 18px 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 60% 70% at 18% 10%, var(--glow), transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 10px 36px var(--glow, rgba(61,169,252,0.20));
+}
+.ws-echo-ring {
+  position: relative;
+  width: 178px; height: 178px; border-radius: 50%;
+  background:
+    conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  display: grid; place-items: center;
+  box-shadow: 0 0 30px var(--glow, rgba(61,169,252,0.22));
+}
+.ws-echo-ring::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-echo-ring-inner {
+  position: relative; z-index: 1;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.ws-echo-ring-score {
+  font-size: 36px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; line-height: 1;
+}
+.ws-echo-ring-of100 {
+  font-size: 11px; color: #8892A6; margin-top: 4px;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-echo-ring-band {
+  font-size: 12px; color: var(--hue); margin-top: 6px; font-weight: 700;
+}
+.ws-echo-hero-body { display: flex; flex-direction: column; gap: 6px; }
+.ws-echo-pill {
+  align-self: flex-start;
+  display: inline-flex; gap: 8px; align-items: center;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--pill-bg, rgba(61,169,252,0.14));
+  border: 1px solid var(--hue, #3DA9FC);
+  color: var(--hue, #3DA9FC);
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-echo-hero-title {
+  font-size: 22px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.01em; line-height: 1.25;
+}
+.ws-echo-hero-detail { color: #C5CBDA; font-size: 14px; line-height: 1.5; }
+.ws-echo-hero-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+}
+.ws-echo-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C5CBDA; font-size: 11px; font-weight: 700;
+}
+.ws-echo-chip.warn { color: #F9C440; border-color: rgba(249,196,64,0.35); }
+.ws-echo-chip.bad  { color: #FF7F50; border-color: rgba(255,127,80,0.35); }
+.ws-echo-chip.crit { color: #FF3D60; border-color: rgba(255,61,96,0.40); }
+.ws-echo-chip.good { color: #53E3A6; border-color: rgba(83,227,166,0.35); }
+.ws-echo-mood {
+  text-align: right;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--mood-bg);
+  border: 1px solid var(--mood-hue);
+  color: var(--mood-hue);
+  min-width: 110px;
+}
+.ws-echo-mood-glyph { font-size: 26px; line-height: 1; }
+.ws-echo-mood-label {
+  font-size: 11px; font-weight: 800; margin-top: 4px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+}
+.ws-echo-mood-mini  { font-size: 10px; color: #8892A6; margin-top: 4px; }
+
+/* ----- 4-tile factor strip ----- */
+.ws-echo-factors {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 6px 0 18px 0;
+}
+.ws-echo-factor {
+  position: relative;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 4px 0 0 0 var(--rim);
+}
+.ws-echo-factor-label {
+  font-size: 10px; color: #8892A6;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-echo-factor-value {
+  font-size: 26px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; margin-top: 2px;
+}
+.ws-echo-factor-small { font-size: 11px; color: #9FA6BB; margin-top: 2px; }
+.ws-echo-factor-detail { font-size: 11px; color: #6F7790; margin-top: 6px; }
+
+/* ----- corridor strip ----- */
+.ws-echo-corridor {
+  display: flex;
+  height: 32px;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+}
+.ws-echo-corridor-cell {
+  flex: 1;
+  position: relative;
+  background: var(--bg);
+  border-right: 1px solid rgba(0,0,0,0.20);
+}
+.ws-echo-corridor-cell.fence::after {
+  content: "";
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 2px,
+    rgba(0,0,0,0.30) 2px 4px
+  );
+}
+.ws-echo-corridor-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px; color: #8892A6;
+  margin: 4px 2px 0 2px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+/* ----- timeline ----- */
+.ws-echo-timeline {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 6px 0;
+}
+.ws-echo-tl-row {
+  display: grid; grid-template-columns: 80px 28px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.025);
+  border-left: 3px solid var(--accent, #9FD3FF);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ws-echo-tl-ts { color: #8892A6; font-family: ui-monospace, monospace; font-size: 11px; }
+.ws-echo-tl-icon { font-size: 16px; text-align: center; }
+.ws-echo-tl-msg { color: #E6E9F2; font-size: 13px; line-height: 1.4; }
+.ws-echo-tl-msg .kind { color: var(--accent, #9FD3FF); font-weight: 700; font-size: 11px; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.ws-echo-tl-km { color: #8892A6; font-size: 10px; font-family: ui-monospace, monospace; }
+
+/* ----- counterfactual cards ----- */
+.ws-echo-cf-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 8px 0 12px 0;
+}
+.ws-echo-cf {
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 4px 14px var(--glow, rgba(61,169,252,0.10));
+}
+.ws-echo-cf.win {
+  background:
+    radial-gradient(circle at 0% 0%, var(--glow), transparent 60%),
+    rgba(255,255,255,0.04);
+  box-shadow: 0 6px 24px var(--glow);
+}
+.ws-echo-cf-head { display: flex; align-items: center; gap: 8px; }
+.ws-echo-cf-glyph { font-size: 20px; }
+.ws-echo-cf-label {
+  font-size: 12px; font-weight: 800; color: var(--hue);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.ws-echo-cf-pill {
+  margin-left: auto;
+  font-size: 10px; padding: 1px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #9FA6BB;
+}
+.ws-echo-cf-score {
+  font-size: 28px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; margin-top: 6px; line-height: 1;
+}
+.ws-echo-cf-band { font-size: 11px; color: var(--hue); font-weight: 700; }
+.ws-echo-cf-stat {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #C5CBDA;
+  margin-top: 4px;
+}
+.ws-echo-cf-delta {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  font-size: 11px; color: #9FA6BB;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+}
+.ws-echo-cf-delta b { color: #E6E9F2; }
+.ws-echo-cf-delta .pos { color: #53E3A6; }
+.ws-echo-cf-delta .neg { color: #FF7F50; }
+
+/* ----- calibration block ----- */
+.ws-echo-calib {
+  display: grid; grid-template-columns: 88px 1fr;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 8px 0;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hue, #9FD3FF);
+}
+.ws-echo-calib-dial {
+  display: grid; place-items: center;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  position: relative;
+}
+.ws-echo-calib-dial::after {
+  content: "";
+  position: absolute; inset: 8px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-echo-calib-dial-inner {
+  position: relative; z-index: 1; text-align: center;
+}
+.ws-echo-calib-band { font-size: 13px; font-weight: 800; color: var(--hue); }
+.ws-echo-calib-brier { font-size: 10px; color: #8892A6; margin-top: 2px; }
+.ws-echo-calib-body { display: flex; flex-direction: column; gap: 6px; }
+.ws-echo-calib-stat-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ws-echo-calib-stat {
+  font-size: 11px;
+  padding: 2px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C5CBDA;
+}
+.ws-echo-calib-stat.pos { color: #53E3A6; border-color: rgba(83,227,166,0.35); }
+.ws-echo-calib-stat.neg { color: #FF7F50; border-color: rgba(255,127,80,0.35); }
+.ws-echo-calib-stat.miss { color: #FF3D60; border-color: rgba(255,61,96,0.40); }
+.ws-echo-calib-summary { color: #C5CBDA; font-size: 13px; line-height: 1.45; }
+
+/* ----- lessons list ----- */
+.ws-echo-lessons {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 4px 0;
+}
+.ws-echo-lesson {
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.025);
+  border-left: 3px solid #9FD3FF;
+  color: #E6E9F2;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ws-echo-lesson.prio { border-left-color: #FF7F50; }
+.ws-echo-lesson.crit { border-left-color: #FF3D60; }
+.ws-echo-lesson.good { border-left-color: #53E3A6; }
+
+/* ----- empty card ----- */
+.ws-echo-empty {
+  padding: 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid rgba(159,211,255,0.30);
+  color: #C5CBDA;
+}
+.ws-echo-empty-title { color: #E6E9F2; font-weight: 800; font-size: 16px; margin-bottom: 4px; }
+.ws-echo-section-title {
+  color: #E6E9F2; font-weight: 800; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 18px 0 8px 0;
+}
+.ws-echo-section-sub { color: #8892A6; font-size: 11px; margin-bottom: 6px; }
+</style>
+"""
+
+
+def _echo_risk_hue(risk: float) -> str:
+    """Map 0..1 risk to a corridor cell hue (greener = safer)."""
+    risk = max(0.0, min(1.0, risk))
+    if risk < 0.18:  return "#53E3A6"
+    if risk < 0.32:  return "#9FD3FF"
+    if risk < 0.45:  return "#F9C440"
+    if risk < 0.60:  return "#FF9F43"
+    if risk < 0.75:  return "#FF7F50"
+    return "#FF3D60"
+
+
+def _echo_rec_to_html(text: str) -> str:
+    """Same minimal **bold** parser used everywhere — copy of _rec_to_html
+    behaviour with HTML-escape on the surrounding text."""
+    if text is None:
+        return ""
+    import re
+    parts = re.split(r"(\*\*[^*]+\*\*)", str(text))
+    out = []
+    for p in parts:
+        if p.startswith("**") and p.endswith("**"):
+            out.append(f"<b>{_esc(p[2:-2])}</b>")
+        else:
+            out.append(_esc(p))
+    return "".join(out)
+
+
+def render_echo(report) -> None:
+    """Render the full Echo debrief: hero ring + mood, factor strip,
+    corridor heat strip, counterfactual cards, calibration, event
+    timeline, lessons. Pure HTML/CSS — no streamlit charts."""
+    st.markdown(_ECHO_CSS, unsafe_allow_html=True)
+
+    hue = _ECHO_BAND_HUE.get(report.band, report.band_color)
+    glow = _hex_to_rgba(hue, 0.22)
+    pill_bg = _hex_to_rgba(hue, 0.14)
+    mood_hue = _ECHO_MOOD_HUE.get(report.mood, "#9FD3FF")
+    mood_bg = _hex_to_rgba(mood_hue, 0.14)
+    mood_glyph = _ECHO_MOOD_GLYPH.get(report.mood, "•")
+
+    # ---- meta chips on the hero ----
+    chip_html: list[str] = []
+    chip_html.append(
+        f'<span class="ws-echo-chip">'
+        f'{_esc(report.route_mode)}</span>'
+    )
+    chip_html.append(
+        f'<span class="ws-echo-chip">'
+        f'{report.distance_km:.1f} km · '
+        f'{int(report.duration_min)} min</span>'
+    )
+    chip_html.append(
+        f'<span class="ws-echo-chip">risk-km '
+        f'{report.risk_km:.2f}</span>'
+    )
+    if report.geofence_minutes >= 1.0:
+        chip_html.append(
+            f'<span class="ws-echo-chip warn">{report.geofence_minutes:.0f} min '
+            f'inside fence</span>'
+        )
+    if report.n_critical_alerts >= 1:
+        chip_html.append(
+            f'<span class="ws-echo-chip crit">{report.n_critical_alerts} critical '
+            f'alert(s)</span>'
+        )
+    if report.user_sos:
+        chip_html.append('<span class="ws-echo-chip crit">USER SOS</span>')
+    if report.auto_sos:
+        chip_html.append('<span class="ws-echo-chip crit">AUTO SOS</span>')
+    if report.n_broadcasts >= 1:
+        chip_html.append(
+            f'<span class="ws-echo-chip">{report.n_broadcasts} broadcast(s)</span>'
+        )
+
+    depart_str = (
+        report.depart_at.strftime("%a %d %b · %H:%M") if report.depart_at else "—"
+    )
+    arrived_str = (
+        report.arrived_at.strftime("%H:%M") if report.arrived_at else "(in progress)"
+    )
+
+    st.markdown(
+        f"""
+        <div class="ws-echo-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-echo-ring" style="--hue:{hue}; --pct:{report.trip_score}; --glow:{glow};">
+            <div class="ws-echo-ring-inner">
+              <div class="ws-echo-ring-score">{report.trip_score:.0f}</div>
+              <div class="ws-echo-ring-of100">/ 100</div>
+              <div class="ws-echo-ring-band">{_esc(report.band)}</div>
+            </div>
+          </div>
+          <div class="ws-echo-hero-body">
+            <span class="ws-echo-pill" style="--hue:{hue}; --pill-bg:{pill_bg};">
+              Echo · debrief
+            </span>
+            <div class="ws-echo-hero-title">{_echo_rec_to_html(report.headline)}</div>
+            <div class="ws-echo-hero-detail">
+              <b>{_esc(report.origin_label)}</b> → <b>{_esc(report.dest_label)}</b>
+              · departed {_esc(depart_str)} · arrived {_esc(arrived_str)}
+            </div>
+            <div class="ws-echo-hero-detail">{_echo_rec_to_html(report.advisory_line)}</div>
+            <div class="ws-echo-hero-meta">{"".join(chip_html)}</div>
+          </div>
+          <div class="ws-echo-mood" style="--mood-hue:{mood_hue}; --mood-bg:{mood_bg};">
+            <div class="ws-echo-mood-glyph">{mood_glyph}</div>
+            <div class="ws-echo-mood-label">{_esc(report.mood)}</div>
+            <div class="ws-echo-mood-mini">mood</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- 4-tile factor strip ----
+    fcells: list[str] = []
+    for f in report.factors:
+        rim = _ECHO_BAND_HUE.get(_safety_band(int(f.value)), "#9FD3FF")
+        fcells.append(
+            f'<div class="ws-echo-factor" style="--rim:{rim};">'
+            f'  <div class="ws-echo-factor-label">{_esc(f.label)}</div>'
+            f'  <div class="ws-echo-factor-value">{f.value:.0f}</div>'
+            f'  <div class="ws-echo-factor-small">weight {f.weight:.2f} · contrib {f.contribution:.1f}</div>'
+            f'  <div class="ws-echo-factor-detail">{_esc(f.detail)}</div>'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div class="ws-echo-factors">{"".join(fcells)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- corridor strip ----
+    if report.corridor:
+        st.markdown(
+            '<div class="ws-echo-section-title">Realised corridor — risk by km</div>'
+            '<div class="ws-echo-section-sub">'
+            'Greener = safer. Diagonal hatch = inside a geofenced risk polygon. '
+            'Sampled from the trip heartbeats; static-corridor fallback when no '
+            'heartbeats were recorded.</div>',
+            unsafe_allow_html=True,
+        )
+        cells: list[str] = []
+        for s in report.corridor:
+            chue = _echo_risk_hue(s.risk)
+            bg = _hex_to_rgba(chue, 0.75)
+            cls = "ws-echo-corridor-cell"
+            if s.inside_geofence:
+                cls += " fence"
+            title = (
+                f"{s.km:.2f} km · risk {s.risk:.2f}"
+                + (" · inside geofence" if s.inside_geofence else "")
+            )
+            cells.append(
+                f'<div class="{cls}" style="--bg:{bg};" title="{_esc(title)}"></div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-corridor">{"".join(cells)}</div>'
+            f'<div class="ws-echo-corridor-legend">'
+            f'<span>0 km · {_esc(report.origin_label)}</span>'
+            f'<span>{report.distance_km:.1f} km · {_esc(report.dest_label)}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- counterfactual ----
+    if report.scenarios:
+        st.markdown(
+            '<div class="ws-echo-section-title">Counterfactual — what other flavors would have scored</div>'
+            '<div class="ws-echo-section-sub">'
+            'Each card re-plans your trip at the same depart-time. Δ rows quote '
+            'the saving (or cost) vs the actual run. The strongest alternative is '
+            'highlighted.</div>',
+            unsafe_allow_html=True,
+        )
+        cards: list[str] = []
+        for s in report.scenarios:
+            shue = _ECHO_BAND_HUE.get(s.band, s.band_color)
+            sglow = _hex_to_rgba(shue, 0.22)
+            classes = ["ws-echo-cf"]
+            is_winner = (
+                report.best_alternative is not None
+                and s.label == report.best_alternative
+            )
+            if is_winner:
+                classes.append("win")
+            actual_pill = (
+                '<span class="ws-echo-cf-pill">your trip</span>' if s.is_actual else
+                ('<span class="ws-echo-cf-pill">best alt</span>' if is_winner else "")
+            )
+            glyph = _ECHO_SCENARIO_GLYPH.get(s.label, "•")
+            delta_html = ""
+            if not s.is_actual:
+                dts = s.delta_trip_score
+                drk = s.delta_risk_km
+                de = s.delta_eta_minutes
+                dd = s.delta_distance_km
+                dms = s.delta_min_safety
+                cls_dts = "pos" if dts >= 0 else "neg"
+                cls_drk = "pos" if drk >= 0 else "neg"
+                de_str = f"{de:+.0f} min"
+                dd_str = f"{dd:+.2f} km"
+                delta_html = (
+                    f'<div class="ws-echo-cf-delta">'
+                    f'<span>Δ score <b class="{cls_dts}">{dts:+.1f}</b></span>'
+                    f'<span>Δ risk-km <b class="{cls_drk}">{drk:+.2f}</b></span>'
+                    f'<span>Δ time <b>{de_str}</b></span>'
+                    f'<span>Δ dist <b>{dd_str}</b></span>'
+                    f'<span>Δ min-safety <b>{dms:+d}</b></span>'
+                    f'</div>'
+                )
+            cards.append(
+                f'<div class="{ " ".join(classes) }" '
+                f'style="--hue:{shue}; --glow:{sglow};">'
+                f'  <div class="ws-echo-cf-head">'
+                f'    <span class="ws-echo-cf-glyph">{glyph}</span>'
+                f'    <span class="ws-echo-cf-label">{_esc(s.label)}</span>'
+                f'    {actual_pill}'
+                f'  </div>'
+                f'  <div class="ws-echo-cf-score">{s.exposure_score:.0f}</div>'
+                f'  <div class="ws-echo-cf-band">{_esc(s.band)}</div>'
+                f'  <div class="ws-echo-cf-stat">'
+                f'    <span>risk-km</span><b>{s.risk_km:.2f}</b>'
+                f'  </div>'
+                f'  <div class="ws-echo-cf-stat">'
+                f'    <span>{s.distance_km:.1f} km · ETA {s.eta_minutes:.0f} min</span>'
+                f'    <span>min {s.min_safety}</span>'
+                f'  </div>'
+                f'  {delta_html}'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-cf-grid">{"".join(cards)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- calibration ----
+    if report.calibration is not None:
+        cal = report.calibration
+        chue = _ECHO_CALIB_HUE.get(cal.band, cal.band_color)
+        # pct: invert brier into a 0..100 dial (1 - brier).
+        dial_pct = max(0.0, min(100.0, 100.0 * (1.0 - cal.brier)))
+        st.markdown(
+            '<div class="ws-echo-section-title">Alert calibration</div>'
+            '<div class="ws-echo-section-sub">'
+            'How well the live-trip risk-ahead predictions tracked what '
+            'actually happened on the trace. Sharp = every alert resolved into '
+            'an actual high-risk stretch within 90 s.</div>',
+            unsafe_allow_html=True,
+        )
+        stat_chips: list[str] = []
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat">{cal.n_risk_ahead_alerts} alert(s)</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat pos">TP {cal.n_true_positive}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat neg">FA {cal.n_false_alarm}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat miss">Miss {cal.n_miss}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat">{cal.n_heartbeats} heartbeats</span>'
+        )
+        st.markdown(
+            f"""
+            <div class="ws-echo-calib" style="--hue:{chue};">
+              <div class="ws-echo-calib-dial" style="--hue:{chue}; --pct:{dial_pct};">
+                <div class="ws-echo-calib-dial-inner">
+                  <div class="ws-echo-calib-band">{_esc(cal.band)}</div>
+                  <div class="ws-echo-calib-brier">brier {cal.brier:.2f}</div>
+                </div>
+              </div>
+              <div class="ws-echo-calib-body">
+                <div class="ws-echo-calib-stat-row">{"".join(stat_chips)}</div>
+                <div class="ws-echo-calib-summary">{_echo_rec_to_html(cal.summary)}</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---- timeline ----
+    if report.timeline:
+        st.markdown(
+            '<div class="ws-echo-section-title">Event timeline</div>'
+            '<div class="ws-echo-section-sub">'
+            'Every alert + milestone the Live Trip Companion emitted, ordered by '
+            'time. Left rail colour mirrors severity.</div>',
+            unsafe_allow_html=True,
+        )
+        rows: list[str] = []
+        for ev in report.timeline[:60]:
+            km_html = (
+                f'<div class="ws-echo-tl-km">{ev.rel_km:.1f} km</div>'
+                if ev.rel_km is not None else ''
+            )
+            rows.append(
+                f'<div class="ws-echo-tl-row" style="--accent:{ev.accent};">'
+                f'  <div class="ws-echo-tl-ts">{ev.ts.strftime("%H:%M:%S")}</div>'
+                f'  <div class="ws-echo-tl-icon">{ev.icon}</div>'
+                f'  <div class="ws-echo-tl-msg">'
+                f'    <span class="kind">{_esc(ev.sub_kind)}</span>'
+                f'    {_echo_rec_to_html(ev.message)}'
+                f'  </div>'
+                f'  {km_html}'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-timeline">{"".join(rows)}</div>',
+            unsafe_allow_html=True,
+        )
+        if len(report.timeline) > 60:
+            st.caption(f"… plus {len(report.timeline) - 60} more events in the JSON export.")
+
+    # ---- lessons ----
+    if report.lessons:
+        st.markdown(
+            '<div class="ws-echo-section-title">Lessons &amp; plan-of-next-trip</div>'
+            '<div class="ws-echo-section-sub">'
+            'Deterministic bullets keyed to this debrief\'s own numbers. Each '
+            'one names the WaySafe tab to open next.</div>',
+            unsafe_allow_html=True,
+        )
+        items: list[str] = []
+        for l in report.lessons:
+            cls = "ws-echo-lesson"
+            head = l[:2]
+            if head in ("🆘", "🔴", "⏸️"):
+                cls += " crit"
+            elif head in ("🛡", "✅", "📈", "🟢"):
+                cls += " good"
+            elif head in ("🚷", "⚠️", "🔧", "📉"):
+                cls += " prio"
+            items.append(
+                f'<div class="{cls}">{_echo_rec_to_html(l)}</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-lessons">{"".join(items)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def render_echo_empty(
+    hint: str = (
+        "Echo composes a post-trip debrief from a completed Live Trip. "
+        "Run a journey in the **Live Trip** tab — or load the seeded "
+        "demo trip below — and come back here for the verdict."
+    ),
+) -> None:
+    st.markdown(_ECHO_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-echo-empty">
+          <div class="ws-echo-empty-title">Echo idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">
+          Echo composes a verdict only — it adds zero new physics. Every number
+          in the brief traces back to <code>safety.point_risk</code>, the
+          <code>routing</code> A*, or the live-trip heartbeats. Pure-Python,
+          zero new deps.
+          </small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
