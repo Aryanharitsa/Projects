@@ -18,6 +18,36 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
+- **🆕 Echo — Post-Trip Debrief & Counterfactual** *(Day 66)* — the
+  *retrospective* lens that closes the temporal loop. Up to Day 65
+  every WaySafe surface is forward-looking: **Pulse** opens the day,
+  **Tempo** picks the depart-minute, **Plan Route** prices the
+  corridor, **Live Trip** streams alerts during the journey. Once the
+  trip ends, the state was dropped into Trip Log as a flat row and the
+  page turned — no surface asked *"how did it actually go?"*. Echo
+  composes a single deterministic verdict from a `companion.TripSession`
+  (active or completed): a **0–100 composite trip score** with the
+  same band ladder Tempo uses (Realised safety 35% · Exposure 25% ·
+  Events 25% · Geofence dwell 15%), a **mood ring** (Smooth / Watch /
+  Rough / Critical, first-match on the ladder), a **realised-corridor
+  heat strip** painting per-km risk along the actual heartbeat trace
+  (diagonal hatch flags km inside a geofenced risk polygon), a
+  **counterfactual card pack** that re-plans the same (origin → dest)
+  at the same depart with **fastest**, **safest** and (when a
+  forecaster is loaded) **forecast-safest** flavors and quotes the
+  Δ trip-score / Δ risk-km / Δ ETA / Δ min-safety vs the actual run,
+  an **alert-calibration dial** that grades every `risk_ahead` alert
+  against what actually happened on the trace within 90 s
+  (true-positive / false-alarm / miss + a Brier-like sharpness score,
+  banded Sharp / OK / Noisy / Off), a chronological **event timeline**
+  merging alerts and milestones with severity-coloured rails, and a
+  prioritised **lessons checklist** that names the WaySafe tab to open
+  next (Tempo, Refuge, Compass, Sentinel) for each finding. Pure-Python,
+  zero new physics — every number traces back to `safety.point_risk`,
+  the `routing` A*, or the recorded `companion.heartbeats`. Exports as
+  JSON (`waysafe.echo.v1`) and Markdown for the family-share / safety-
+  journal use case. Lives at `tabs[17]` next to Trip Log — Trip Log
+  lists *what happened*, Echo explains *why it scored what it scored*.
 - **Live safety score (0–100)** — composite penalty across geofences,
   recency- & severity-weighted nearby incidents, late-night windows and
   help-POI density. Bands: Safe / Caution / High Risk / Danger.
@@ -544,6 +574,146 @@ and `utils.haversine_km`). UI render in `theme.render_refuge`. Test the
 hour-aware open-confidence by un-checking *"Use current hour"* and
 sliding to 23:00 — the tourist help-desk and clinic drop out of the
 podium.
+
+---
+
+## 📼 Echo — Post-Trip Debrief & Counterfactual (Day 66)
+
+WaySafe up to Day 65 is *forward-looking*. **Pulse** opens the day,
+**Tempo** picks the depart-minute, **Plan Route** prices the corridor,
+and **Live Trip** streams alerts during the journey. Once the trip
+ends, the state was dropped into Trip Log as a flat row and the page
+turned — no surface asked **"how did it actually go?"**
+
+Echo is the *retrospective* lens that closes the temporal loop:
+
+| Surface       | Lens               | Question it answers                       |
+|---------------|--------------------|-------------------------------------------|
+| Pulse         | morning            | What changed since yesterday?             |
+| Tempo         | pre-trip           | When should I leave?                      |
+| Plan Route    | pre-trip           | How do I get there?                       |
+| Live Trip     | during             | What's happening right now?               |
+| **Echo**      | **post-trip**      | **How did the journey actually go?**      |
+
+### Composite trip score
+
+A single 0–100 composite with the same band ladder Tempo uses
+(All-clear / Caution / Elevated / High Risk / Danger), composed from
+four weighted factors so the surface and the engine never disagree on
+a band name:
+
+```
+trip_score = 0.35 · realized_avg_safety       # mean(100·(1−heartbeat.risk))
+           + 0.25 · exposure_score            # 100·exp(−0.35·risk_km)
+           + 0.25 · event_score               # clip(100 − Σ penalties)
+           + 0.15 · fence_score               # 100·(1 − km_inside_fence/total_km)
+
+event_score penalties:
+  USER_SOS    −40   AUTO_SOS    −30
+  critical    −10   warn         −4
+```
+
+Weights are tuned so the canonical Aguada → Baga safest route at
+22:00 lands at ~69 (Caution / mood Rough — late-night fence dwell),
+the same route at 16:00 lands at ~88 (All-clear / Smooth), and a
+fastest run that triggers an auto-SOS lands ~32 (Danger / Critical).
+
+### Mood ladder
+
+First-match wins, top-to-bottom:
+
+```
+Critical   user_sos OR auto_sos OR trip_score < 45 OR n_critical ≥ 2
+Rough      trip_score < 60 OR n_warn ≥ 3 OR n_critical ≥ 1
+Watch      trip_score < 75 OR n_warn ≥ 1
+Smooth     else
+```
+
+The mood is the headline glyph on the hero card — `🟢 Smooth` /
+`🟡 Watch` / `🟠 Rough` / `🔴 Critical` — so the family-share
+screenshot reads correctly at a glance.
+
+### Realised corridor heat strip
+
+Echo paints the journey's actual corridor — from `trip.heartbeats`
+when a live trip was simulated, or from an evenly-spaced sample of
+the planned coords priced at `safety.point_risk(now=depart_at)` as a
+fallback. Per-km risk colours the strip greener / amber / rose, and a
+diagonal hatch overlay flags any segment inside a geofenced risk
+polygon. Hover shows the exact (km, risk, geofence?) tuple.
+
+### Counterfactual card pack
+
+For the same `(origin, dest, depart_at)` Echo re-plans:
+
+| Card             | Engine                                       | Delta quoted vs actual                              |
+|------------------|----------------------------------------------|-----------------------------------------------------|
+| `actual`         | the heartbeat trace                           | baseline                                            |
+| `fastest`        | `routing.plan_fastest_route` (α=0)           | trip-score / risk-km / ETA / distance / min-safety  |
+| `safest`         | `routing.plan_safest_route` (α=4.5)          | trip-score / risk-km / ETA / distance / min-safety  |
+| `forecast-safest`| `routing.plan_forecast_route` at `depart_at` | trip-score / risk-km / ETA / distance / min-safety  |
+
+The **strongest alternative** is highlighted on the card grid. When
+the actual trip already beats every alternative, Echo says so
+("you took the safest available slot, no upgrade possible at that
+depart").
+
+### Alert calibration
+
+The Live Trip Companion fires `risk_ahead` alerts when the 1.5-km
+look-ahead crosses 0.45. Echo grades those predictions against the
+heartbeat trace that followed:
+
+- **True-positive** — `risk_ahead` fired and within 90 s the corridor
+  actually crossed risk ≥ 0.45.
+- **False-alarm** — `risk_ahead` fired but the next 90 s stayed below
+  0.32 (the hysteresis recovery floor) — never reached the predicted
+  threat.
+- **Miss** — a heartbeat with risk ≥ 0.45 that had no upstream
+  `risk_ahead` within the prior 120 s.
+
+A Brier-style **sharpness score** (mean (predicted − actual)² across
+heartbeats) bands the calibration:
+
+```
+< 0.06   Sharp     · system called it right almost every time
+< 0.12   OK
+< 0.20   Noisy     · over-warns
+else     Off
+```
+
+An outcome-aware override promotes the band to **Sharp** when every
+alert resolved into a true-positive *and* nothing slipped past
+unwarned — so a single alert that persisted across multiple
+heartbeats (high Brier) but ultimately matched a real event isn't
+labelled "Off" just because of the persistence artefact.
+
+### Lessons checklist
+
+A deterministic, first-match-wins ladder of natural-language bullets
+keyed to the report's own numbers. Each bullet names the WaySafe tab
+the analyst should open next so the debrief deep-links into the rest
+of the surface:
+
+- `🆘 You triggered the manual SOS — open Alerts for the dispatch log.`
+- `🛡 The safest route at the same depart would have been +12 pts (saving 0.30 risk-km) at +10 min. Open Plan Route and try safest next time.`
+- `🚷 4 min (35%) inside geofenced risk zones. Tempo will surface a depart-time slot that threads around the corridor.`
+- `⚠️ 2 critical alerts fired. Sentinel may already be tracking the cluster behind them — open Sentinel to confirm.`
+- `📉 Realised safety came in −12 pts under the plan — the static score under-priced this corridor at this depart-time.`
+- `🔧 Risk-ahead alerts over-warned (3 false alarms). Tighten RISK_AHEAD_THRESHOLD.`
+- `📨 3 broadcasts dispatched to your trusted contacts.`
+
+### Exports
+
+| Format       | Use                                                                 |
+|--------------|---------------------------------------------------------------------|
+| **JSON**     | stable `waysafe.echo.v1` schema — full corridor + timeline + scenarios + calibration |
+| **Markdown** | a paste-able trip-journal entry (~3 KB) for WhatsApp / email / Notion |
+
+Engine in `echo.py` (~750 LOC, pure-stdlib + reuse of `safety`,
+`routing`, `companion`, and optionally `forecast`). UI render lives in
+`theme.render_echo`. Lives at `tabs[17]` next to Trip Log — Trip Log
+lists *what happened*, Echo explains *why it scored what it scored*.
 
 ---
 
@@ -1114,6 +1284,7 @@ WaySafe/
 │── advisory.py         # Travel Advisory brief — fusion engine + PDF / JSON / markdown
 │── compass.py          # 🆕 Destination Showdown — multi-target ranking + JSON / markdown
 │── companion.py        # Live Trip Companion — trips, alerts, broadcasts
+│── echo.py             # 🆕 Post-Trip Debrief — composite + counterfactual + calibration
 │── theme.py            # Dark theme + render_* helpers
 │── utils.py            # haversine, point_in_polygon, sha256, build_merkle
 │── data/
