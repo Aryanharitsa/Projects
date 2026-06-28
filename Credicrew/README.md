@@ -25,14 +25,113 @@ exponential-hazard exit forecast over the next 7 days, and now
 **reactivates the silver-medalist pool** with **Revive** — the candidates
 you already paid to source but passed on, re-scored against every other
 open role with a 90-day recency-decay so the queue stays fresh and
-sunk-cost talent never falls out of the funnel quietly. All from a dark,
-fast, single-page workspace.
+sunk-cost talent never falls out of the funnel quietly, and now
+**closes the entire loop with hindsight** through **Hindsight** — every
+accepted offer becomes a tracked hire, the engine pairs each one with
+its post-hire performance + tenure, and a Pearson-driven rubric tuner
+tells you exactly which interview dims actually predicted who succeeded
+— flags false positives the panel over-scored, false negatives it
+under-scored, and writes a 50/50 evidence-and-intent reweighting of the
+rubric so next quarter you're hiring on what worked, not what felt
+right. All from a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Hindsight (Day 67)
+
+Every other Credicrew surface is forward-looking. Discover ranks who to
+talk to. Decision Studio ranks who interviewed best. Forecast Studio
+predicts whether a hire will close. None of them answer the question
+that the next quarter's hiring loop hinges on:
+
+> Now that this person has been on the team for 90 days — did our rubric
+> actually predict who would succeed?
+
+**Hindsight** (`/hindsight`) is the missing retrospective. It treats every
+offer-status shortlist entry as a tracked hire, pairs each one with its
+post-hire performance + tenure outcome (logged by the recruiter, or
+synthesised deterministically from the FNV-1a hash of
+`candidateId::roleId` until the recruiter starts logging), and writes the
+calibration math every rubric assumes is already done.
+
+- **Pool-level calibration** — Pearson(composite, performance),
+  Spearman, and a Brier score (`mean((composite/100 − goodHire)²)`)
+  hero-stamp the whole pool. The band reads off the Pearson — excellent
+  ≥ 0.55 · good ≥ 0.35 · mixed ≥ 0.15 · concerning otherwise — and tints
+  the conic ring + every accent so the verdict reads before the text.
+- **Per-dim predictive power** — for every rubric dim that's been rated
+  on at least four hires, the engine computes Pearson(rating,
+  performance) and Pearson(rating, tenureDays) and bucket the dim
+  `strong (≥ 0.55) · moderate (≥ 0.35) · weak (≥ 0.10) · unknown`.
+  Every dim's row shows a 0–100 power bar, the raw r values, and a
+  rendered weight bar with both the current weight and the suggested
+  weight as a coloured tick — promote/reduce direction is read by colour
+  before number.
+- **Suggested rubric weights** — `0.5 · (|r| / Σ|r|) + 0.5 · current`,
+  renormalised across all dims to sum to 1. Half evidence, half intent:
+  a single quarter's calibration never tears down the whole rubric, but
+  the dims doing the predictive work *do* shift up and the silent ones
+  shift down. Promote / Keep / Reduce / Drop cards split the
+  recommendation into a four-quadrant grid, with the actual delta on
+  every line.
+- **Surprise hires** — composite ≥ 80 + perf ≤ 2 (the panel over-scored:
+  false positive) and composite ≤ 55 + perf ≥ 4 (the panel under-scored:
+  false negative) get their own card grid. Each card names the driver
+  dim — the highest-rated dim on an FP, the lowest-rated dim on an FN —
+  and prints the why: *Rated 5/5 on System design at interview · landed
+  at perf 2/5 — left after 187d*. These are the calibration teachers.
+- **Calibration curve** — bucket every hire by composite (10-pt bins)
+  and plot mean performance per bucket as a fat dot, with dot radius
+  scaling to bin size. A dashed reference line draws the *ideal*
+  monotone (perf 1 at composite 0, perf 5 at composite 100); the
+  observed line lights up the actual mapping. Hover a dot for the bin's
+  exact n, mean perf, good-rate %, mean tenure.
+- **Tenure × recommendation band** — does the team's "strong hire"
+  bucket actually stick longer than the "mixed" bucket? Five tiles, one
+  per recommendation band, render mean tenure and mean performance per
+  band so the answer is a glance, not a query.
+- **Hire roster + outcome editor** — every hire renders as a row with
+  composite chip, performance dot, tenure pill, attrition state, and an
+  *Edit outcome / Log real outcome* button that pops a 1–5 performance
+  picker + active/attrited toggle + manager note. Logged outcomes are
+  persisted to `localStorage:credicrew:hires:v1` and override the
+  synthetic seed on every render. Filter by *all / real / synthetic* to
+  audit how much of the calibration is still seeded.
+- **Empty-state seed** — if you have no offer-status entries yet, a
+  one-click *Seed demo hires* button drops 6 unused candidates into the
+  first three roles as accepted hires, ensures interview records exist
+  for them, and lets the engine show its math on a real fixture.
+- **Markdown brief** — Copy or download a calibration brief
+  (headline, actions, per-dim table with r/power/Δ, promote/reduce/drop
+  lists, surprise hires, calibration curve table) for a quarterly
+  hiring review or a post-mortem.
+
+**Backend mirror** — `backend/app/services/hindsight.py` is the
+byte-for-byte Python port: same thresholds (`PP_STRONG=0.55`,
+`PP_MODERATE=0.35`, `PP_WEAK=0.10`, `RETUNE_BLEND=0.5`,
+`GOOD_HIRE_FLOOR=4`, `FP_COMPOSITE_FLOOR=80`, `FP_PERF_FLOOR=2`,
+`FN_COMPOSITE_CEIL=55`, `FN_PERF_FLOOR=4`, `MIN_SAMPLES=4`), same
+FNV-1a 32-bit seed (`fnv1a("hello") = 0x4f9f2cab`), same Pearson +
+Spearman + Brier formulas, same predictive-power bucketing, same blended
+reweight, same surprise + tenure-by-band rules. Verified end-to-end via
+`/hindsight/summary` on a 6-hire fixture: same Pearson 0.94 and same
+per-dim suggested-weight deltas in TS and Python.
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/hindsight/summary \
+  -H 'content-type: application/json' \
+  -d '{ "roles": [...], "candidates": [...], "interviews": [...],
+        "outcomes": [...], "includeBrief": true }' \
+  | jq '.calibration_band, .pearson, .per_dimension[0].label, .actions[0]'
+```
+
+API version bumped `0.14.0 → 0.15.0`.
 
 ---
 
