@@ -307,6 +307,35 @@ body::before {
 .cc-xw-move { transition: transform 130ms ease, border-color 130ms ease, background 130ms ease; }
 .cc-xw-move:hover { transform: translateX(2px); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); }
 
+/* ---------- Hindsight (Post-Hire Calibration) ---------- */
+
+.cc-hd-hero {
+  background-image:
+    radial-gradient(540px 240px at 110% -30%, color-mix(in srgb, var(--hd-accent, #34d399) 14%, transparent), transparent 60%),
+    radial-gradient(420px 200px at -10% 130%, rgba(167,139,250,0.08), transparent 60%);
+}
+
+.cc-hd-ring { transition: filter 240ms ease, transform 240ms ease; }
+.cc-hd-ring:hover { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--hd-accent, #34d399) 60%, transparent)); transform: scale(1.02); }
+
+.cc-hd-tile { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-hd-tile:hover { transform: translateY(-1px); }
+
+.cc-hd-row { transition: transform 130ms ease, background 130ms ease, border-color 130ms ease; }
+.cc-hd-row:hover { transform: translateX(2px); background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.18); }
+
+.cc-hd-dim { transition: transform 120ms ease, border-color 120ms ease; }
+.cc-hd-dim:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+
+.cc-hd-surprise { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-hd-surprise:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+
+.cc-hd-rec {
+  background-image: radial-gradient(360px 140px at 100% -40%, color-mix(in srgb, var(--hd-accent, #a78bfa) 14%, transparent), transparent 60%);
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+.cc-hd-rec:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.16); }
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }
