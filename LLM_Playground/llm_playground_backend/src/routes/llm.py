@@ -22,6 +22,7 @@ from src import optimizer as optimizer_lib
 from src import adversary as adversary_lib
 from src import showdown as showdown_lib
 from src import drift as drift_lib
+from src import surgeon as surgeon_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1714,6 +1715,103 @@ def drift_run(drift_id):
     try:
         payload, status = drift_lib.run_drift(
             drift_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+# ---------------------------------------------------------------------------
+# Prompt Surgeon — section-level ablation & attribution. Round-15.
+# Tells you which paragraphs of your prompt are load-bearing and which are
+# dead weight you can cut for $$$ off every call.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/surgeon/defaults', methods=['GET'])
+def surgeon_defaults():
+    return jsonify({'success': True, 'defaults': surgeon_lib.defaults()})
+
+
+@llm_bp.route('/surgeon/stats', methods=['GET'])
+def surgeon_stats():
+    return jsonify({'success': True, 'stats': surgeon_lib.stats()})
+
+
+@llm_bp.route('/surgeon/parse', methods=['POST'])
+def surgeon_parse():
+    """Stateless section preview — used by the editor to render the
+    section grid before the user commits to a run."""
+    data = request.get_json() or {}
+    sections = surgeon_lib.parse_sections(data.get('system_prompt') or '')
+    return jsonify({'success': True, 'sections': sections, 'total_tokens': sum(s['tokens'] for s in sections)})
+
+
+@llm_bp.route('/surgeon', methods=['GET'])
+def surgeon_list():
+    args = request.args
+    rows, total = surgeon_lib.list_surgeons(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'surgeons': rows, 'total': total})
+
+
+@llm_bp.route('/surgeon', methods=['POST'])
+def surgeon_create():
+    data = request.get_json() or {}
+    try:
+        surg = surgeon_lib.create_surgeon(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            system_prompt=(data.get('system_prompt') or ''),
+            user_prompt=(data.get('user_prompt') or '').strip(),
+            candidate_provider=(data.get('candidate_provider') or '').strip(),
+            candidate_model=(data.get('candidate_model') or '').strip(),
+            temperature=data.get('temperature', surgeon_lib.DEFAULT_TEMPERATURE),
+            top_p=data.get('top_p', surgeon_lib.DEFAULT_TOP_P),
+            n_replays=data.get('n_replays', surgeon_lib.DEFAULT_N_REPLAYS),
+            monthly_calls=data.get('monthly_calls', surgeon_lib.DEFAULT_MONTHLY_CALLS),
+            dryrun=bool(data.get('dryrun', False)),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'surgeon': surg}), 201
+
+
+@llm_bp.route('/surgeon/seed', methods=['POST'])
+def surgeon_seed():
+    surg = surgeon_lib.seed_demo()
+    return jsonify({'success': True, 'surgeon': surg}), 201
+
+
+@llm_bp.route('/surgeon/<surgeon_id>', methods=['GET'])
+def surgeon_get(surgeon_id):
+    surg = surgeon_lib.get_surgeon(surgeon_id)
+    if not surg:
+        return jsonify({'success': False, 'error': 'surgeon run not found'}), 404
+    return jsonify({'success': True, 'surgeon': surg})
+
+
+@llm_bp.route('/surgeon/<surgeon_id>', methods=['DELETE'])
+def surgeon_delete(surgeon_id):
+    if not surgeon_lib.delete_surgeon(surgeon_id):
+        return jsonify({'success': False, 'error': 'surgeon run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/surgeon/<surgeon_id>/run', methods=['POST'])
+def surgeon_run(surgeon_id):
+    """Execute the ablation sweep. Live mode requires
+    ``{confirm_live: true}`` so we never silently spend API credits."""
+    data = request.get_json() or {}
+    try:
+        payload, status = surgeon_lib.run_surgeon(
+            surgeon_id,
             provider_factory=provider_factory,
             confirm_live=bool(data.get('confirm_live', False)),
         )

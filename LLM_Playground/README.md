@@ -10,16 +10,164 @@ judge sheets), **Optimize** any prompt automatically against those rubrics
 into a measurably better one, **stress‑test** prompts with **Adversary Lab**
 (15 deterministic perturbations + Robustness score), **A/B test** any two
 prompts head‑to‑head with **Showdown Arena** (paired mean Δ, 95 % bootstrap
-CI, sign‑test p‑value, Cohen's d, ship / keep / no‑decision verdict) — and,
-new this round, **Drift Lab**: fire the exact same prompt at the exact same
-model **N times in parallel** and surface a composite **Stability Score**
-(lexical + length + latency drift), a full pairwise similarity heatmap, a
-cluster count, and the canonical **medoid** answer — so you know how
-non‑deterministic your prompt actually is at `temperature > 0` *before* a
-user hits the call where the model produces a different answer than the one
-you QA'd.
+CI, sign‑test p‑value, Cohen's d, ship / keep / no‑decision verdict), measure
+output non‑determinism with **Drift Lab** (lexical + length + latency
+Stability Score with pairwise similarity heatmap and a medoid pick) — and,
+new this round, **Prompt Surgeon**: section‑level ablation that splits
+your system prompt into paragraphs, ablates each one, scores the difference,
+and tells you which sections are **critical**, **supporting**, **dead
+weight**, or actively **harmful** — then ships you a leaner prompt and a
+**monthly $ savings projection** at your call rate. Stop guessing which
+paragraph is doing real work; measure it.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
+
+---
+
+## 🆕 What's new — Prompt Surgeon (Day 68)
+
+> Round‑15. Every prior quality surface in the playground perturbs
+> *something* about the call: **Adversary** changes the *input* (typos,
+> structural shuffles, injection vectors); **Showdown** changes the *prompt*
+> (champion vs challenger); **Drift** changes nothing and measures
+> determinism. None of them answer the question every engineer who has
+> shipped an LLM feature for more than a quarter ends up asking when the
+> system prompt is two thousand tokens long and the team can't remember why
+> half the bullets are even there: *which paragraphs in this prompt are
+> actually doing the work, and which ones can I delete without anyone
+> noticing?* That question is not vanity — at 50 k calls a day, a 30 %
+> bloat trim is a 30 % cheaper bill. Surgeon is the surface that measures
+> it.
+
+Hit **Surgeon** in the sidebar. A Surgeon run is a `(system_prompt,
+user_prompt, target_model)` triple. The engine first **parses** the system
+prompt into ablatable sections via four heuristics in priority order:
+
+1. **Markdown headings** (`# Header`, `## Subheader`) open a new section
+   that owns every line up to the next heading.
+2. Inside a non‑heading block, if the block is **3+ list items**, every
+   bullet/number becomes its own section.
+3. Otherwise the block is a **paragraph** section.
+4. If the whole prompt parses to one prose blob, it gets split into
+   **sentence groups** of three so even un‑structured prompts get a fair
+   slicing.
+
+Then for each section the engine assembles a *prompt‑without‑this‑section*
+and fires `n_replays` (default 3) parallel calls. Each batch is scored
+against a composite 0–100 quality function (50 % coverage of prompt
+keywords, 30 % fidelity to the baseline medoid, 20 % format conformance —
+no surprises, same axes the rest of the playground uses). The per‑section
+**load** is `baseline_score − ablated_score` — the bigger the drop, the
+more load‑bearing the section. The verdict is banded four ways:
+
+| Band | Load range | Reading |
+|---|---|---|
+| 🩸 **Critical** | ≥ 15 | Removing this dropped quality by ≥ 15 pts — keep verbatim. |
+| 🟡 **Supporting** | 5 – 15 | Useful but the prompt survives a careful rewrite. |
+| ⚪ **Dead weight** | −2 – 5 | Quality barely moved — safe to drop. |
+| 🟣 **Harmful** | < −2 | Quality went *up* without it. **Delete.** |
+
+The engine then assembles a **lean prompt** — the original minus every
+dead‑weight and harmful section — and reports:
+
+* The trimmed prompt verbatim, paste‑ready.
+* **Tokens saved** (`original_tokens − lean_tokens`).
+* % of the original kept.
+* **Lean‑score projection** — baseline plus the net load of every dropped
+  section. (Dropping a harmful section *adds* points.)
+* **Monthly $ savings** at a user‑configurable call rate, projected at
+  `$2.50 / M tokens` in dryrun mode so the demo surfaces a real dollar
+  number without provider keys.
+
+Every section card carries: an inline *load bar* (centred at zero so harmful
+sections push the bar *left*), a *token bar* sized against the bloatiest
+section in the run, the band pill, an italic *rationale* line ("Quality went
+up by 9.3 pts without this bullet — actively hurting your responses, delete
+it"), and a click‑to‑expand panel showing the section content plus the
+**medoid response** when the section is removed — so you don't just see a
+score, you see *what answer the model actually gives* when the bullet is
+gone (cosmetic reword? refusal? hallucination?).
+
+A **band‑breakdown stack bar** at the top of the run shows the token‑weight
+distribution at a glance — a healthy prompt is mostly amber/rose, a bloated
+one is mostly slate/violet. Underneath, a violet **Actions** strip surfaces
+the three actionable lines: *lock in the most load‑bearing bullet, delete
+the most harmful one, drop the dead‑weight stack for ~N tokens off every
+call.* When the projected lean score is *greater than* the baseline (i.e.
+the trim actually nets you quality, not just dollars), a fourth bullet
+calls that out explicitly.
+
+A side‑by‑side **lean prompt diff** at the bottom of the page renders the
+original and the trimmed prompt in adjacent monospace panels — emerald
+background on the lean side, slate on the original — with a copy‑to‑
+clipboard button so you can paste the slimmer prompt straight back into
+your production config.
+
+Like Adversary, Showdown, and Drift, the whole loop runs in **dryrun mode
+without any API keys**. Each section gets a deterministic synthetic
+"true load" seeded from a SHA‑1 hash of `(system_prompt[:128] || content[:96]
+|| index)` so the distribution is fixed across page loads — buckets fall
+roughly 20 % critical, 30 % supporting, 35 % dead, 15 % harmful, with
+magnitudes pulled from the hash bytes. The seed demo loads a believable
+600‑token customer‑support system prompt with several visibly‑bolted‑on
+sections ("Misc reminders. Remember to be helpful. Remember to be polite.
+Be the kind of support agent you'd want to talk to. Always do your best."
+— exactly the kind of paragraph that survives six prompt rewrites because
+nobody's brave enough to delete it). On the demo prompt, Surgeon parses
+**18 sections**, bands them across all four buckets, finds **2 critical
+sections** (the per‑tier SLA bullets and the workflow‑specific instructions
+do the real work), **2 harmful sections** (one redundant escalation rule
+and the "Misc reminders" paragraph are pulling quality *down*), and ships
+a 454‑token lean prompt — **−215 tokens / −32 %** — that scores **72 vs
+baseline 58**: trimming the bloat *raised* quality by 14 pts and saved
+$26.88/mo at 50 k calls.
+
+### How it works — at a glance
+
+```
+prompt ──► parse_sections                       (heuristics 1–4)
+       │      18 sections [heading, list-item, paragraph, …]
+       │
+       ├─► baseline batch (3 replays)            score = 58
+       │
+       └─► for each section:
+              assemble_without(sections, i)
+              replay batch (3 replays)
+              score = composite(coverage·50 + fidelity·30 + format·20)
+              load  = baseline − ablated
+              band  = critical | supporting | dead-weight | harmful
+
+     ──► assemble_lean(dropped = [dead, harmful])
+            lean_score   = baseline − net_load_of_dropped
+            tokens_saved = original_tokens − lean_tokens
+            $ savings    = tokens_saved · monthly_calls · $2.50/Mtok
+```
+
+### API
+
+* `GET  /api/surgeon/defaults` — section parser docs, scoring axes,
+  band thresholds, default replay counts.
+* `GET  /api/surgeon/stats` — rolling counters, last run, mean savings.
+* `POST /api/surgeon/parse` — stateless preview: `{system_prompt}` →
+  `{sections, total_tokens}`. Used by the editor's "18 sections / 669
+  tokens" preview chip while you type.
+* `GET  /api/surgeon` — list saved runs.
+* `POST /api/surgeon` — create a run from `{name, system_prompt,
+  user_prompt, candidate_provider, candidate_model, temperature,
+  n_replays, monthly_calls, dryrun}`.
+* `POST /api/surgeon/seed` — drop the demo support prompt.
+* `GET  /api/surgeon/<id>` — fetch one run with all section records.
+* `POST /api/surgeon/<id>/run` — execute the ablation sweep. Live mode
+  requires `{confirm_live: true}` so we never silently spend credits.
+* `DELETE /api/surgeon/<id>` — wipe a run.
+
+```bash
+curl -s http://localhost:5050/api/surgeon/seed -X POST | jq .surgeon.summary.actions
+# ["**Lock in** the most load-bearing section: *For feature requests…* (35-pt drop when removed).",
+#  "**Delete** *Escalation criteria → The customer asks to speak to a manager* — removing it raises quality by 9.3 pts.",
+#  "**Drop 4 dead-weight sections** for ~215 tokens off every call with no measurable quality cost.",
+#  "Projected lean score **72 > baseline 58** — the trim actually nets you quality, not just dollars."]
+```
 
 ---
 

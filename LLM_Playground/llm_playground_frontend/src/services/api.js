@@ -658,6 +658,60 @@ class ApiService {
     });
   }
 
+  // ─── Prompt Surgeon ────────────────────────────────────────────────────────
+  // Section-level ablation & attribution. Parses a prompt into sections,
+  // ablates each one, and bands every section as critical / supporting /
+  // dead-weight / harmful — then ships a trimmed "lean" prompt + dollar
+  // savings projection. Round-15.
+
+  async listSurgeons(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/surgeon${suffix}`);
+  }
+
+  async createSurgeon(payload) {
+    return this.request('/surgeon', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedSurgeon() {
+    return this.request('/surgeon/seed', { method: 'POST' });
+  }
+
+  async surgeonStats() {
+    return this.request('/surgeon/stats');
+  }
+
+  async surgeonDefaults() {
+    return this.request('/surgeon/defaults');
+  }
+
+  async surgeonParse(systemPrompt) {
+    return this.request('/surgeon/parse', {
+      method: 'POST',
+      body: JSON.stringify({ system_prompt: systemPrompt || '' }),
+    });
+  }
+
+  async getSurgeon(surgeonId) {
+    return this.request(`/surgeon/${encodeURIComponent(surgeonId)}`);
+  }
+
+  async deleteSurgeon(surgeonId) {
+    return this.request(`/surgeon/${encodeURIComponent(surgeonId)}`, { method: 'DELETE' });
+  }
+
+  async runSurgeon(surgeonId, payload = {}) {
+    return this.request(`/surgeon/${encodeURIComponent(surgeonId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

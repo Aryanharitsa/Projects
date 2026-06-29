@@ -56,6 +56,7 @@ import {
   Scale,
   Shield,
   Waves,
+  Scissors,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -69,6 +70,7 @@ import OptimizerStudio from './components/OptimizerStudio';
 import AdversaryLab from './components/AdversaryLab';
 import ShowdownArena from './components/ShowdownArena';
 import DriftLab from './components/DriftLab';
+import SurgeonStudio from './components/SurgeonStudio';
 import './App.css';
 
 const App = () => {
@@ -1103,7 +1105,14 @@ const App = () => {
                       <RadioGroupItem value="drift" id="drift" />
                       <Label htmlFor="drift" className="cursor-pointer flex items-center gap-1">
                         <Waves className="w-3.5 h-3.5 text-cyan-600" />
-                        Drift <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-amber-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Drift
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="surgeon" id="surgeon" />
+                      <Label htmlFor="surgeon" className="cursor-pointer flex items-center gap-1">
+                        <Scissors className="w-3.5 h-3.5 text-rose-600" />
+                        Surgeon <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-rose-500 via-fuchsia-500 to-violet-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1377,6 +1386,10 @@ const App = () => {
           ) : selectedMode === 'drift' ? (
             <div className="lg:col-span-3">
               <DriftLab />
+            </div>
+          ) : selectedMode === 'surgeon' ? (
+            <div className="lg:col-span-3">
+              <SurgeonStudio />
             </div>
           ) : selectedMode === 'adversary' ? (
             <div className="lg:col-span-3">
