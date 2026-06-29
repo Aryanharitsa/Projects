@@ -26,6 +26,14 @@ const FEATURES = [
     cta: "Run drift",
   },
   {
+    href: "/profile",
+    title: "Customer Risk Profile",
+    eyebrow: "RBA · CDD",
+    body: "The FATF Recommendation-10 composite. Every TITAN surface — transactions, sanctions, adverse media, typology, drift, network — folded into one number per customer, the regulator-aligned bucket, an FATF-aligned KYC refresh schedule, and an analyst-override audit trail.",
+    accent: "from-violet-500/30 via-amber-400/15 to-transparent",
+    cta: "Open profile",
+  },
+  {
     href: "/cases",
     title: "Case Workflow",
     eyebrow: "Triage",
@@ -40,6 +48,14 @@ const FEATURES = [
     body: "Fuzzy-match names against the bundled OFAC/UN/EU/UK-style watchlist. Every score is a transparent blend of token-set, char-3gram, and substring containment — with a jurisdiction prior on top.",
     accent: "from-rose-400/25 via-amber-400/15 to-transparent",
     cta: "Screen names",
+  },
+  {
+    href: "/media",
+    title: "Adverse Media OSINT",
+    eyebrow: "Tier-2 EDD",
+    body: "Sanctions catches the closed list. Adverse media catches the open world — a curated corpus of negative-news coverage scored by category severity × source tier × exponential recency × fuzzy name match, with the exact articles that fired surfaced as evidence.",
+    accent: "from-violet-500/30 via-rose-400/15 to-transparent",
+    cta: "Screen entities",
   },
   {
     href: "/kyc",
@@ -60,11 +76,11 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { label: "Pattern detectors", value: "8" },
+  { label: "Pattern detectors", value: "9" },
+  { label: "Risk surfaces", value: "6" },
   { label: "Drift axes", value: "10" },
   { label: "Laundering typologies", value: "6" },
   { label: "Watchlist entries", value: "30" },
-  { label: "Workflow states", value: "5" },
   { label: "External ML deps", value: "0" },
 ];
 

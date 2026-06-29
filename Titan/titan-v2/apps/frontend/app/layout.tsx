@@ -12,12 +12,17 @@ export const metadata = {
 
 const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/", label: "Overview" },
+  { href: "/pulse", label: "Pulse" },
+  { href: "/profile", label: "Profile" },
+  { href: "/peer", label: "Peer Lens" },
   { href: "/aml", label: "AML Console" },
   { href: "/network", label: "Network" },
+  { href: "/lineage", label: "Lineage" },
   { href: "/drift", label: "Drift" },
   { href: "/validation", label: "Validation" },
   { href: "/cases", label: "Cases", pill: "cases" },
   { href: "/watchlist", label: "Watchlist" },
+  { href: "/media", label: "Adverse Media" },
   { href: "/kyc", label: "KYC Pipeline" },
   { href: "/attestations", label: "Attestations" },
 ];

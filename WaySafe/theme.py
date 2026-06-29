@@ -1134,6 +1134,278 @@ def inject_theme() -> None:
             letter-spacing:.04em; color:#AAB2C5; margin-top:2px;
             text-transform:none;
         }}
+
+        /* -------------------------------------------------- Refuge */
+        .ws-ref-hero {{
+            background: linear-gradient(135deg, var(--glow, rgba(239,68,68,0.20)) 0%, {CARD} 60%);
+            border: 1px solid var(--hue, #EF4444);
+            border-left-width: 4px;
+            border-radius: 18px;
+            padding: 22px 26px;
+            display: grid;
+            grid-template-columns: 168px 1fr auto;
+            gap: 26px;
+            align-items: center;
+            margin-bottom: 18px;
+            box-shadow: 0 12px 28px var(--glow, rgba(239,68,68,0.2));
+        }}
+        .ws-ref-hero-body {{ min-width: 0; }}
+        .ws-ref-pill {{
+            display:inline-block; padding:3px 12px; border-radius:999px;
+            font-size:.66rem; font-weight:800; letter-spacing:.12em;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.06);
+            color: var(--hue, #EF4444);
+            border: 1px solid var(--hue, #EF4444);
+            margin-bottom:.55rem;
+        }}
+        .ws-ref-hero-title {{
+            font-size: 1.45rem; font-weight: 800; line-height: 1.15;
+            letter-spacing: -0.02em; color: #F2F4FA; margin-bottom: 4px;
+        }}
+        .ws-ref-hero-detail {{ font-size:.92rem; color:#C9D0E0; line-height:1.45; }}
+        .ws-ref-hero-meta {{
+            display:flex; flex-wrap:wrap; gap:8px; margin-top:.9rem;
+            font-size:.72rem; color:{MUTED};
+        }}
+        .ws-ref-chip {{
+            padding:3px 10px; border-radius:999px; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+        }}
+        .ws-ref-chip.warn {{
+            color: var(--hue, #EF4444);
+            border-color: var(--hue, #EF4444);
+            background: rgba(239,68,68,0.08);
+        }}
+        .ws-ref-compass {{
+            width: 168px; height: 168px; border-radius: 50%;
+            background: conic-gradient(var(--hue, #EF4444) calc(var(--pct, 100) * 1%), rgba(255,255,255,0.07) 0);
+            display:flex; align-items:center; justify-content:center;
+            position: relative; flex-shrink: 0;
+        }}
+        .ws-ref-compass::after {{
+            content:""; position:absolute; inset:10px;
+            background: {CARD}; border-radius: 50%;
+        }}
+        .ws-ref-compass-inner {{
+            position:relative; z-index:1; text-align:center;
+        }}
+        .ws-ref-compass-arrow {{
+            font-size: 2.7rem; line-height:1;
+            transform: rotate(var(--bearing, 0deg));
+            display:inline-block; transform-origin: 50% 55%;
+            color: var(--hue, #EF4444);
+            text-shadow: 0 2px 6px var(--glow, rgba(239,68,68,0.4));
+        }}
+        .ws-ref-compass-label {{
+            display:block; font-size:.95rem; font-weight:800;
+            letter-spacing:.18em; color: var(--hue, #EF4444); margin-top:6px;
+        }}
+        .ws-ref-compass-sub {{
+            display:block; font-size:.62rem; color:{MUTED}; margin-top:3px;
+            letter-spacing:.08em;
+        }}
+        .ws-ref-here {{
+            text-align:right; padding-left: 12px;
+            border-left: 1px solid rgba(255,255,255,0.08);
+        }}
+        .ws-ref-here-val {{
+            font-size: 1.85rem; font-weight: 800; line-height:1;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-ref-here-lbl {{
+            font-size: .58rem; letter-spacing:.16em; text-transform: uppercase;
+            color:{MUTED}; margin-top:4px; font-weight: 700;
+        }}
+
+        /* Podium grid */
+        .ws-ref-podium {{
+            display:grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+            gap: 10px; margin: 8px 0 16px;
+        }}
+        .ws-ref-card {{
+            background: {CARD};
+            border: 1px solid rgba(255,255,255,0.07);
+            border-left: 4px solid var(--hue, #EF4444);
+            border-radius: 14px;
+            padding: 14px 16px;
+        }}
+        .ws-ref-card.is-top {{
+            background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, {CARD} 60%);
+            border-color: var(--hue, #EF4444);
+            box-shadow: 0 8px 20px var(--glow, rgba(239,68,68,0.18));
+        }}
+        .ws-ref-card-top {{
+            display:flex; align-items:center; justify-content:space-between;
+            margin-bottom: 8px;
+        }}
+        .ws-ref-rank {{
+            font-size:.7rem; font-weight:800; color:#E6E9F2;
+            background: rgba(255,255,255,0.06); border-radius:999px;
+            padding: 3px 10px; letter-spacing:.06em;
+        }}
+        .ws-ref-rank.r1 {{ background: rgba(255,191,60,0.2); color:#FFD66B; }}
+        .ws-ref-band {{
+            font-size:.65rem; font-weight:800; letter-spacing:.10em;
+            text-transform: uppercase;
+            padding: 3px 9px; border-radius:999px;
+        }}
+        .ws-ref-tier {{
+            font-size:.7rem; color:#AAB2C5; display:flex; align-items:center; gap:6px;
+            margin-bottom: 6px;
+        }}
+        .ws-ref-card-name {{
+            font-size:1.02rem; font-weight:800; color:#F2F4FA;
+            line-height:1.2; margin-bottom: 6px;
+        }}
+        .ws-ref-card-score {{
+            display:flex; align-items:baseline; gap:6px; margin: 4px 0 2px;
+        }}
+        .ws-ref-card-score b {{ font-size:2rem; font-weight:800; line-height:1; }}
+        .ws-ref-card-score span {{ font-size:.7rem; color:{MUTED}; }}
+        .ws-ref-bar-track {{
+            background: rgba(255,255,255,0.05); height:5px; border-radius:999px;
+            overflow:hidden; margin: 6px 0 10px;
+        }}
+        .ws-ref-bar-fill {{ height:100%; border-radius:999px; }}
+        .ws-ref-mini {{
+            display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;
+            margin-top:6px;
+        }}
+        .ws-ref-mini-cell {{
+            background: rgba(255,255,255,0.03); border-radius:8px;
+            padding:6px 4px; text-align:center;
+        }}
+        .ws-ref-mini-val {{
+            font-size:.92rem; font-weight:800; color:#E6E9F2;
+            font-variant-numeric: tabular-nums;
+        }}
+        .ws-ref-mini-lbl {{
+            font-size:.55rem; color:{MUTED}; letter-spacing:.08em;
+            text-transform: uppercase; margin-top:2px;
+        }}
+        .ws-ref-script {{
+            margin-top: 10px;
+            padding: 9px 11px;
+            background: rgba(255,255,255,0.03);
+            border-left: 2px solid var(--hue, #EF4444);
+            border-radius: 6px;
+            font-size: .76rem; color: #D2D7E5; line-height: 1.4;
+        }}
+        .ws-ref-notes {{
+            margin-top:8px; font-size:.72rem; color:#AAB2C5; line-height:1.4;
+        }}
+        .ws-ref-notes li {{ margin-left: 16px; }}
+
+        /* Matrix (heat row) */
+        .ws-ref-matrix {{ display:grid; gap:5px; margin-top:10px; }}
+        .ws-ref-mcorner {{
+            font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:{MUTED};
+            font-weight:700; display:flex; align-items:flex-end; padding:0 4px 6px;
+        }}
+        .ws-ref-mhead {{
+            text-align:center; font-size:.74rem; font-weight:800; color:#E6E9F2;
+            padding:6px 4px; border-bottom:2px solid rgba(255,255,255,0.08);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        }}
+        .ws-ref-mhead.is-top {{
+            color: var(--hue, {PRIMARY}); border-bottom-color: var(--hue, {PRIMARY});
+        }}
+        .ws-ref-mlabel {{
+            font-size:.78rem; color:#AAB2C5; font-weight:600;
+            display:flex; align-items:center; padding:0 4px;
+        }}
+        .ws-ref-mlabel-w {{
+            font-size:.58rem; color:{MUTED}; margin-left:6px;
+            background: rgba(255,255,255,0.04); padding:1px 6px; border-radius:999px;
+        }}
+        .ws-ref-cell {{
+            text-align:center; border-radius:8px; padding:8px 4px;
+            font-weight:800; font-size:.84rem; font-variant-numeric:tabular-nums;
+            line-height:1.2;
+        }}
+        .ws-ref-cell.head-row {{ font-size:1.05rem; }}
+
+        /* Corridor strip — visualises path_safety along the 5 waypoints */
+        .ws-ref-corridor {{
+            display:flex; gap:3px; margin-top: 8px;
+        }}
+        .ws-ref-corridor-step {{
+            flex: 1; height: 10px; border-radius:3px;
+            background: var(--step-hue, #444);
+            opacity:.92;
+        }}
+        .ws-ref-corridor-step.fenced {{
+            outline: 1.5px dashed rgba(239,68,68,0.85); outline-offset:-1px;
+        }}
+
+        /* Emergency card */
+        .ws-ref-emergency {{
+            background: linear-gradient(135deg, rgba(239,68,68,0.06) 0%, {CARD} 70%);
+            border: 1px solid rgba(239,68,68,0.32);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin-top: 14px;
+        }}
+        .ws-ref-emergency-head {{
+            display:flex; align-items:center; gap:10px; margin-bottom:10px;
+        }}
+        .ws-ref-emergency-flag {{ font-size: 1.55rem; }}
+        .ws-ref-emergency-title {{
+            font-size: 1rem; font-weight: 800; color:#F2F4FA;
+            letter-spacing:-0.01em;
+        }}
+        .ws-ref-emergency-grid {{
+            display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap:8px;
+        }}
+        .ws-ref-emergency-cell {{
+            background: rgba(0,0,0,0.18);
+            border: 1px solid rgba(239,68,68,0.18);
+            border-radius:10px;
+            padding: 10px 12px;
+        }}
+        .ws-ref-emergency-num {{
+            font-size: 1.4rem; font-weight: 800; color: #FF6A6A;
+            font-variant-numeric: tabular-nums; letter-spacing: .01em;
+        }}
+        .ws-ref-emergency-lbl {{
+            font-size: .62rem; letter-spacing:.12em; text-transform: uppercase;
+            color:{MUTED}; font-weight:700; margin-top: 4px;
+        }}
+        .ws-ref-emergency-note {{
+            font-size:.72rem; color:#AAB2C5; margin-top: 10px;
+        }}
+
+        /* Beacon block */
+        .ws-ref-beacon {{
+            background: rgba(255,191,60,0.06);
+            border: 1px dashed rgba(255,191,60,0.45);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-top: 12px;
+        }}
+        .ws-ref-beacon-title {{
+            font-size:.66rem; font-weight:800; letter-spacing:.15em;
+            text-transform: uppercase; color:#FFD66B; margin-bottom:6px;
+        }}
+        .ws-ref-beacon-body {{
+            font-family: 'JetBrains Mono','SF Mono', ui-monospace, monospace;
+            font-size:.74rem; color:#E6E9F2; line-height:1.45;
+            white-space: pre-wrap; word-break: break-word;
+        }}
+
+        /* Fallback / empty */
+        .ws-ref-empty {{
+            background: {CARD};
+            border: 1px dashed rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 22px 24px;
+            color:#AAB2C5; font-size:.88rem; line-height:1.45;
+        }}
+        .ws-ref-empty-title {{
+            font-size:1.05rem; font-weight:800; color:#F2F4FA;
+            margin-bottom: 6px; letter-spacing:-0.01em;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -2990,6 +3262,2648 @@ def render_staysafe_empty(hint: str = "Pick at least two stays above, then run t
         <div class="ws-sent-empty">
           <div class="ws-sent-empty-title">No stay comparison yet</div>
           <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================== Refuge
+
+
+_REF_BAND_HUE = {
+    "Strong refuge": "#10B981",
+    "Viable refuge": "#FBBF24",
+    "Last resort":   "#F59E0B",
+    "Not a refuge":  "#EF4444",
+}
+
+
+def _ref_corridor_strip_html(samples) -> str:
+    if not samples:
+        return ""
+    steps = []
+    for s in samples:
+        # 1 − risk to get goodness, then map to red→amber→green.
+        hue = _goodness_hue(1.0 - float(s.risk))
+        cls = "ws-ref-corridor-step"
+        if getattr(s, "in_geofence", False):
+            cls += " fenced"
+        steps.append(
+            f'<div class="{cls}" style="--step-hue:{hue};" '
+            f'title="risk {s.risk:.2f}{(" · in risk zone" if s.in_geofence else "")}"></div>'
+        )
+    return f'<div class="ws-ref-corridor">{"".join(steps)}</div>'
+
+
+def _ref_card_html(opt) -> str:
+    band_hue = _REF_BAND_HUE.get(opt.band, opt.band_color)
+    bar_hue = _goodness_hue(opt.refuge_score / 100.0)
+    top_cls = " is-top" if opt.is_top else ""
+    rank_cls = "r1" if opt.rank == 1 else ""
+    notes_html = ""
+    if opt.notes:
+        notes_html = (
+            "<div class='ws-ref-notes'><ul>"
+            + "".join(f"<li>{_esc(n)}</li>" for n in opt.notes[:3])
+            + "</ul></div>"
+        )
+    return f"""
+    <div class="ws-ref-card{top_cls}" style="--hue:{band_hue}; --glow:{_hex_to_rgba(band_hue, 0.18)};">
+      <div class="ws-ref-card-top">
+        <span class="ws-ref-rank {rank_cls}">#{opt.rank}</span>
+        <span class="ws-ref-band" style="color:{band_hue}; background:{_hex_to_rgba(band_hue, 0.18)};">
+          {_esc(opt.band)}
+        </span>
+      </div>
+      <div class="ws-ref-tier">{opt.tier_icon} {_esc(opt.tier_label)}</div>
+      <div class="ws-ref-card-name">{_esc(opt.poi_name)}</div>
+      <div class="ws-ref-card-score">
+        <b style="color:{bar_hue}">{opt.refuge_score}</b><span>/ 100 refuge</span>
+      </div>
+      <div class="ws-ref-bar-track">
+        <div class="ws-ref-bar-fill" style="width:{opt.refuge_score}%; background:{bar_hue};"></div>
+      </div>
+      <div class="ws-ref-mini">
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.distance_km*1000:.0f}m</div>
+          <div class="ws-ref-mini-lbl">distance</div>
+        </div>
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.eta_min:.0f}m</div>
+          <div class="ws-ref-mini-lbl">walk</div>
+        </div>
+        <div class="ws-ref-mini-cell">
+          <div class="ws-ref-mini-val">{opt.bearing_label}</div>
+          <div class="ws-ref-mini-lbl">heading</div>
+        </div>
+      </div>
+      {_ref_corridor_strip_html(opt.path_samples)}
+      <div class="ws-ref-script">→ {_esc(opt.arrival_script)}</div>
+      {notes_html}
+    </div>
+    """
+
+
+def render_refuge(result) -> None:
+    """Render the full Refuge result: bearing-compass hero, podium, matrix,
+    emergency card and quiet-beacon payload."""
+    options = result.options
+    here_hue = band_color(result.here_band)
+
+    if not options:
+        # Fallback: still render the local safety score + emergency card.
+        st.markdown(
+            f"""
+            <div class="ws-ref-empty">
+              <div class="ws-ref-empty-title">No registered refuge within {result.radius_km:g} km</div>
+              <div>{_esc(result.advisory_line)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        _render_emergency_card(result.emergency_card)
+        return
+
+    top = options[0]
+    hue = _REF_BAND_HUE.get(top.band, top.band_color)
+    glow = _hex_to_rgba(hue, 0.24)
+
+    fence_chip = ""
+    if top.geofence_crossings >= 1:
+        fence_chip = (
+            f'<span class="ws-ref-chip warn">'
+            f'corridor clips {top.geofence_crossings} risk waypoint'
+            f'{"s" if top.geofence_crossings != 1 else ""}'
+            f'</span>'
+        )
+
+    here_chip_hue = here_hue
+    here_chip = (
+        f'<span class="ws-ref-chip" style="border-color:{here_chip_hue}; color:{here_chip_hue};">'
+        f'you · {_esc(result.here_band)} {result.here_score}'
+        f'</span>'
+    )
+
+    st.markdown(
+        f"""
+        <div class="ws-ref-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-ref-compass" style="--hue:{hue}; --pct:{top.refuge_score}; --glow:{glow};">
+            <div class="ws-ref-compass-inner">
+              <div class="ws-ref-compass-arrow" style="--bearing:{top.bearing_deg}deg;">↑</div>
+              <span class="ws-ref-compass-label">{_esc(top.bearing_label)}</span>
+              <span class="ws-ref-compass-sub">{top.bearing_deg}° · {top.refuge_score}/100</span>
+            </div>
+          </div>
+          <div class="ws-ref-hero-body">
+            <span class="ws-ref-pill">Refuge · {_esc(top.band)}</span>
+            <div class="ws-ref-hero-title">{_rec_to_html(result.headline)}</div>
+            <div class="ws-ref-hero-detail">{_rec_to_html(result.advisory_line)}</div>
+            <div class="ws-ref-hero-meta">
+              {here_chip}
+              <span class="ws-ref-chip">scan {result.radius_km:g} km</span>
+              <span class="ws-ref-chip">{len(options)} options ranked</span>
+              <span class="ws-ref-chip">{result.now:%H:%M}</span>
+              {fence_chip}
+            </div>
+          </div>
+          <div class="ws-ref-here">
+            <div class="ws-ref-here-val" style="color:{here_hue}">{result.here_score}</div>
+            <div class="ws-ref-here-lbl">your spot</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Podium of all options
+    cards = [_ref_card_html(o) for o in options]
+    st.markdown(
+        f'<div class="ws-ref-podium">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Heat matrix — destinations as columns, factors as rows
+    n = len(options)
+    cols = f"1.45fr repeat({n}, minmax(0,1fr))"
+    parts = [f'<div class="ws-ref-matrix" style="grid-template-columns:{cols};">']
+    parts.append('<div class="ws-ref-mcorner">Factor ↓ / Option →</div>')
+    for o in options:
+        wc = " is-top" if o.is_top else ""
+        band_hue = _REF_BAND_HUE.get(o.band, o.band_color)
+        # Trim long POI names for the matrix header.
+        display_name = o.poi_name if len(o.poi_name) < 28 else o.poi_name[:25] + "…"
+        parts.append(
+            f'<div class="ws-ref-mhead{wc}" style="--hue:{band_hue};" '
+            f'title="{_esc(o.poi_name)}">{_esc(display_name)}</div>'
+        )
+
+    # Headline refuge-score row
+    parts.append('<div class="ws-ref-mlabel"><strong>Refuge score</strong></div>')
+    for o in options:
+        g = o.refuge_score / 100.0
+        ch = _goodness_hue(g)
+        parts.append(
+            f'<div class="ws-ref-cell head-row" '
+            f'style="background:{_hex_to_rgba(ch, 0.18)}; color:{ch};">'
+            f'{o.refuge_score}</div>'
+        )
+
+    # Per-factor rows with weight chip
+    from refuge import WEIGHTS as _REF_WEIGHTS  # avoid cycles for theme-only callers
+    weight_lookup = {
+        "proximity": _REF_WEIGHTS["proximity"],
+        "path":      _REF_WEIGHTS["path"],
+        "trust":     _REF_WEIGHTS["trust"],
+        "open":      _REF_WEIGHTS["open"],
+        "crowd":     _REF_WEIGHTS["crowd"],
+    }
+    for key, label in result.factor_order:
+        w_pct = int(round(weight_lookup.get(key, 0.0) * 100))
+        parts.append(
+            f'<div class="ws-ref-mlabel">{_esc(label)}'
+            f'<span class="ws-ref-mlabel-w">{w_pct}%</span></div>'
+        )
+        for o in options:
+            f = next((ff for ff in o.factors if ff.key == key), None)
+            if f is None:
+                parts.append('<div class="ws-ref-cell">—</div>')
+                continue
+            ch = _goodness_hue(f.goodness)
+            parts.append(
+                f'<div class="ws-ref-cell" '
+                f'style="background:{_hex_to_rgba(ch, 0.15)}; color:{ch};">'
+                f'{_esc(f.display)}</div>'
+            )
+    parts.append("</div>")
+    st.markdown("".join(parts), unsafe_allow_html=True)
+    st.caption(
+        "Greener = safer on that factor. Composite weights shown next to each row; corridor strip "
+        "below each card shows path-safety across 5 sampled waypoints (dashed outline = inside a risk zone)."
+    )
+
+    # Emergency card + beacon
+    _render_emergency_card(result.emergency_card)
+    if result.quiet_beacon is not None:
+        st.markdown(
+            f"""
+            <div class="ws-ref-beacon">
+              <div class="ws-ref-beacon-title">📡 Quiet Beacon · ready to send</div>
+              <div class="ws-ref-beacon-body">{_esc(result.quiet_beacon.payload_text)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _render_emergency_card(card) -> None:
+    cells = "".join(
+        f"""
+        <div class="ws-ref-emergency-cell">
+          <div class="ws-ref-emergency-num">{_esc(num)}</div>
+          <div class="ws-ref-emergency-lbl">{_esc(lbl)}</div>
+        </div>
+        """
+        for lbl, num in card.numbers
+    )
+    note_html = f'<div class="ws-ref-emergency-note">{_esc(card.note)}</div>' if card.note else ""
+    st.markdown(
+        f"""
+        <div class="ws-ref-emergency">
+          <div class="ws-ref-emergency-head">
+            <span class="ws-ref-emergency-flag">{card.flag_emoji}</span>
+            <span class="ws-ref-emergency-title">Emergency · {_esc(card.country)}</span>
+          </div>
+          <div class="ws-ref-emergency-grid">{cells}</div>
+          {note_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_refuge_empty(hint: str = "Press **Find Refuge** above to scan for safe-haven options around you.") -> None:
+    st.markdown(
+        f"""
+        <div class="ws-ref-empty">
+          <div class="ws-ref-empty-title">Refuge engine idle</div>
+          <div>{_esc(hint)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# Tempo — Departure-Window Optimizer (Day 51)
+# ============================================================
+
+_TEMPO_BAND_HUE = {
+    "All-clear": "#53E3A6",
+    "Caution":   "#F9C440",
+    "Elevated":  "#FF9F43",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+}
+
+_TEMPO_FLAVOR_GLYPH = {
+    "safest":   "🛡",
+    "balanced": "⚖",
+    "fastest":  "🏁",
+}
+
+_TEMPO_CSS = """
+<style>
+.ws-tempo-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 168px 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 20px 22px;
+  margin: 8px 0 16px 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 6px 28px var(--glow, rgba(61,169,252,0.18));
+}
+.ws-tempo-ring {
+  position: relative;
+  width: 168px; height: 168px; border-radius: 50%;
+  background:
+    conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  display: grid; place-items: center;
+  box-shadow: 0 0 24px var(--glow, rgba(61,169,252,0.20));
+}
+.ws-tempo-ring::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-tempo-ring-inner {
+  position: relative; z-index: 1;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.ws-tempo-ring-depart {
+  font-size: 28px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; line-height: 1;
+}
+.ws-tempo-ring-rel {
+  font-size: 11px; color: #8892A6; margin-top: 4px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.ws-tempo-ring-score {
+  font-size: 12px; color: var(--hue); margin-top: 6px; font-weight: 700;
+}
+.ws-tempo-hero-body {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.ws-tempo-pill {
+  align-self: flex-start;
+  display: inline-flex; gap: 6px; align-items: center;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--pill-bg, rgba(61,169,252,0.14));
+  border: 1px solid var(--hue, #3DA9FC);
+  color: var(--hue, #3DA9FC);
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.ws-tempo-hero-title {
+  font-size: 22px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.01em; line-height: 1.25;
+}
+.ws-tempo-hero-detail { color: #C5CBDA; font-size: 14px; line-height: 1.45; }
+.ws-tempo-hero-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;
+}
+.ws-tempo-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C5CBDA; font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+}
+.ws-tempo-chip.warn {
+  border-color: #FF7F50; color: #FF7F50;
+  background: rgba(255,127,80,0.10);
+}
+.ws-tempo-arrival {
+  display: grid; gap: 2px; text-align: right; min-width: 92px;
+  padding-left: 14px; border-left: 1px dashed rgba(255,255,255,0.10);
+}
+.ws-tempo-arrival-val {
+  font-size: 32px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; line-height: 1;
+}
+.ws-tempo-arrival-lbl {
+  font-size: 10px; color: #8892A6;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+/* Heatmap grid */
+.ws-tempo-grid-wrap {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px; border-radius: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 16px;
+}
+.ws-tempo-grid-title {
+  font-size: 12px; color: #8892A6; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.ws-tempo-grid {
+  display: grid; gap: 6px;
+  grid-template-columns: 92px repeat(var(--cols, 10), minmax(58px, 1fr));
+  align-items: stretch;
+}
+.ws-tempo-h {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #8892A6; font-weight: 700;
+  letter-spacing: 0.04em;
+  height: 28px;
+}
+.ws-tempo-row-lbl {
+  display: flex; flex-direction: column; justify-content: center;
+  align-items: flex-start;
+  padding: 6px 8px;
+  font-size: 12px; font-weight: 700; color: #C5CBDA;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.ws-tempo-row-lbl small { font-size: 10px; color: #8892A6; font-weight: 600; letter-spacing: 0.04em; }
+.ws-tempo-cell {
+  position: relative;
+  display: grid; place-items: center;
+  height: 56px; border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--bd);
+  color: #E6E9F2;
+  font-weight: 800; font-size: 15px;
+  letter-spacing: -0.01em;
+  cursor: default;
+  transition: transform 0.12s ease;
+}
+.ws-tempo-cell:hover { transform: translateY(-1px); }
+.ws-tempo-cell small {
+  display: block; font-size: 9.5px; color: var(--accent, #E6E9F2);
+  font-weight: 700; letter-spacing: 0.04em;
+  margin-top: 2px; opacity: 0.85;
+}
+.ws-tempo-cell.win {
+  outline: 2px solid var(--bd);
+  outline-offset: 2px;
+  box-shadow: 0 0 16px var(--glow, rgba(83,227,166,0.32));
+}
+.ws-tempo-cell.win::before {
+  content: "★";
+  position: absolute; top: 3px; right: 5px;
+  font-size: 11px; color: var(--accent, #E6E9F2);
+}
+.ws-tempo-cell.dim {
+  opacity: 0.32;
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(255,255,255,0.03) 0 6px,
+      transparent 6px 12px),
+    var(--bg);
+}
+.ws-tempo-legend {
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px dashed rgba(255,255,255,0.08);
+  font-size: 11px; color: #8892A6;
+}
+.ws-tempo-legend-swatch {
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.ws-tempo-legend-swatch i {
+  width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+}
+
+/* Comparison cards */
+.ws-tempo-cmp-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 8px 0 16px 0;
+}
+.ws-tempo-cmp {
+  position: relative;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--bd, rgba(255,255,255,0.10));
+}
+.ws-tempo-cmp.win {
+  background: linear-gradient(135deg, var(--glow, rgba(83,227,166,0.14)) 0%, rgba(255,255,255,0.025) 100%);
+  border-color: var(--hue, #53E3A6);
+}
+.ws-tempo-cmp-label {
+  font-size: 10px; color: #8892A6; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-tempo-cmp-times {
+  font-size: 20px; font-weight: 800; color: #E6E9F2; letter-spacing: -0.01em;
+}
+.ws-tempo-cmp-times small {
+  font-size: 11px; color: #8892A6; font-weight: 600; margin-left: 4px;
+}
+.ws-tempo-cmp-meta {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  font-size: 11px; color: #C5CBDA;
+}
+.ws-tempo-cmp-meta span { white-space: nowrap; }
+.ws-tempo-cmp-delta {
+  margin-top: 4px;
+  font-size: 12px; font-weight: 700;
+}
+.ws-tempo-cmp-delta.win { color: var(--hue, #53E3A6); }
+.ws-tempo-cmp-delta.loss { color: #FF7F50; }
+.ws-tempo-cmp-delta.flat { color: #8892A6; }
+.ws-tempo-cmp-bar {
+  height: 4px; border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.ws-tempo-cmp-bar > i {
+  display: block; height: 100%;
+  background: var(--hue, #53E3A6);
+  width: var(--pct, 0%);
+}
+
+/* Runners-up */
+.ws-tempo-runners {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin: 4px 0 12px 0;
+}
+.ws-tempo-runner {
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.ws-tempo-runner-rank {
+  display: grid; place-items: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--bg, rgba(255,255,255,0.05));
+  border: 1px solid var(--bd, rgba(255,255,255,0.18));
+  color: var(--hue, #C5CBDA);
+  font-weight: 800; font-size: 13px;
+}
+.ws-tempo-runner-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ws-tempo-runner-times { font-size: 14px; font-weight: 700; color: #E6E9F2; }
+.ws-tempo-runner-meta { font-size: 11px; color: #8892A6; }
+
+/* Rationale */
+.ws-tempo-rationale {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(83,227,166,0.06);
+  border-left: 3px solid #53E3A6;
+  margin-bottom: 14px;
+}
+.ws-tempo-rationale-title {
+  font-size: 11px; color: #53E3A6; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.ws-tempo-rationale ul { margin: 0; padding-left: 18px; }
+.ws-tempo-rationale li { color: #C5CBDA; font-size: 13px; line-height: 1.5; margin-bottom: 4px; }
+.ws-tempo-rationale li:last-child { margin-bottom: 0; }
+
+.ws-tempo-empty {
+  padding: 28px 22px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.02);
+  color: #C5CBDA;
+  text-align: center;
+}
+.ws-tempo-empty-title { color: #E6E9F2; font-weight: 800; margin-bottom: 6px; }
+.ws-tempo-empty small { color: #8892A6; }
+</style>
+"""
+
+
+def _tempo_score_to_alpha(score: float) -> float:
+    """Higher score → more saturated tint. Range ~0.10..0.34."""
+    return 0.10 + 0.24 * max(0.0, min(1.0, score / 100.0))
+
+
+def _tempo_relative(now, t) -> str:
+    delta = int(round((t - now).total_seconds() / 60.0))
+    if delta == 0:
+        return "now"
+    if delta > 0:
+        if delta < 60:
+            return f"in {delta} min"
+        h, m = divmod(delta, 60)
+        return f"in {h}h{m:02d}m" if m else f"in {h}h"
+    delta = -delta
+    if delta < 60:
+        return f"{delta} min ago"
+    h, m = divmod(delta, 60)
+    return f"{h}h{m:02d}m ago" if m else f"{h}h ago"
+
+
+def render_tempo(result) -> None:
+    """Render the full Tempo result: hero card, heatmap grid, comparison cards,
+    rationale, and runners-up."""
+    st.markdown(_TEMPO_CSS, unsafe_allow_html=True)
+
+    w = result.winner
+    if w is None:
+        st.markdown(
+            """
+            <div class="ws-tempo-empty">
+              <div class="ws-tempo-empty-title">No feasible departure</div>
+              <div>The arrival window is entirely in the past, or no route could be planned.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    hue = _TEMPO_BAND_HUE.get(w.band, w.band_color)
+    glow = _hex_to_rgba(hue, 0.24)
+    pill_bg = _hex_to_rgba(hue, 0.14)
+
+    flavor_glyph = _TEMPO_FLAVOR_GLYPH.get(w.flavor, "🧭")
+
+    fence_chip = ""
+    if w.max_risk_segment_km >= 0.5:
+        fence_chip = (
+            f'<span class="ws-tempo-chip warn">'
+            f'{w.max_risk_segment_km:.1f} km warm stretch'
+            f'</span>'
+        )
+
+    feas_chip = ""
+    if result.feasibility_note:
+        feas_chip = (
+            f'<span class="ws-tempo-chip warn">'
+            f'{_esc(result.feasibility_note)}'
+            f'</span>'
+        )
+
+    rel = _tempo_relative(result.now, w.depart)
+    st.markdown(
+        f"""
+        <div class="ws-tempo-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-tempo-ring" style="--hue:{hue}; --pct:{w.composite}; --glow:{glow};">
+            <div class="ws-tempo-ring-inner">
+              <div class="ws-tempo-ring-depart">{w.depart.strftime('%H:%M')}</div>
+              <div class="ws-tempo-ring-rel">{_esc(rel)}</div>
+              <div class="ws-tempo-ring-score">{w.composite:.0f}/100 · {_esc(w.band)}</div>
+            </div>
+          </div>
+          <div class="ws-tempo-hero-body">
+            <span class="ws-tempo-pill" style="--hue:{hue}; --pill-bg:{pill_bg};">
+              {flavor_glyph} {_esc(w.flavor)} · Tempo
+            </span>
+            <div class="ws-tempo-hero-title">{_rec_to_html(result.headline)}</div>
+            <div class="ws-tempo-hero-detail">{_rec_to_html(result.advisory_line)}</div>
+            <div class="ws-tempo-hero-meta">
+              <span class="ws-tempo-chip">ETA {w.eta_minutes:.0f} min · {w.distance_km:.1f} km</span>
+              <span class="ws-tempo-chip">risk-km {w.risk_km:.2f}</span>
+              <span class="ws-tempo-chip">avg safety {w.avg_safety}</span>
+              <span class="ws-tempo-chip">min {w.min_safety}</span>
+              {fence_chip}
+              {feas_chip}
+            </div>
+          </div>
+          <div class="ws-tempo-arrival">
+            <div class="ws-tempo-arrival-val">{w.arrival.strftime('%H:%M')}</div>
+            <div class="ws-tempo-arrival-lbl">arrive · {_esc(result.dest_label)}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------------- heatmap grid ----------------
+    headers = "".join(
+        f'<div class="ws-tempo-h">{s.strftime("%H:%M")}</div>'
+        for s in result.arrival_slots
+    )
+    rows_html: list[str] = []
+    for row in result.grid:
+        if not row:
+            continue
+        flavor = row[0].flavor
+        alpha_val = row[0].alpha
+        glyph = _TEMPO_FLAVOR_GLYPH.get(flavor, "•")
+        rows_html.append(
+            f'<div class="ws-tempo-row-lbl">{glyph} {_esc(flavor)}'
+            f'<small>α={alpha_val:g}</small></div>'
+        )
+        for c in row:
+            cell_hue = _TEMPO_BAND_HUE.get(c.band, c.band_color)
+            bg = _hex_to_rgba(cell_hue, _tempo_score_to_alpha(c.composite))
+            bd = _hex_to_rgba(cell_hue, 0.42 if c.feasible else 0.20)
+            classes = ["ws-tempo-cell"]
+            if not c.feasible:
+                classes.append("dim")
+            is_win = (
+                w is not None
+                and c.arrival == w.arrival
+                and c.alpha == w.alpha
+            )
+            cell_glow = ""
+            if is_win:
+                classes.append("win")
+                cell_glow = f"--glow:{_hex_to_rgba(cell_hue, 0.42)};"
+            cls_str = " ".join(classes)
+            depart_hm = c.depart.strftime("%H:%M")
+            arrival_hm = c.arrival.strftime("%H:%M")
+            title_txt = (
+                f"depart {depart_hm} · arrive {arrival_hm} · {flavor} · "
+                f"composite {c.composite:.0f} · risk-km {c.risk_km:.2f}"
+            )
+            rows_html.append(
+                f'<div class="{cls_str}" '
+                f'style="--bg:{bg}; --bd:{bd}; --accent:{cell_hue}; {cell_glow}" '
+                f'title="{title_txt}">'
+                f'{c.composite:.0f}'
+                f'<small>{depart_hm}</small>'
+                f'</div>'
+            )
+
+    legend_items = "".join(
+        f'<span class="ws-tempo-legend-swatch"><i style="background:{_hex_to_rgba(hex_, 0.55)};border:1px solid {hex_};"></i>{name}</span>'
+        for name, hex_ in [
+            ("All-clear", "#53E3A6"),
+            ("Caution", "#F9C440"),
+            ("Elevated", "#FF9F43"),
+            ("High Risk", "#FF7F50"),
+            ("Danger", "#FF3D60"),
+        ]
+    )
+
+    st.markdown(
+        f"""
+        <div class="ws-tempo-grid-wrap">
+          <div class="ws-tempo-grid-title">
+            depart × arrival heatmap · {len(result.arrival_slots)} slots × {len(result.flavors)} flavors
+            · step {result.step_min} min · ★ winner
+          </div>
+          <div class="ws-tempo-grid" style="--cols:{len(result.arrival_slots)};">
+            <div class="ws-tempo-h"></div>
+            {headers}
+            {''.join(rows_html)}
+          </div>
+          <div class="ws-tempo-legend">
+            {legend_items}
+            <span style="margin-left:auto; color:#8892A6;">cells show composite · sub-label is depart-time</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------------- comparison cards ----------------
+    if result.comparisons:
+        cmp_cards: list[str] = []
+        max_delta = max((abs(cmp.delta_composite) for cmp in result.comparisons), default=1.0)
+        max_delta = max(max_delta, 1.0)
+        for cmp in result.comparisons:
+            c = cmp.candidate
+            if c is None:
+                continue
+            cell_hue = _TEMPO_BAND_HUE.get(c.band, c.band_color)
+            bd = _hex_to_rgba(cell_hue, 0.32)
+            cglow = _hex_to_rgba(cell_hue, 0.18)
+            classes = ["ws-tempo-cmp"]
+            delta_html: str
+            bar_pct = 0
+            if cmp.same_as_winner:
+                classes.append("win")
+                delta_html = (
+                    f'<div class="ws-tempo-cmp-delta win">★ winner</div>'
+                )
+                bar_pct = 100
+            else:
+                if cmp.delta_composite > 0.5:
+                    cls = "loss"
+                    arrow = "▼"
+                    txt = (
+                        f"{arrow} −{cmp.delta_composite:.0f} pts · "
+                        f"+{cmp.delta_risk_km:.2f} risk-km vs winner"
+                    )
+                elif cmp.delta_composite < -0.5:
+                    cls = "win"
+                    arrow = "▲"
+                    txt = f"{arrow} +{-cmp.delta_composite:.0f} pts vs winner"
+                else:
+                    cls = "flat"
+                    txt = "≈ tie with winner"
+                delta_html = f'<div class="ws-tempo-cmp-delta {cls}">{txt}</div>'
+                bar_pct = int(max(0, min(100, 100 * c.composite / 100.0)))
+            cmp_cards.append(f"""
+                <div class="{' '.join(classes)}" style="--hue:{cell_hue}; --bd:{bd}; --glow:{cglow};">
+                  <div class="ws-tempo-cmp-label">{_esc(cmp.label)}</div>
+                  <div class="ws-tempo-cmp-times">
+                    {c.depart.strftime('%H:%M')} → {c.arrival.strftime('%H:%M')}
+                    <small>{_esc(c.flavor)}</small>
+                  </div>
+                  <div class="ws-tempo-cmp-meta">
+                    <span>composite <strong style="color:{cell_hue};">{c.composite:.0f}</strong></span>
+                    <span>risk-km {c.risk_km:.2f}</span>
+                    <span>ETA {c.eta_minutes:.0f}m</span>
+                  </div>
+                  <div class="ws-tempo-cmp-bar"><i style="--pct:{bar_pct}%; --hue:{cell_hue};"></i></div>
+                  {delta_html}
+                </div>
+            """)
+        st.markdown(
+            f'<div class="ws-tempo-cmp-grid">{"".join(cmp_cards)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---------------- rationale ----------------
+    if result.rationale:
+        items = "".join(f"<li>{_rec_to_html(r)}</li>" for r in result.rationale)
+        st.markdown(
+            f"""
+            <div class="ws-tempo-rationale">
+              <div class="ws-tempo-rationale-title">Why this minute</div>
+              <ul>{items}</ul>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---------------- runners-up ----------------
+    if result.runners_up:
+        runner_cards: list[str] = []
+        for c in result.runners_up:
+            cell_hue = _TEMPO_BAND_HUE.get(c.band, c.band_color)
+            bg = _hex_to_rgba(cell_hue, 0.14)
+            bd = _hex_to_rgba(cell_hue, 0.42)
+            runner_cards.append(f"""
+                <div class="ws-tempo-runner">
+                  <div class="ws-tempo-runner-rank" style="--bg:{bg}; --bd:{bd}; --hue:{cell_hue};">
+                    #{c.rank}
+                  </div>
+                  <div class="ws-tempo-runner-body">
+                    <div class="ws-tempo-runner-times">
+                      {c.depart.strftime('%H:%M')} → {c.arrival.strftime('%H:%M')}
+                      · {_esc(c.flavor)}
+                    </div>
+                    <div class="ws-tempo-runner-meta">
+                      composite <strong style="color:{cell_hue};">{c.composite:.0f}</strong>
+                      · {_esc(c.band)}
+                      · risk-km {c.risk_km:.2f}
+                      · {c.distance_km:.1f} km
+                    </div>
+                  </div>
+                </div>
+            """)
+        st.markdown(
+            f"""
+            <div style="margin-top:4px;">
+              <div class="ws-tempo-grid-title">Runners-up (within 6 pts of winner)</div>
+              <div class="ws-tempo-runners">{"".join(runner_cards)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def render_tempo_empty(hint: str = "Set an arrival window and press **Optimize Departure** to sweep the grid.") -> None:
+    st.markdown(_TEMPO_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-tempo-empty">
+          <div class="ws-tempo-empty-title">Tempo idle</div>
+          <div>{_esc(hint)}</div>
+          <small>Pure-Python optimisation over <code>plan_forecast_route</code> ×
+          three route flavors × arrival-time slots. Picks the minute that minimises
+          integrated forecast risk-distance on the actual corridor.</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================================
+# Pulse — Today's Outlook brief (Day 56)
+# ============================================================================
+
+_PULSE_MOOD_HUE: dict[str, str] = {
+    "Calm":     "#53E3A6",
+    "Watch":    "#F9C440",
+    "Active":   "#FF9F43",
+    "Critical": "#FF3D60",
+}
+
+_PULSE_BAND_HUE: dict[str, str] = {
+    "Safe":      "#53E3A6",
+    "Caution":   "#F9C440",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+    "Unknown":   "#8892A6",
+}
+
+_PULSE_CSS = """
+<style>
+.ws-pulse-hero {
+  position:relative;
+  border-radius:18px;
+  padding:18px 22px;
+  margin: 8px 0 14px;
+  background:
+    radial-gradient(140% 90% at -10% -40%, var(--glow) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%),
+    #161A23;
+  border: 1px solid rgba(255,255,255,0.08);
+  display:grid;
+  grid-template-columns: minmax(180px, 1fr) 3.4fr 1.3fr;
+  gap: 18px;
+  align-items:center;
+  overflow:hidden;
+}
+.ws-pulse-hero::after {
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(120deg, var(--glow) 0%, transparent 38%);
+  pointer-events:none; opacity:.55;
+}
+.ws-pulse-pulse {
+  width: 140px; height: 140px; border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px var(--glow);
+  flex-shrink:0;
+}
+.ws-pulse-pulse::after {
+  content:""; position:absolute; inset:14px; border-radius:50%;
+  background:#161A23; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.ws-pulse-pulse-inner {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.ws-pulse-pulse-mood {
+  font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+  color: var(--hue); font-weight:700;
+}
+.ws-pulse-pulse-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  font-size: 1.95rem; letter-spacing:-.04em;
+}
+.ws-pulse-pulse-sub { font-size:.78rem; color:#A4ADC2; }
+.ws-pulse-hero-body { position:relative; z-index:1; }
+.ws-pulse-kicker {
+  font-size:.72rem; letter-spacing:.22em; text-transform:uppercase;
+  color: var(--hue); font-weight:700; margin-bottom:6px;
+}
+.ws-pulse-headline { font-size:1.32rem; font-weight:800; letter-spacing:-.02em; line-height:1.25; }
+.ws-pulse-advisory { color:#C8D0E0; font-size:.95rem; margin-top:6px; }
+.ws-pulse-mover {
+  position:relative; z-index:1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius:14px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.ws-pulse-mover-kicker { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;}
+.ws-pulse-mover-label { font-weight:700; font-size:1.0rem; }
+.ws-pulse-mover-delta { font-weight:800; font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em; font-size:1.7rem; color: var(--mover-hue, #C8D0E0); }
+.ws-pulse-mover-foot { color:#A4ADC2; font-size:.78rem; }
+
+.ws-pulse-tiles {
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 4px 0 16px;
+}
+.ws-pulse-tile {
+  background: #161A23;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding: 12px 14px;
+  display:flex; flex-direction:column; gap:2px;
+  position:relative; overflow:hidden;
+}
+.ws-pulse-tile::after {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: var(--accent, #3DA9FC);
+}
+.ws-pulse-tile-kicker {
+  color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase;
+}
+.ws-pulse-tile-val { font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:1.32rem; letter-spacing:-.02em; }
+.ws-pulse-tile-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-pulse-ribbon-wrap {
+  background:#161A23; border-radius:14px; padding:14px;
+  border:1px solid rgba(255,255,255,0.06); margin-bottom:14px;
+}
+.ws-pulse-ribbon-title { font-weight:700; font-size:.94rem; margin-bottom:6px; }
+.ws-pulse-ribbon-sub { color:#8892A6; font-size:.78rem; margin-bottom:10px; }
+.ws-pulse-ribbon-grid {
+  display:grid; grid-template-columns: 100px repeat(24, 1fr); gap:3px;
+  align-items:end;
+}
+.ws-pulse-ribbon-label {
+  font-size:.78rem; color:#C8D0E0; padding-right:6px; text-align:right;
+  align-self:center; line-height:1.15;
+}
+.ws-pulse-ribbon-label small { display:block; color:#8892A6; font-size:.66rem; }
+.ws-pulse-cell {
+  height:38px; border-radius:5px; position:relative;
+  background: linear-gradient(180deg, transparent 0%, transparent var(--top), var(--fill) var(--top));
+  border:1px solid rgba(255,255,255,0.05);
+  overflow:hidden;
+}
+.ws-pulse-cell.past { opacity:.35; }
+.ws-pulse-cell.best { box-shadow: 0 0 0 1.5px #53E3A6, 0 0 12px rgba(83,227,166,0.45); }
+.ws-pulse-cell.worst { box-shadow: 0 0 0 1.5px #FF3D60; }
+.ws-pulse-cell.now-mark::after {
+  content:""; position:absolute; left:50%; top:0; bottom:0; width:2px;
+  background: rgba(61,169,252,0.8); box-shadow: 0 0 6px rgba(61,169,252,0.6);
+}
+.ws-pulse-hours {
+  display:grid; grid-template-columns: 100px repeat(24, 1fr); gap:3px;
+  color:#8892A6; font-size:.66rem; margin-top:6px;
+}
+.ws-pulse-hour { text-align:center; font-variant-numeric:tabular-nums; }
+.ws-pulse-hour.best { color:#53E3A6; font-weight:700; }
+.ws-pulse-hour.worst { color:#FF3D60; font-weight:700; }
+
+.ws-pulse-snap {
+  background: #161A23;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius:14px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns: 100px 1.6fr 1fr;
+  gap: 14px; align-items:center;
+  margin-bottom: 10px;
+  position:relative;
+}
+.ws-pulse-snap::before {
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px;
+  background: var(--accent, #8892A6); border-radius:0 4px 4px 0;
+}
+.ws-pulse-snap-ring {
+  width: 78px; height:78px; border-radius:50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.ws-pulse-snap-ring::after { content:""; position:absolute; inset:7px; border-radius:50%; background:#161A23; }
+.ws-pulse-snap-ring-val { position:relative; z-index:2; font-weight:800; font-variant-numeric:tabular-nums; font-size:1.25rem; }
+.ws-pulse-snap-title { display:flex; align-items:center; gap:6px; font-weight:700; font-size:1.02rem; letter-spacing:-.01em; }
+.ws-pulse-snap-kind { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-pulse-chip {
+  display:inline-block;
+  padding:3px 8px; border-radius:999px;
+  font-size:.72rem; font-weight:700;
+  background: rgba(255,255,255,0.06);
+  color:#E6EAF2;
+  margin: 4px 4px 0 0;
+}
+.ws-pulse-chip.warn { background: rgba(255,159,67,0.16); color:#FFB077; }
+.ws-pulse-chip.bad  { background: rgba(255,61,96,0.16);  color:#FF6F88; }
+.ws-pulse-chip.ok   { background: rgba(83,227,166,0.14); color:#62E9B2; }
+.ws-pulse-chip.delta-up   { background: rgba(83,227,166,0.16); color:#62E9B2; }
+.ws-pulse-chip.delta-down { background: rgba(255,61,96,0.18);  color:#FF6F88; }
+.ws-pulse-chip.delta-flat { background: rgba(255,255,255,0.06); color:#A4ADC2; }
+.ws-pulse-snap-changes { color:#C8D0E0; font-size:.86rem; margin-top:6px; }
+.ws-pulse-snap-changes b { color:#E6EAF2; }
+.ws-pulse-snap-mini {
+  display:grid; grid-template-columns: repeat(24, 1fr); gap:1px;
+  height:18px; border-radius:4px; overflow:hidden;
+}
+.ws-pulse-snap-mini > i { background: var(--c, rgba(255,255,255,0.05)); display:block; }
+.ws-pulse-snap-side {
+  display:flex; flex-direction:column; gap:6px;
+  font-size:.82rem; color:#C8D0E0;
+}
+.ws-pulse-snap-side b { color:#E6EAF2; }
+.ws-pulse-snap-side small { color:#8892A6; }
+
+.ws-pulse-section-title {
+  font-weight:800; font-size:.92rem; letter-spacing:.04em; text-transform:uppercase;
+  color:#8892A6; margin: 16px 0 6px;
+}
+.ws-pulse-list { list-style:none; padding-left:0; margin:0; }
+.ws-pulse-list li {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.4;
+  position:relative; padding-left:36px;
+}
+.ws-pulse-list li::before {
+  content: attr(data-i);
+  position:absolute; left:10px; top:10px;
+  width:20px; height:20px; border-radius:50%;
+  background: rgba(255,255,255,0.08);
+  font-size:.74rem; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  color:#C8D0E0;
+}
+.ws-pulse-list li b { color:#E6EAF2; }
+.ws-pulse-cluster-line {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  display:flex; align-items:center; gap:10px; font-size:.92rem;
+}
+.ws-pulse-cluster-dot { width:10px; height:10px; border-radius:50%; background: var(--hue); flex-shrink:0; }
+.ws-pulse-empty {
+  background: #161A23; border: 1px dashed rgba(255,255,255,0.10);
+  border-radius:16px; padding: 26px; text-align:center;
+  color:#A4ADC2;
+}
+.ws-pulse-empty-title { font-weight:800; color:#E6EAF2; font-size:1.05rem; margin-bottom:6px; }
+</style>
+"""
+
+
+def _pulse_curve_to_cells(curve, *, now_hour: int, best_window=None, worst_window=None) -> str:
+    """Render a 24-cell ribbon row for a single forecast curve.
+
+    `curve` is 24 floats in [0,1]. `best_window` and `worst_window` are
+    optional `(start, end_exclusive)` tuples — cells whose hour falls in the
+    range get a coloured outline (best=green glow, worst=red ring).
+    """
+    cells: list[str] = []
+    max_r = max(curve) if curve else 0.0
+    for h in range(24):
+        r = float(curve[h]) if h < len(curve) else 0.0
+        # Map risk → color and fill height (top % from where the colored
+        # band starts — small risk = mostly empty, high risk = tall bar).
+        top_pct = max(8.0, 100.0 - r * 100.0)
+        if r >= 0.66:
+            hue = "#FF3D60"
+        elif r >= 0.4:
+            hue = "#FF7F50"
+        elif r >= 0.2:
+            hue = "#F9C440"
+        else:
+            hue = "#53E3A6"
+        fill = _hex_to_rgba(hue, 0.42 + 0.45 * min(1.0, r))
+        classes = ["ws-pulse-cell"]
+        if h < now_hour:
+            classes.append("past")
+        if best_window is not None and _in_window(h, best_window):
+            classes.append("best")
+        if worst_window is not None and _in_window(h, worst_window):
+            classes.append("worst")
+        if h == now_hour:
+            classes.append("now-mark")
+        cls = " ".join(classes)
+        title = f"{h:02d}:00 · risk {r:.2f}"
+        cells.append(
+            f'<div class="{cls}" '
+            f'style="--top:{top_pct:.0f}%; --fill:{fill};" title="{title}"></div>'
+        )
+    return "".join(cells)
+
+
+def _pulse_curve_to_mini(curve) -> str:
+    """A compact 24-cell strip used inside per-snapshot cards."""
+    parts: list[str] = []
+    for h in range(24):
+        r = float(curve[h]) if h < len(curve) else 0.0
+        if r >= 0.66:
+            hue = "#FF3D60"
+        elif r >= 0.4:
+            hue = "#FF7F50"
+        elif r >= 0.2:
+            hue = "#F9C440"
+        else:
+            hue = "#53E3A6"
+        c = _hex_to_rgba(hue, 0.25 + 0.55 * min(1.0, r))
+        parts.append(f'<i style="--c:{c};"></i>')
+    return "".join(parts)
+
+
+def _in_window(hour: int, window) -> bool:
+    """Window is (start, end_exclusive) modulo 24."""
+    start, end = int(window[0]), int(window[1])
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def _delta_chip(delta: int) -> str:
+    if delta >= 5:
+        cls = "delta-up"; arrow = "▲"
+    elif delta <= -5:
+        cls = "delta-down"; arrow = "▼"
+    else:
+        cls = "delta-flat"; arrow = "→"
+    label = f"{arrow} {'+' if delta > 0 else ''}{delta} pts vs 24h ago"
+    return f'<span class="ws-pulse-chip {cls}">{label}</span>'
+
+
+def render_pulse(day) -> None:
+    """Render the full Pulse — Today's Outlook brief."""
+    st.markdown(_PULSE_CSS, unsafe_allow_html=True)
+
+    hue = _PULSE_MOOD_HUE.get(day.overall_mood, "#8892A6")
+    glow = _hex_to_rgba(hue, 0.20)
+
+    overall_score = int(round(
+        sum(s.score_now for s in day.snapshots) / max(1, len(day.snapshots))
+    )) if day.snapshots else 0
+
+    # ---------- hero ----------
+    if day.biggest_mover is not None and abs(day.biggest_mover.delta_score) >= 1:
+        bm = day.biggest_mover
+        mover_hue = _PULSE_BAND_HUE.get(bm.band_now, "#C8D0E0")
+        mover_block = f"""
+          <div class="ws-pulse-mover">
+            <div class="ws-pulse-mover-kicker">Biggest mover</div>
+            <div class="ws-pulse-mover-label">{bm.point.glyph} {_esc(bm.point.label)}</div>
+            <div class="ws-pulse-mover-delta" style="--mover-hue:{mover_hue};">
+              {bm.delta_arrow} {bm.delta_label}
+            </div>
+            <div class="ws-pulse-mover-foot">
+              {bm.band_24h_ago} → <b style="color:{mover_hue};">{bm.band_now}</b>
+              · score {bm.score_now}
+            </div>
+          </div>
+        """
+    elif day.snapshots:
+        # Calm day — show "no material change" tile in the mover slot.
+        mover_block = """
+          <div class="ws-pulse-mover">
+            <div class="ws-pulse-mover-kicker">Day-over-day</div>
+            <div class="ws-pulse-mover-label">No material change</div>
+            <div class="ws-pulse-mover-delta delta-flat" style="--mover-hue:#A4ADC2;">→ ±0</div>
+            <div class="ws-pulse-mover-foot">All watched points within ±5 pts of yesterday.</div>
+          </div>
+        """
+    else:
+        mover_block = ""
+
+    st.markdown(
+        f"""
+        <div class="ws-pulse-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-pulse-pulse" style="--hue:{hue}; --pct:{overall_score}; --glow:{glow};">
+            <div class="ws-pulse-pulse-inner">
+              <div class="ws-pulse-pulse-mood">{_esc(day.overall_mood)}</div>
+              <div class="ws-pulse-pulse-score">{overall_score}</div>
+              <div class="ws-pulse-pulse-sub">mean score · {_esc(day.overall_band)}</div>
+            </div>
+          </div>
+          <div class="ws-pulse-hero-body">
+            <div class="ws-pulse-kicker">Today's outlook · {_esc(day.now.strftime('%a %d %b · %H:%M'))}</div>
+            <div class="ws-pulse-headline">{_rec_to_html(day.headline)}</div>
+            <div class="ws-pulse-advisory">{_rec_to_html(day.advisory_line)}</div>
+          </div>
+          {mover_block}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------- tiles ----------
+    bw_s, bw_e = day.best_outdoor_window
+    ww_s, ww_e = day.worst_outdoor_window
+    overall_band_hue = _PULSE_BAND_HUE.get(day.overall_band, "#8892A6")
+
+    new_inc_total = day.n_incidents_24h_total
+    new_inc_hue = "#FF7F50" if new_inc_total >= 3 else ("#F9C440" if new_inc_total >= 1 else "#53E3A6")
+
+    stay = next((s for s in day.snapshots if s.point.kind == "stay"), None)
+    if stay is not None and stay.refuge_label:
+        refuge_tile_val = stay.refuge_band
+        refuge_tile_sub = f"{stay.refuge_label} · {stay.refuge_distance_km} km"
+        refuge_hue = _PULSE_BAND_HUE.get(stay.refuge_band, "#8892A6")
+    else:
+        refuge_tile_val = "—"
+        refuge_tile_sub = "no stay flagged"
+        refuge_hue = "#8892A6"
+
+    tiles_html = f"""
+    <div class="ws-pulse-tiles">
+      <div class="ws-pulse-tile" style="--accent:{overall_band_hue};">
+        <div class="ws-pulse-tile-kicker">Overall band</div>
+        <div class="ws-pulse-tile-val" style="color:{overall_band_hue};">{_esc(day.overall_band)}</div>
+        <div class="ws-pulse-tile-sub">{len(day.snapshots)} watched · worst-of</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:#53E3A6;">
+        <div class="ws-pulse-tile-kicker">Best outdoor window</div>
+        <div class="ws-pulse-tile-val">{bw_s:02d}:00–{bw_e:02d}:00</div>
+        <div class="ws-pulse-tile-sub">joint risk {day.best_outdoor_window_risk:.2f}</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:{new_inc_hue};">
+        <div class="ws-pulse-tile-kicker">New incidents (24h, 1 km)</div>
+        <div class="ws-pulse-tile-val" style="color:{new_inc_hue};">{new_inc_total}</div>
+        <div class="ws-pulse-tile-sub">across {len(day.snapshots)} watched point{'s' if len(day.snapshots) != 1 else ''}</div>
+      </div>
+      <div class="ws-pulse-tile" style="--accent:{refuge_hue};">
+        <div class="ws-pulse-tile-kicker">Refuge readiness · stay</div>
+        <div class="ws-pulse-tile-val" style="color:{refuge_hue};">{_esc(refuge_tile_val)}</div>
+        <div class="ws-pulse-tile-sub">{_esc(refuge_tile_sub)}</div>
+      </div>
+    </div>
+    """
+    st.markdown(tiles_html, unsafe_allow_html=True)
+
+    # ---------- joint ribbon ----------
+    now_hour = int(day.now.hour)
+    joint_cells = _pulse_curve_to_cells(
+        day.joint_curve, now_hour=now_hour,
+        best_window=day.best_outdoor_window, worst_window=day.worst_outdoor_window,
+    )
+    hour_labels = []
+    for h in range(24):
+        cls = "ws-pulse-hour"
+        if _in_window(h, day.best_outdoor_window): cls += " best"
+        if _in_window(h, day.worst_outdoor_window): cls += " worst"
+        hour_labels.append(f'<div class="{cls}">{h:02d}</div>')
+
+    st.markdown(
+        f"""
+        <div class="ws-pulse-ribbon-wrap">
+          <div class="ws-pulse-ribbon-title">Joint risk ribbon · today, max over watched points</div>
+          <div class="ws-pulse-ribbon-sub">
+            green outline = best 3-h window · red outline = avoid · blue line = now ({now_hour:02d}:00)
+          </div>
+          <div class="ws-pulse-ribbon-grid">
+            <div class="ws-pulse-ribbon-label">Joint <small>max over watched</small></div>
+            {joint_cells}
+          </div>
+          <div class="ws-pulse-hours">
+            <div></div>
+            {''.join(hour_labels)}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------- per-snapshot cards ----------
+    st.markdown('<div class="ws-pulse-section-title">Watched points</div>', unsafe_allow_html=True)
+    for s in day.snapshots:
+        band_hue = _PULSE_BAND_HUE.get(s.band_now, "#8892A6")
+        delta_html = _delta_chip(s.delta_score)
+        chips: list[str] = [delta_html]
+        if s.new_incidents_24h:
+            cat = f" · {s.dominant_new_category}" if s.dominant_new_category else ""
+            chips.append(
+                f'<span class="ws-pulse-chip warn">{s.new_incidents_24h} new (1 km, 24h){_esc(cat)}</span>'
+            )
+        for c in s.intersecting_clusters[:2]:
+            cls = "bad" if c.is_escalating else ""
+            chips.append(
+                f'<span class="ws-pulse-chip {cls}">{_esc(c.label)} · {_esc(c.status_now)} '
+                f'×{c.velocity:.1f} · {c.distance_km:.1f} km</span>'
+            )
+        if s.band_changed:
+            chips.append(
+                f'<span class="ws-pulse-chip warn">band {_esc(s.band_24h_ago)} → {_esc(s.band_now)}</span>'
+            )
+        chip_html = "".join(chips)
+
+        changes_html = ""
+        if s.changes:
+            bullets = "".join(f"<div>· {_rec_to_html(c)}</div>" for c in s.changes)
+            changes_html = f'<div class="ws-pulse-snap-changes">{bullets}</div>'
+
+        side_lines = []
+        side_lines.append(
+            f'<div><small>best 3 h</small><br><b>'
+            f'{s.best_window[0]:02d}:00–{s.best_window[1]:02d}:00</b> · risk {s.best_window_risk:.2f}</div>'
+        )
+        if s.refuge_label:
+            side_lines.append(
+                f'<div><small>nearest refuge</small><br><b>{_esc(s.refuge_label)}</b>'
+                f' · {_esc(s.refuge_band)} · {s.refuge_distance_km} km</div>'
+            )
+        side_html = "".join(side_lines)
+
+        mini = _pulse_curve_to_mini(s.hour_curve_today)
+
+        st.markdown(
+            f"""
+            <div class="ws-pulse-snap" style="--accent:{band_hue};">
+              <div>
+                <div class="ws-pulse-snap-ring" style="--hue:{band_hue}; --pct:{s.score_now};">
+                  <div class="ws-pulse-snap-ring-val">{s.score_now}</div>
+                </div>
+              </div>
+              <div>
+                <div class="ws-pulse-snap-kind">{_esc(s.point.kind)}</div>
+                <div class="ws-pulse-snap-title">{s.point.glyph} {_esc(s.point.label)}
+                  · <span style="color:{band_hue};">{_esc(s.band_now)}</span></div>
+                <div>{chip_html}</div>
+                {changes_html}
+                <div style="margin-top:8px;">
+                  <small style="color:#8892A6;">today's 24-h curve</small>
+                  <div class="ws-pulse-snap-mini">{mini}</div>
+                </div>
+              </div>
+              <div class="ws-pulse-snap-side">{side_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---------- cluster intersections ----------
+    if day.sentinel_intersections:
+        st.markdown('<div class="ws-pulse-section-title">Sentinel intersections with your day</div>',
+                    unsafe_allow_html=True)
+        lines: list[str] = []
+        for c in day.sentinel_intersections:
+            hue = _cluster_status_hue(c.status_now)
+            badge = (
+                '<span class="ws-pulse-chip bad">escalating</span>'
+                if c.is_escalating else ""
+            )
+            lines.append(
+                f'<div class="ws-pulse-cluster-line">'
+                f'<span class="ws-pulse-cluster-dot" style="--hue:{hue};"></span>'
+                f'<div><b>{_esc(c.label)}</b> · {_esc(c.status_now)} ×{c.velocity:.1f}'
+                f' · {c.recent_count} recent · edge {c.distance_km:.2f} km</div>'
+                f'<div style="margin-left:auto;">{badge}</div>'
+                f'</div>'
+            )
+        st.markdown("".join(lines), unsafe_allow_html=True)
+
+    # ---------- change log ----------
+    if day.change_log:
+        st.markdown('<div class="ws-pulse-section-title">What changed since yesterday</div>',
+                    unsafe_allow_html=True)
+        items = "".join(
+            f'<li data-i="{i+1}">{_rec_to_html(line)}</li>'
+            for i, line in enumerate(day.change_log)
+        )
+        st.markdown(f'<ul class="ws-pulse-list">{items}</ul>', unsafe_allow_html=True)
+
+    # ---------- plan of day ----------
+    if day.actions:
+        st.markdown('<div class="ws-pulse-section-title">Plan of day</div>', unsafe_allow_html=True)
+        items = "".join(
+            f'<li data-i="{i+1}">{_rec_to_html(a)}</li>'
+            for i, a in enumerate(day.actions)
+        )
+        st.markdown(f'<ul class="ws-pulse-list">{items}</ul>', unsafe_allow_html=True)
+
+
+def render_pulse_empty(hint: str = "Pick your stay and 1–3 destinations, then press **Compose Pulse**.") -> None:
+    st.markdown(_PULSE_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-pulse-empty">
+          <div class="ws-pulse-empty-title">Pulse idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">Pulse is a composer — it re-runs Safety,
+          Forecast, Sentinel and Refuge for each watched point at <em>now</em>
+          and at <em>now − 24 h</em>, then ranks the deltas into a single
+          morning brief. Pure-Python, zero new deps.</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================================
+# Beacon — Group Safety Coordinator (Day 61)
+# ============================================================================
+
+_BEACON_MOOD_HUE: dict[str, str] = {
+    "Calm":     "#53E3A6",
+    "Watch":    "#F9C440",
+    "Active":   "#FF9F43",
+    "Critical": "#FF3D60",
+}
+
+_BEACON_BAND_HUE: dict[str, str] = {
+    "Safe":      "#53E3A6",
+    "Caution":   "#F9C440",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+    "Unknown":   "#8892A6",
+}
+
+_BEACON_SOURCE_HUE: dict[str, str] = {
+    "help_poi":      "#3DA9FC",
+    "centroid":      "#A78BFA",
+    "safe_pocket":   "#53E3A6",
+    "stable_member": "#F9C440",
+}
+
+_BEACON_SOURCE_LABEL: dict[str, str] = {
+    "help_poi":      "help POI",
+    "centroid":      "centroid",
+    "safe_pocket":   "safe pocket",
+    "stable_member": "stable member",
+}
+
+_BEACON_CSS = """
+<style>
+.ws-bcn-hero {
+  position:relative;
+  border-radius:18px;
+  padding:18px 22px;
+  margin: 8px 0 14px;
+  background:
+    radial-gradient(150% 95% at -8% -40%, var(--glow) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%),
+    #161A23;
+  border: 1px solid rgba(255,255,255,0.08);
+  display:grid;
+  grid-template-columns: minmax(190px, 1fr) 3.4fr 1.4fr;
+  gap: 18px; align-items:center; overflow:hidden;
+}
+.ws-bcn-hero::after {
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(120deg, var(--glow) 0%, transparent 38%);
+  pointer-events:none; opacity:.55;
+}
+@keyframes ws-bcn-breathe {
+  0%   { transform: scale(1.000); opacity:1.00; }
+  50%  { transform: scale(1.028); opacity:0.88; }
+  100% { transform: scale(1.000); opacity:1.00; }
+}
+.ws-bcn-ring {
+  width: 152px; height: 152px; border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center;
+  position:relative; box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px var(--glow);
+  flex-shrink:0;
+  animation: ws-bcn-breathe 4.6s ease-in-out infinite;
+}
+.ws-bcn-ring::after {
+  content:""; position:absolute; inset:14px; border-radius:50%;
+  background:#161A23; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.ws-bcn-ring-inner {
+  position:relative; z-index:2;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.ws-bcn-ring-mood {
+  font-size:.72rem; letter-spacing:.18em; text-transform:uppercase;
+  color: var(--hue); font-weight:700;
+}
+.ws-bcn-ring-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  font-size: 2.05rem; letter-spacing:-.04em;
+}
+.ws-bcn-ring-sub { font-size:.78rem; color:#A4ADC2; }
+.ws-bcn-hero-body { position:relative; z-index:1; }
+.ws-bcn-kicker {
+  font-size:.72rem; letter-spacing:.22em; text-transform:uppercase;
+  color: var(--hue); font-weight:700; margin-bottom:6px;
+}
+.ws-bcn-headline { font-size:1.32rem; font-weight:800; letter-spacing:-.02em; line-height:1.28; }
+.ws-bcn-advisory { color:#C8D0E0; font-size:.95rem; margin-top:6px; }
+.ws-bcn-concern {
+  position:relative; z-index:1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius:14px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.ws-bcn-concern-kicker { color:#8892A6; font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-concern-label { font-weight:700; font-size:1.0rem; }
+.ws-bcn-concern-band {
+  display:inline-block; align-self:flex-start;
+  padding:3px 10px; border-radius:999px; font-weight:800;
+  background: var(--bg, rgba(255,255,255,0.08)); color: var(--c, #E6EAF2);
+  font-size:.78rem;
+}
+.ws-bcn-concern-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-bcn-tiles {
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin: 4px 0 14px;
+}
+.ws-bcn-tile {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:12px 14px;
+  display:flex; flex-direction:column; gap:2px;
+  position:relative; overflow:hidden;
+}
+.ws-bcn-tile::after {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: var(--accent, #3DA9FC);
+}
+.ws-bcn-tile-kicker { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-tile-val { font-weight:800; font-variant-numeric:tabular-nums;
+  font-size:1.32rem; letter-spacing:-.02em; }
+.ws-bcn-tile-sub { color:#A4ADC2; font-size:.78rem; }
+
+.ws-bcn-section-title {
+  font-weight:800; font-size:.92rem; letter-spacing:.04em; text-transform:uppercase;
+  color:#8892A6; margin: 14px 0 6px;
+}
+
+.ws-bcn-member-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:10px; }
+.ws-bcn-member {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px; padding:12px 14px;
+  display:grid; grid-template-columns: 78px 1fr; gap:12px;
+  align-items:center; position:relative;
+}
+.ws-bcn-member::before {
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px;
+  background: var(--accent, #8892A6); border-radius:0 4px 4px 0;
+}
+.ws-bcn-member-ring {
+  width: 70px; height:70px; border-radius:50%;
+  background: conic-gradient(var(--hue) calc(var(--pct) * 1%), rgba(255,255,255,0.07) 0);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.ws-bcn-member-ring::after { content:""; position:absolute; inset:6px; border-radius:50%; background:#161A23; }
+.ws-bcn-member-ring-val { position:relative; z-index:2; font-weight:800; font-variant-numeric:tabular-nums; font-size:1.15rem; }
+.ws-bcn-member-name { font-weight:700; font-size:1.0rem; display:flex; align-items:center; gap:6px; }
+.ws-bcn-member-kind { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-member-meta { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.ws-bcn-chip {
+  display:inline-block; padding:3px 8px; border-radius:999px;
+  font-size:.72rem; font-weight:700;
+  background: rgba(255,255,255,0.06); color:#E6EAF2;
+}
+.ws-bcn-chip.warn { background: rgba(255,159,67,0.16); color:#FFB077; }
+.ws-bcn-chip.bad  { background: rgba(255,61,96,0.16);  color:#FF6F88; }
+.ws-bcn-chip.ok   { background: rgba(83,227,166,0.14); color:#62E9B2; }
+.ws-bcn-chip.cool { background: rgba(61,169,252,0.16); color:#7BC4FE; }
+
+.ws-bcn-cand-table {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px; padding:8px;
+}
+.ws-bcn-cand-row {
+  display:grid;
+  grid-template-columns: 30px minmax(180px, 1.4fr) 64px 64px 80px 90px 80px;
+  gap:8px; align-items:center;
+  padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04);
+  font-size:.85rem;
+}
+.ws-bcn-cand-row:last-child { border-bottom: none; }
+.ws-bcn-cand-row.head { color:#8892A6; font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.08); }
+.ws-bcn-cand-row.chosen {
+  background: linear-gradient(180deg, rgba(83,227,166,0.06), rgba(83,227,166,0.02));
+  border-left: 2px solid #53E3A6;
+}
+.ws-bcn-cand-row.secondary {
+  background: linear-gradient(180deg, rgba(249,196,64,0.04), transparent);
+  border-left: 2px solid rgba(249,196,64,0.6);
+}
+.ws-bcn-cand-rank {
+  width:24px; height:24px; border-radius:50%;
+  background: rgba(255,255,255,0.07); color:#C8D0E0;
+  font-weight:700; font-size:.78rem;
+  display:flex; align-items:center; justify-content:center;
+}
+.ws-bcn-cand-label { display:flex; flex-direction:column; gap:1px; }
+.ws-bcn-cand-label b { font-size:.92rem; }
+.ws-bcn-cand-label small { color:#8892A6; font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; }
+.ws-bcn-cand-num { font-variant-numeric:tabular-nums; font-weight:700; text-align:right; }
+.ws-bcn-cand-score {
+  font-variant-numeric:tabular-nums; font-weight:800;
+  text-align:right;
+}
+
+.ws-bcn-alert {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.4;
+  border-left: 3px solid var(--severity, #F9C440);
+}
+.ws-bcn-alert b { color:#E6EAF2; }
+
+.ws-bcn-plan-list { list-style:none; padding-left:0; margin:0; counter-reset: ws-bcn-plan; }
+.ws-bcn-plan-list li {
+  background:#161A23; border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px; padding:10px 14px 10px 40px; margin-bottom:6px;
+  color:#E6EAF2; font-size:.94rem; line-height:1.45;
+  position:relative;
+}
+.ws-bcn-plan-list li::before {
+  counter-increment: ws-bcn-plan;
+  content: counter(ws-bcn-plan);
+  position:absolute; left:10px; top:10px;
+  width:22px; height:22px; border-radius:50%;
+  background: rgba(120, 200, 255, 0.16);
+  color: #7BC4FE; font-size:.78rem; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.ws-bcn-plan-list li b { color:#E6EAF2; }
+
+.ws-bcn-source-pill {
+  display:inline-block; padding:2px 8px; border-radius:999px;
+  font-size:.66rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  background: var(--bg, rgba(255,255,255,0.06));
+  color: var(--c, #C8D0E0);
+}
+
+.ws-bcn-empty {
+  background:#161A23; border:1px dashed rgba(255,255,255,0.10);
+  border-radius:16px; padding:26px; text-align:center; color:#A4ADC2;
+}
+.ws-bcn-empty-title { font-weight:800; color:#E6EAF2; font-size:1.05rem; margin-bottom:6px; }
+</style>
+"""
+
+
+def _bcn_rec_to_html(text) -> str:
+    """Tiny **bold** parser identical to the Pulse one."""
+    if text is None:
+        return ""
+    s = _esc(str(text))
+    out = []
+    i = 0
+    bold = False
+    while i < len(s):
+        if s[i] == "*" and i + 1 < len(s) and s[i + 1] == "*":
+            out.append("</b>" if bold else "<b>")
+            bold = not bold
+            i += 2
+        else:
+            out.append(s[i]); i += 1
+    if bold:
+        out.append("</b>")
+    return "".join(out).replace("\n", "<br/>")
+
+
+def _bcn_alert_severity(line: str) -> str:
+    low = line.lower()
+    if "danger" in low or "critical" in low or "high risk" in low or "high_risk" in low:
+        return "#FF3D60"
+    if "isolated" in low or "fragmented" in low or "geofenced" in low:
+        return "#FF9F43"
+    if "corridor" in low or "re-route" in low or "escort" in low:
+        return "#F9C440"
+    return "#3DA9FC"
+
+
+def render_beacon(report) -> None:
+    """Render the full Beacon — Group Safety Coordinator brief."""
+    st.markdown(_BEACON_CSS, unsafe_allow_html=True)
+
+    mood = report.mood
+    hue = _BEACON_MOOD_HUE.get(mood, "#8892A6")
+    glow = _hex_to_rgba(hue, 0.22)
+
+    # ---- hero ----------------------------------------------------------
+    concern = next(
+        (s for s in report.members if s.member.id == report.biggest_concern),
+        None,
+    )
+    if concern is not None:
+        c_hue = _BEACON_BAND_HUE.get(concern.band, "#C8D0E0")
+        c_bg = _hex_to_rgba(c_hue, 0.18)
+        concern_block = f"""
+          <div class="ws-bcn-concern">
+            <div class="ws-bcn-concern-kicker">Biggest concern</div>
+            <div class="ws-bcn-concern-label">{_esc(concern.glyph)} {_esc(concern.member.label)}</div>
+            <div class="ws-bcn-concern-band" style="--bg:{c_bg}; --c:{c_hue};">{_esc(concern.band)} · score {concern.score}</div>
+            <div class="ws-bcn-concern-sub">
+              isolation {concern.isolation_km:.2f} km · nearest help {(f'{concern.nearest_help_km:.2f} km' if concern.nearest_help_km is not None else '—')}
+            </div>
+          </div>
+        """
+    else:
+        concern_block = ""
+
+    st.markdown(
+        f"""
+        <div class="ws-bcn-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-bcn-ring" style="--hue:{hue}; --pct:{report.group_score}; --glow:{glow};">
+            <div class="ws-bcn-ring-inner">
+              <div class="ws-bcn-ring-mood">{_esc(mood)}</div>
+              <div class="ws-bcn-ring-score">{report.group_score}</div>
+              <div class="ws-bcn-ring-sub">group score · {_esc(report.group_band)}</div>
+            </div>
+          </div>
+          <div class="ws-bcn-hero-body">
+            <div class="ws-bcn-kicker">Beacon · {_esc(report.now.strftime('%a %d %b · %H:%M'))}</div>
+            <div class="ws-bcn-headline">{_bcn_rec_to_html(report.headline)}</div>
+            <div class="ws-bcn-advisory">{_bcn_rec_to_html(report.advisory_line)}</div>
+          </div>
+          {concern_block}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- 4-tile vital signs --------------------------------------------
+    band_hue = _BEACON_BAND_HUE.get(report.group_band, "#8892A6")
+    spread = report.group_spread_km
+    if spread > 2.5:    spread_hue = "#FF3D60"
+    elif spread > 1.2:  spread_hue = "#FF9F43"
+    elif spread > 0.5:  spread_hue = "#F9C440"
+    else:               spread_hue = "#53E3A6"
+    chosen_lab = report.chosen.label if report.chosen else "—"
+    chosen_eta = (
+        f"{report.chosen.eta_max_minutes:.0f} min slow · {report.chosen.max_walk_km:.2f} km"
+        if report.chosen else "no candidate"
+    )
+    chosen_src_hue = _BEACON_SOURCE_HUE.get(report.chosen.source, "#8892A6") if report.chosen else "#8892A6"
+    st.markdown(
+        f"""
+        <div class="ws-bcn-tiles">
+          <div class="ws-bcn-tile" style="--accent:{band_hue};">
+            <div class="ws-bcn-tile-kicker">Group band</div>
+            <div class="ws-bcn-tile-val" style="color:{band_hue};">{_esc(report.group_band)}</div>
+            <div class="ws-bcn-tile-sub">score {report.group_score} · {len(report.members)} member(s)</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:{spread_hue};">
+            <div class="ws-bcn-tile-kicker">Group spread</div>
+            <div class="ws-bcn-tile-val" style="color:{spread_hue};">{spread:.2f} km</div>
+            <div class="ws-bcn-tile-sub">max pairwise distance</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:#A78BFA;">
+            <div class="ws-bcn-tile-kicker">Mood</div>
+            <div class="ws-bcn-tile-val" style="color:{hue};">{_esc(mood)}</div>
+            <div class="ws-bcn-tile-sub">{len(report.alerts)} alert(s) · {len(report.candidates)} candidate(s)</div>
+          </div>
+          <div class="ws-bcn-tile" style="--accent:{chosen_src_hue};">
+            <div class="ws-bcn-tile-kicker">Meet at</div>
+            <div class="ws-bcn-tile-val">{_esc(chosen_lab[:22])}</div>
+            <div class="ws-bcn-tile-sub">{_esc(chosen_eta)}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- Per-member cards ----------------------------------------------
+    st.markdown('<div class="ws-bcn-section-title">Members</div>', unsafe_allow_html=True)
+    cor_by_id = {c.member_id: c for c in report.corridors}
+    cards: list[str] = []
+    for s in report.members:
+        m_hue = _BEACON_BAND_HUE.get(s.band, "#8892A6")
+        cor = cor_by_id.get(s.member.id)
+        chips: list[str] = []
+        chips.append(f'<span class="ws-bcn-chip">iso {s.isolation_km:.2f} km</span>')
+        if s.nearest_help_km is not None:
+            help_cls = "ok" if s.nearest_help_km <= 1.0 else ("warn" if s.nearest_help_km <= 2.5 else "bad")
+            chips.append(f'<span class="ws-bcn-chip {help_cls}">help {s.nearest_help_km:.2f} km</span>')
+        if cor is not None:
+            cor_cls = "bad" if cor.peak_risk >= 0.55 else ("warn" if cor.peak_risk >= 0.35 else "ok")
+            chips.append(f'<span class="ws-bcn-chip {cor_cls}">→ meet · {cor.distance_km:.2f} km · {cor.eta_minutes:.0f} min</span>')
+            chips.append(f'<span class="ws-bcn-chip {cor_cls}">corridor risk {cor.peak_risk:.2f}</span>')
+        band_cls = {"Safe": "ok", "Caution": "warn", "High Risk": "bad", "Danger": "bad"}.get(s.band, "")
+        chips.append(f'<span class="ws-bcn-chip {band_cls}">{_esc(s.band)}</span>')
+        chips_html = "".join(chips)
+        cards.append(f"""
+          <div class="ws-bcn-member" style="--accent:{m_hue};">
+            <div class="ws-bcn-member-ring" style="--hue:{m_hue}; --pct:{s.score};">
+              <div class="ws-bcn-member-ring-val">{s.score}</div>
+            </div>
+            <div>
+              <div class="ws-bcn-member-name">{_esc(s.glyph)} {_esc(s.member.label)}</div>
+              <div class="ws-bcn-member-kind">{_esc(s.member.kind)}</div>
+              <div class="ws-bcn-member-meta">{chips_html}</div>
+            </div>
+          </div>
+        """)
+    st.markdown(
+        f'<div class="ws-bcn-member-grid">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- Meet-point candidates -----------------------------------------
+    if report.candidates:
+        st.markdown('<div class="ws-bcn-section-title">Meet-point candidates</div>', unsafe_allow_html=True)
+        rows: list[str] = []
+        rows.append("""
+          <div class="ws-bcn-cand-row head">
+            <div></div>
+            <div>Where</div>
+            <div style="text-align:right;">Score</div>
+            <div style="text-align:right;">Safety</div>
+            <div style="text-align:right;">Max walk</div>
+            <div style="text-align:right;">Sum walk</div>
+            <div style="text-align:right;">Worst risk</div>
+          </div>
+        """)
+        chosen_id = id(report.chosen) if report.chosen else None
+        secondary_id = id(report.secondary) if report.secondary else None
+        for i, c in enumerate(report.candidates[:6], 1):
+            extra_cls = ""
+            if id(c) == chosen_id:
+                extra_cls = " chosen"
+            elif id(c) == secondary_id:
+                extra_cls = " secondary"
+            src_hue = _BEACON_SOURCE_HUE.get(c.source, "#8892A6")
+            src_bg = _hex_to_rgba(src_hue, 0.16)
+            src_label = _BEACON_SOURCE_LABEL.get(c.source, c.source)
+            risk_hue = "#FF3D60" if c.max_path_risk >= 0.55 else ("#F9C440" if c.max_path_risk >= 0.35 else "#53E3A6")
+            rows.append(f"""
+              <div class="ws-bcn-cand-row{extra_cls}">
+                <div class="ws-bcn-cand-rank">{i}</div>
+                <div class="ws-bcn-cand-label">
+                  <b>{_esc(c.label)}</b>
+                  <small><span class="ws-bcn-source-pill" style="--bg:{src_bg}; --c:{src_hue};">{_esc(src_label)}</span></small>
+                </div>
+                <div class="ws-bcn-cand-score" style="color:{_BEACON_MOOD_HUE.get(mood) if id(c)==chosen_id else '#E6EAF2'};">{c.score}</div>
+                <div class="ws-bcn-cand-num">{c.safety_at}</div>
+                <div class="ws-bcn-cand-num">{c.max_walk_km:.2f} km</div>
+                <div class="ws-bcn-cand-num">{c.sum_walk_km:.2f} km</div>
+                <div class="ws-bcn-cand-num" style="color:{risk_hue};">{c.max_path_risk:.2f}</div>
+              </div>
+            """)
+        st.markdown(
+            f'<div class="ws-bcn-cand-table">{"".join(rows)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- Alerts --------------------------------------------------------
+    if report.alerts:
+        st.markdown('<div class="ws-bcn-section-title">Alerts</div>', unsafe_allow_html=True)
+        for line in report.alerts:
+            sev = _bcn_alert_severity(line)
+            st.markdown(
+                f'<div class="ws-bcn-alert" style="--severity:{sev};">{_bcn_rec_to_html(line)}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ---- Plan of action ------------------------------------------------
+    if report.plan_of_action:
+        st.markdown('<div class="ws-bcn-section-title">Plan of action</div>', unsafe_allow_html=True)
+        items = "".join(
+            f'<li>{_bcn_rec_to_html(p)}</li>' for p in report.plan_of_action
+        )
+        st.markdown(f'<ol class="ws-bcn-plan-list">{items}</ol>', unsafe_allow_html=True)
+
+
+def render_beacon_empty(
+    hint: str = "Add 2–6 group members (lat/lon), then press **Compose Beacon**.",
+) -> None:
+    st.markdown(_BEACON_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-bcn-empty">
+          <div class="ws-bcn-empty-title">Beacon idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">Beacon is a *group-first* composer —
+          every other WaySafe surface scores a single point at a time.
+          Beacon scores the group as a whole, ranks meet-point candidates by
+          how the walk to each point would actually go for every member, and
+          paints rendezvous corridors with per-waypoint risk samples.
+          Pure-Python, zero new deps.</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ===================================================================
+# Echo — Post-Trip Debrief (Day 66)
+# ===================================================================
+
+_ECHO_BAND_HUE = {
+    "All-clear": "#53E3A6",
+    "Caution":   "#F9C440",
+    "Elevated":  "#FF9F43",
+    "High Risk": "#FF7F50",
+    "Danger":    "#FF3D60",
+}
+
+_ECHO_MOOD_HUE = {
+    "Smooth":   "#53E3A6",
+    "Watch":    "#F9C440",
+    "Rough":    "#FF7F50",
+    "Critical": "#FF3D60",
+}
+
+_ECHO_MOOD_GLYPH = {
+    "Smooth":   "🟢",
+    "Watch":    "🟡",
+    "Rough":    "🟠",
+    "Critical": "🔴",
+}
+
+_ECHO_CALIB_HUE = {
+    "Sharp": "#53E3A6",
+    "OK":    "#9FD3FF",
+    "Noisy": "#F9C440",
+    "Off":   "#FF7F50",
+}
+
+_ECHO_SCENARIO_GLYPH = {
+    "actual":           "🛣",
+    "fastest":          "🏁",
+    "safest":           "🛡",
+    "forecast-safest":  "🔮",
+}
+
+_ECHO_CSS = """
+<style>
+.ws-echo-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 178px 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 24px;
+  margin: 8px 0 18px 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 60% 70% at 18% 10%, var(--glow), transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 10px 36px var(--glow, rgba(61,169,252,0.20));
+}
+.ws-echo-ring {
+  position: relative;
+  width: 178px; height: 178px; border-radius: 50%;
+  background:
+    conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  display: grid; place-items: center;
+  box-shadow: 0 0 30px var(--glow, rgba(61,169,252,0.22));
+}
+.ws-echo-ring::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-echo-ring-inner {
+  position: relative; z-index: 1;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.ws-echo-ring-score {
+  font-size: 36px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; line-height: 1;
+}
+.ws-echo-ring-of100 {
+  font-size: 11px; color: #8892A6; margin-top: 4px;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-echo-ring-band {
+  font-size: 12px; color: var(--hue); margin-top: 6px; font-weight: 700;
+}
+.ws-echo-hero-body { display: flex; flex-direction: column; gap: 6px; }
+.ws-echo-pill {
+  align-self: flex-start;
+  display: inline-flex; gap: 8px; align-items: center;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--pill-bg, rgba(61,169,252,0.14));
+  border: 1px solid var(--hue, #3DA9FC);
+  color: var(--hue, #3DA9FC);
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-echo-hero-title {
+  font-size: 22px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.01em; line-height: 1.25;
+}
+.ws-echo-hero-detail { color: #C5CBDA; font-size: 14px; line-height: 1.5; }
+.ws-echo-hero-meta {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+}
+.ws-echo-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C5CBDA; font-size: 11px; font-weight: 700;
+}
+.ws-echo-chip.warn { color: #F9C440; border-color: rgba(249,196,64,0.35); }
+.ws-echo-chip.bad  { color: #FF7F50; border-color: rgba(255,127,80,0.35); }
+.ws-echo-chip.crit { color: #FF3D60; border-color: rgba(255,61,96,0.40); }
+.ws-echo-chip.good { color: #53E3A6; border-color: rgba(83,227,166,0.35); }
+.ws-echo-mood {
+  text-align: right;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--mood-bg);
+  border: 1px solid var(--mood-hue);
+  color: var(--mood-hue);
+  min-width: 110px;
+}
+.ws-echo-mood-glyph { font-size: 26px; line-height: 1; }
+.ws-echo-mood-label {
+  font-size: 11px; font-weight: 800; margin-top: 4px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+}
+.ws-echo-mood-mini  { font-size: 10px; color: #8892A6; margin-top: 4px; }
+
+/* ----- 4-tile factor strip ----- */
+.ws-echo-factors {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 6px 0 18px 0;
+}
+.ws-echo-factor {
+  position: relative;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 4px 0 0 0 var(--rim);
+}
+.ws-echo-factor-label {
+  font-size: 10px; color: #8892A6;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-echo-factor-value {
+  font-size: 26px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; margin-top: 2px;
+}
+.ws-echo-factor-small { font-size: 11px; color: #9FA6BB; margin-top: 2px; }
+.ws-echo-factor-detail { font-size: 11px; color: #6F7790; margin-top: 6px; }
+
+/* ----- corridor strip ----- */
+.ws-echo-corridor {
+  display: flex;
+  height: 32px;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+}
+.ws-echo-corridor-cell {
+  flex: 1;
+  position: relative;
+  background: var(--bg);
+  border-right: 1px solid rgba(0,0,0,0.20);
+}
+.ws-echo-corridor-cell.fence::after {
+  content: "";
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 2px,
+    rgba(0,0,0,0.30) 2px 4px
+  );
+}
+.ws-echo-corridor-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px; color: #8892A6;
+  margin: 4px 2px 0 2px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+/* ----- timeline ----- */
+.ws-echo-timeline {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 6px 0;
+}
+.ws-echo-tl-row {
+  display: grid; grid-template-columns: 80px 28px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.025);
+  border-left: 3px solid var(--accent, #9FD3FF);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ws-echo-tl-ts { color: #8892A6; font-family: ui-monospace, monospace; font-size: 11px; }
+.ws-echo-tl-icon { font-size: 16px; text-align: center; }
+.ws-echo-tl-msg { color: #E6E9F2; font-size: 13px; line-height: 1.4; }
+.ws-echo-tl-msg .kind { color: var(--accent, #9FD3FF); font-weight: 700; font-size: 11px; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.ws-echo-tl-km { color: #8892A6; font-size: 10px; font-family: ui-monospace, monospace; }
+
+/* ----- counterfactual cards ----- */
+.ws-echo-cf-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 8px 0 12px 0;
+}
+.ws-echo-cf {
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 4px 14px var(--glow, rgba(61,169,252,0.10));
+}
+.ws-echo-cf.win {
+  background:
+    radial-gradient(circle at 0% 0%, var(--glow), transparent 60%),
+    rgba(255,255,255,0.04);
+  box-shadow: 0 6px 24px var(--glow);
+}
+.ws-echo-cf-head { display: flex; align-items: center; gap: 8px; }
+.ws-echo-cf-glyph { font-size: 20px; }
+.ws-echo-cf-label {
+  font-size: 12px; font-weight: 800; color: var(--hue);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.ws-echo-cf-pill {
+  margin-left: auto;
+  font-size: 10px; padding: 1px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #9FA6BB;
+}
+.ws-echo-cf-score {
+  font-size: 28px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; margin-top: 6px; line-height: 1;
+}
+.ws-echo-cf-band { font-size: 11px; color: var(--hue); font-weight: 700; }
+.ws-echo-cf-stat {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #C5CBDA;
+  margin-top: 4px;
+}
+.ws-echo-cf-delta {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  font-size: 11px; color: #9FA6BB;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+}
+.ws-echo-cf-delta b { color: #E6E9F2; }
+.ws-echo-cf-delta .pos { color: #53E3A6; }
+.ws-echo-cf-delta .neg { color: #FF7F50; }
+
+/* ----- calibration block ----- */
+.ws-echo-calib {
+  display: grid; grid-template-columns: 88px 1fr;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 8px 0;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--hue, #9FD3FF);
+}
+.ws-echo-calib-dial {
+  display: grid; place-items: center;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  position: relative;
+}
+.ws-echo-calib-dial::after {
+  content: "";
+  position: absolute; inset: 8px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-echo-calib-dial-inner {
+  position: relative; z-index: 1; text-align: center;
+}
+.ws-echo-calib-band { font-size: 13px; font-weight: 800; color: var(--hue); }
+.ws-echo-calib-brier { font-size: 10px; color: #8892A6; margin-top: 2px; }
+.ws-echo-calib-body { display: flex; flex-direction: column; gap: 6px; }
+.ws-echo-calib-stat-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ws-echo-calib-stat {
+  font-size: 11px;
+  padding: 2px 9px; border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C5CBDA;
+}
+.ws-echo-calib-stat.pos { color: #53E3A6; border-color: rgba(83,227,166,0.35); }
+.ws-echo-calib-stat.neg { color: #FF7F50; border-color: rgba(255,127,80,0.35); }
+.ws-echo-calib-stat.miss { color: #FF3D60; border-color: rgba(255,61,96,0.40); }
+.ws-echo-calib-summary { color: #C5CBDA; font-size: 13px; line-height: 1.45; }
+
+/* ----- lessons list ----- */
+.ws-echo-lessons {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 4px 0;
+}
+.ws-echo-lesson {
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.025);
+  border-left: 3px solid #9FD3FF;
+  color: #E6E9F2;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.ws-echo-lesson.prio { border-left-color: #FF7F50; }
+.ws-echo-lesson.crit { border-left-color: #FF3D60; }
+.ws-echo-lesson.good { border-left-color: #53E3A6; }
+
+/* ----- empty card ----- */
+.ws-echo-empty {
+  padding: 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid rgba(159,211,255,0.30);
+  color: #C5CBDA;
+}
+.ws-echo-empty-title { color: #E6E9F2; font-weight: 800; font-size: 16px; margin-bottom: 4px; }
+.ws-echo-section-title {
+  color: #E6E9F2; font-weight: 800; font-size: 13px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 18px 0 8px 0;
+}
+.ws-echo-section-sub { color: #8892A6; font-size: 11px; margin-bottom: 6px; }
+</style>
+"""
+
+
+def _echo_risk_hue(risk: float) -> str:
+    """Map 0..1 risk to a corridor cell hue (greener = safer)."""
+    risk = max(0.0, min(1.0, risk))
+    if risk < 0.18:  return "#53E3A6"
+    if risk < 0.32:  return "#9FD3FF"
+    if risk < 0.45:  return "#F9C440"
+    if risk < 0.60:  return "#FF9F43"
+    if risk < 0.75:  return "#FF7F50"
+    return "#FF3D60"
+
+
+def _echo_rec_to_html(text: str) -> str:
+    """Same minimal **bold** parser used everywhere — copy of _rec_to_html
+    behaviour with HTML-escape on the surrounding text."""
+    if text is None:
+        return ""
+    import re
+    parts = re.split(r"(\*\*[^*]+\*\*)", str(text))
+    out = []
+    for p in parts:
+        if p.startswith("**") and p.endswith("**"):
+            out.append(f"<b>{_esc(p[2:-2])}</b>")
+        else:
+            out.append(_esc(p))
+    return "".join(out)
+
+
+def render_echo(report) -> None:
+    """Render the full Echo debrief: hero ring + mood, factor strip,
+    corridor heat strip, counterfactual cards, calibration, event
+    timeline, lessons. Pure HTML/CSS — no streamlit charts."""
+    st.markdown(_ECHO_CSS, unsafe_allow_html=True)
+
+    hue = _ECHO_BAND_HUE.get(report.band, report.band_color)
+    glow = _hex_to_rgba(hue, 0.22)
+    pill_bg = _hex_to_rgba(hue, 0.14)
+    mood_hue = _ECHO_MOOD_HUE.get(report.mood, "#9FD3FF")
+    mood_bg = _hex_to_rgba(mood_hue, 0.14)
+    mood_glyph = _ECHO_MOOD_GLYPH.get(report.mood, "•")
+
+    # ---- meta chips on the hero ----
+    chip_html: list[str] = []
+    chip_html.append(
+        f'<span class="ws-echo-chip">'
+        f'{_esc(report.route_mode)}</span>'
+    )
+    chip_html.append(
+        f'<span class="ws-echo-chip">'
+        f'{report.distance_km:.1f} km · '
+        f'{int(report.duration_min)} min</span>'
+    )
+    chip_html.append(
+        f'<span class="ws-echo-chip">risk-km '
+        f'{report.risk_km:.2f}</span>'
+    )
+    if report.geofence_minutes >= 1.0:
+        chip_html.append(
+            f'<span class="ws-echo-chip warn">{report.geofence_minutes:.0f} min '
+            f'inside fence</span>'
+        )
+    if report.n_critical_alerts >= 1:
+        chip_html.append(
+            f'<span class="ws-echo-chip crit">{report.n_critical_alerts} critical '
+            f'alert(s)</span>'
+        )
+    if report.user_sos:
+        chip_html.append('<span class="ws-echo-chip crit">USER SOS</span>')
+    if report.auto_sos:
+        chip_html.append('<span class="ws-echo-chip crit">AUTO SOS</span>')
+    if report.n_broadcasts >= 1:
+        chip_html.append(
+            f'<span class="ws-echo-chip">{report.n_broadcasts} broadcast(s)</span>'
+        )
+
+    depart_str = (
+        report.depart_at.strftime("%a %d %b · %H:%M") if report.depart_at else "—"
+    )
+    arrived_str = (
+        report.arrived_at.strftime("%H:%M") if report.arrived_at else "(in progress)"
+    )
+
+    st.markdown(
+        f"""
+        <div class="ws-echo-hero" style="--hue:{hue}; --glow:{glow};">
+          <div class="ws-echo-ring" style="--hue:{hue}; --pct:{report.trip_score}; --glow:{glow};">
+            <div class="ws-echo-ring-inner">
+              <div class="ws-echo-ring-score">{report.trip_score:.0f}</div>
+              <div class="ws-echo-ring-of100">/ 100</div>
+              <div class="ws-echo-ring-band">{_esc(report.band)}</div>
+            </div>
+          </div>
+          <div class="ws-echo-hero-body">
+            <span class="ws-echo-pill" style="--hue:{hue}; --pill-bg:{pill_bg};">
+              Echo · debrief
+            </span>
+            <div class="ws-echo-hero-title">{_echo_rec_to_html(report.headline)}</div>
+            <div class="ws-echo-hero-detail">
+              <b>{_esc(report.origin_label)}</b> → <b>{_esc(report.dest_label)}</b>
+              · departed {_esc(depart_str)} · arrived {_esc(arrived_str)}
+            </div>
+            <div class="ws-echo-hero-detail">{_echo_rec_to_html(report.advisory_line)}</div>
+            <div class="ws-echo-hero-meta">{"".join(chip_html)}</div>
+          </div>
+          <div class="ws-echo-mood" style="--mood-hue:{mood_hue}; --mood-bg:{mood_bg};">
+            <div class="ws-echo-mood-glyph">{mood_glyph}</div>
+            <div class="ws-echo-mood-label">{_esc(report.mood)}</div>
+            <div class="ws-echo-mood-mini">mood</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- 4-tile factor strip ----
+    fcells: list[str] = []
+    for f in report.factors:
+        rim = _ECHO_BAND_HUE.get(_safety_band(int(f.value)), "#9FD3FF")
+        fcells.append(
+            f'<div class="ws-echo-factor" style="--rim:{rim};">'
+            f'  <div class="ws-echo-factor-label">{_esc(f.label)}</div>'
+            f'  <div class="ws-echo-factor-value">{f.value:.0f}</div>'
+            f'  <div class="ws-echo-factor-small">weight {f.weight:.2f} · contrib {f.contribution:.1f}</div>'
+            f'  <div class="ws-echo-factor-detail">{_esc(f.detail)}</div>'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div class="ws-echo-factors">{"".join(fcells)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- corridor strip ----
+    if report.corridor:
+        st.markdown(
+            '<div class="ws-echo-section-title">Realised corridor — risk by km</div>'
+            '<div class="ws-echo-section-sub">'
+            'Greener = safer. Diagonal hatch = inside a geofenced risk polygon. '
+            'Sampled from the trip heartbeats; static-corridor fallback when no '
+            'heartbeats were recorded.</div>',
+            unsafe_allow_html=True,
+        )
+        cells: list[str] = []
+        for s in report.corridor:
+            chue = _echo_risk_hue(s.risk)
+            bg = _hex_to_rgba(chue, 0.75)
+            cls = "ws-echo-corridor-cell"
+            if s.inside_geofence:
+                cls += " fence"
+            title = (
+                f"{s.km:.2f} km · risk {s.risk:.2f}"
+                + (" · inside geofence" if s.inside_geofence else "")
+            )
+            cells.append(
+                f'<div class="{cls}" style="--bg:{bg};" title="{_esc(title)}"></div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-corridor">{"".join(cells)}</div>'
+            f'<div class="ws-echo-corridor-legend">'
+            f'<span>0 km · {_esc(report.origin_label)}</span>'
+            f'<span>{report.distance_km:.1f} km · {_esc(report.dest_label)}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- counterfactual ----
+    if report.scenarios:
+        st.markdown(
+            '<div class="ws-echo-section-title">Counterfactual — what other flavors would have scored</div>'
+            '<div class="ws-echo-section-sub">'
+            'Each card re-plans your trip at the same depart-time. Δ rows quote '
+            'the saving (or cost) vs the actual run. The strongest alternative is '
+            'highlighted.</div>',
+            unsafe_allow_html=True,
+        )
+        cards: list[str] = []
+        for s in report.scenarios:
+            shue = _ECHO_BAND_HUE.get(s.band, s.band_color)
+            sglow = _hex_to_rgba(shue, 0.22)
+            classes = ["ws-echo-cf"]
+            is_winner = (
+                report.best_alternative is not None
+                and s.label == report.best_alternative
+            )
+            if is_winner:
+                classes.append("win")
+            actual_pill = (
+                '<span class="ws-echo-cf-pill">your trip</span>' if s.is_actual else
+                ('<span class="ws-echo-cf-pill">best alt</span>' if is_winner else "")
+            )
+            glyph = _ECHO_SCENARIO_GLYPH.get(s.label, "•")
+            delta_html = ""
+            if not s.is_actual:
+                dts = s.delta_trip_score
+                drk = s.delta_risk_km
+                de = s.delta_eta_minutes
+                dd = s.delta_distance_km
+                dms = s.delta_min_safety
+                cls_dts = "pos" if dts >= 0 else "neg"
+                cls_drk = "pos" if drk >= 0 else "neg"
+                de_str = f"{de:+.0f} min"
+                dd_str = f"{dd:+.2f} km"
+                delta_html = (
+                    f'<div class="ws-echo-cf-delta">'
+                    f'<span>Δ score <b class="{cls_dts}">{dts:+.1f}</b></span>'
+                    f'<span>Δ risk-km <b class="{cls_drk}">{drk:+.2f}</b></span>'
+                    f'<span>Δ time <b>{de_str}</b></span>'
+                    f'<span>Δ dist <b>{dd_str}</b></span>'
+                    f'<span>Δ min-safety <b>{dms:+d}</b></span>'
+                    f'</div>'
+                )
+            cards.append(
+                f'<div class="{ " ".join(classes) }" '
+                f'style="--hue:{shue}; --glow:{sglow};">'
+                f'  <div class="ws-echo-cf-head">'
+                f'    <span class="ws-echo-cf-glyph">{glyph}</span>'
+                f'    <span class="ws-echo-cf-label">{_esc(s.label)}</span>'
+                f'    {actual_pill}'
+                f'  </div>'
+                f'  <div class="ws-echo-cf-score">{s.exposure_score:.0f}</div>'
+                f'  <div class="ws-echo-cf-band">{_esc(s.band)}</div>'
+                f'  <div class="ws-echo-cf-stat">'
+                f'    <span>risk-km</span><b>{s.risk_km:.2f}</b>'
+                f'  </div>'
+                f'  <div class="ws-echo-cf-stat">'
+                f'    <span>{s.distance_km:.1f} km · ETA {s.eta_minutes:.0f} min</span>'
+                f'    <span>min {s.min_safety}</span>'
+                f'  </div>'
+                f'  {delta_html}'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-cf-grid">{"".join(cards)}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ---- calibration ----
+    if report.calibration is not None:
+        cal = report.calibration
+        chue = _ECHO_CALIB_HUE.get(cal.band, cal.band_color)
+        # pct: invert brier into a 0..100 dial (1 - brier).
+        dial_pct = max(0.0, min(100.0, 100.0 * (1.0 - cal.brier)))
+        st.markdown(
+            '<div class="ws-echo-section-title">Alert calibration</div>'
+            '<div class="ws-echo-section-sub">'
+            'How well the live-trip risk-ahead predictions tracked what '
+            'actually happened on the trace. Sharp = every alert resolved into '
+            'an actual high-risk stretch within 90 s.</div>',
+            unsafe_allow_html=True,
+        )
+        stat_chips: list[str] = []
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat">{cal.n_risk_ahead_alerts} alert(s)</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat pos">TP {cal.n_true_positive}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat neg">FA {cal.n_false_alarm}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat miss">Miss {cal.n_miss}</span>'
+        )
+        stat_chips.append(
+            f'<span class="ws-echo-calib-stat">{cal.n_heartbeats} heartbeats</span>'
+        )
+        st.markdown(
+            f"""
+            <div class="ws-echo-calib" style="--hue:{chue};">
+              <div class="ws-echo-calib-dial" style="--hue:{chue}; --pct:{dial_pct};">
+                <div class="ws-echo-calib-dial-inner">
+                  <div class="ws-echo-calib-band">{_esc(cal.band)}</div>
+                  <div class="ws-echo-calib-brier">brier {cal.brier:.2f}</div>
+                </div>
+              </div>
+              <div class="ws-echo-calib-body">
+                <div class="ws-echo-calib-stat-row">{"".join(stat_chips)}</div>
+                <div class="ws-echo-calib-summary">{_echo_rec_to_html(cal.summary)}</div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---- timeline ----
+    if report.timeline:
+        st.markdown(
+            '<div class="ws-echo-section-title">Event timeline</div>'
+            '<div class="ws-echo-section-sub">'
+            'Every alert + milestone the Live Trip Companion emitted, ordered by '
+            'time. Left rail colour mirrors severity.</div>',
+            unsafe_allow_html=True,
+        )
+        rows: list[str] = []
+        for ev in report.timeline[:60]:
+            km_html = (
+                f'<div class="ws-echo-tl-km">{ev.rel_km:.1f} km</div>'
+                if ev.rel_km is not None else ''
+            )
+            rows.append(
+                f'<div class="ws-echo-tl-row" style="--accent:{ev.accent};">'
+                f'  <div class="ws-echo-tl-ts">{ev.ts.strftime("%H:%M:%S")}</div>'
+                f'  <div class="ws-echo-tl-icon">{ev.icon}</div>'
+                f'  <div class="ws-echo-tl-msg">'
+                f'    <span class="kind">{_esc(ev.sub_kind)}</span>'
+                f'    {_echo_rec_to_html(ev.message)}'
+                f'  </div>'
+                f'  {km_html}'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-timeline">{"".join(rows)}</div>',
+            unsafe_allow_html=True,
+        )
+        if len(report.timeline) > 60:
+            st.caption(f"… plus {len(report.timeline) - 60} more events in the JSON export.")
+
+    # ---- lessons ----
+    if report.lessons:
+        st.markdown(
+            '<div class="ws-echo-section-title">Lessons &amp; plan-of-next-trip</div>'
+            '<div class="ws-echo-section-sub">'
+            'Deterministic bullets keyed to this debrief\'s own numbers. Each '
+            'one names the WaySafe tab to open next.</div>',
+            unsafe_allow_html=True,
+        )
+        items: list[str] = []
+        for l in report.lessons:
+            cls = "ws-echo-lesson"
+            head = l[:2]
+            if head in ("🆘", "🔴", "⏸️"):
+                cls += " crit"
+            elif head in ("🛡", "✅", "📈", "🟢"):
+                cls += " good"
+            elif head in ("🚷", "⚠️", "🔧", "📉"):
+                cls += " prio"
+            items.append(
+                f'<div class="{cls}">{_echo_rec_to_html(l)}</div>'
+            )
+        st.markdown(
+            f'<div class="ws-echo-lessons">{"".join(items)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def render_echo_empty(
+    hint: str = (
+        "Echo composes a post-trip debrief from a completed Live Trip. "
+        "Run a journey in the **Live Trip** tab — or load the seeded "
+        "demo trip below — and come back here for the verdict."
+    ),
+) -> None:
+    st.markdown(_ECHO_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-echo-empty">
+          <div class="ws-echo-empty-title">Echo idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">
+          Echo composes a verdict only — it adds zero new physics. Every number
+          in the brief traces back to <code>safety.point_risk</code>, the
+          <code>routing</code> A*, or the live-trip heartbeats. Pure-Python,
+          zero new deps.
+          </small>
         </div>
         """,
         unsafe_allow_html=True,
