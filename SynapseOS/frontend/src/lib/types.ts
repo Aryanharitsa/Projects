@@ -757,3 +757,73 @@ export type SparkReport = {
     highest_priority?: number;
   };
 };
+
+// ----------------------------------------------------------------- compass
+
+export type LensNote = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  tags: string[];
+  relevance: number;
+  info_gain: number;
+  cosine: number;
+  lexical: number;
+  title_hit: boolean;
+  read: boolean;
+  read_at: string | null;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+};
+
+export type CompassCitation = {
+  ref: number;
+  note_id: number;
+  title: string;
+  excerpt: string;
+  relevance: number;
+};
+
+export type CompassSubquestion = {
+  term: string;
+  note_count: number;
+  covered: number;
+  coverage_pct: number;
+  sample_note_id: number;
+};
+
+export type CompassLens = {
+  question_id: number;
+  question_text: string;
+  created_at: string;
+  archived_at: string | null;
+  generated_at: string;
+  total_notes: number;
+  in_lens: number;
+  relevance_mass_total: number;
+  relevance_mass_read: number;
+  coverage_pct: number;
+  notes: LensNote[];
+  frontiers: LensNote[];
+  subquestions: CompassSubquestion[];
+  working_answer: string;
+  citations: CompassCitation[];
+  stats: {
+    total_in_lens?: number;
+    read_in_lens?: number;
+    top_relevance?: number;
+    answered_subquestions?: number;
+    frontiers_count?: number;
+  };
+};
+
+export type CompassQuestionSummary = {
+  id: number;
+  text: string;
+  created_at: string;
+  archived_at: string | null;
+  reads_count: number;
+  last_read_at: string | null;
+  coverage_pct: number;
+};

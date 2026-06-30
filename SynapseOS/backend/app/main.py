@@ -31,6 +31,7 @@ from . import atlas as atlas_engine
 from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import chronicle as chronicle_engine
+from . import compass as compass_engine
 from . import pulse as pulse_engine
 from . import spark as spark_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
@@ -1114,4 +1115,223 @@ def spark_export(
         content=md,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="spark.md"'},
+    )
+
+
+# --------------------------------------------------------------- compass
+
+
+def _build_lens_for_question(
+    qrow: dict,
+    *,
+    threshold: float,
+    top_k: int,
+) -> compass_engine.Lens:
+    """Shared assembly: pull notes/embeddings/communities and call the
+    pure ``build_lens`` function. Centralising this keeps every Compass
+    endpoint consistent on cluster colouring and floor parameters."""
+    notes = store.all_notes()
+    embeddings = dict(store.all_embeddings())
+    if notes:
+        g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+        cmap = {n["id"]: n.get("community", 0) for n in g.nodes}
+        notes_for_community = {n["id"]: n for n in g.nodes}
+        built = community.build_communities(cmap, notes_for_community)
+        community_lookup = {
+            c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+            for c in built
+        }
+    else:
+        cmap = {}
+        community_lookup = {}
+    reads = store.reads_for(qrow["id"])
+    return compass_engine.build_lens(
+        question_id=qrow["id"],
+        question_text=qrow["text"],
+        question_created_at=qrow["created_at"],
+        question_archived_at=qrow.get("archived_at"),
+        notes=notes,
+        embeddings=embeddings,
+        cmap=cmap,
+        community_lookup=community_lookup,
+        reads=reads,
+    )
+
+
+@app.get("/compass/questions", response_model=list[schemas.CompassQuestionSummary])
+def compass_list(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> list[dict]:
+    """List every active research question with its current coverage %.
+
+    Coverage is mass-weighted (``relevance_read / relevance_total``),
+    not count-weighted — answering the top-1 most-relevant note matters
+    more than reading a long tail of weakly-relevant ones, and the rail
+    surfaces that truth instead of pretending all reads are equal.
+    """
+    rows = store.list_questions()
+    if not rows:
+        return []
+    out: list[dict] = []
+    notes_cached: list[dict] | None = None
+    embeddings_cached: dict[int, tuple[float, ...]] | None = None
+    cmap_cached: dict[int, int] | None = None
+    community_lookup_cached: dict[int, dict] | None = None
+    for r in rows:
+        if notes_cached is None:
+            notes_cached = store.all_notes()
+            embeddings_cached = dict(store.all_embeddings())
+            if notes_cached:
+                g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+                cmap_cached = {n["id"]: n.get("community", 0) for n in g.nodes}
+                notes_for_community = {n["id"]: n for n in g.nodes}
+                built = community.build_communities(cmap_cached, notes_for_community)
+                community_lookup_cached = {
+                    c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+                    for c in built
+                }
+            else:
+                cmap_cached = {}
+                community_lookup_cached = {}
+        reads = store.reads_for(r["id"])
+        lens = compass_engine.build_lens(
+            question_id=r["id"],
+            question_text=r["text"],
+            question_created_at=r["created_at"],
+            question_archived_at=r.get("archived_at"),
+            notes=notes_cached or [],
+            embeddings=embeddings_cached or {},
+            cmap=cmap_cached or {},
+            community_lookup=community_lookup_cached or {},
+            reads=reads,
+        )
+        out.append(
+            {
+                "id": r["id"],
+                "text": r["text"],
+                "created_at": r["created_at"],
+                "archived_at": r.get("archived_at"),
+                "reads_count": r["reads_count"],
+                "last_read_at": r["last_read_at"],
+                "coverage_pct": lens.coverage_pct,
+            }
+        )
+    return out
+
+
+@app.post(
+    "/compass/questions",
+    response_model=schemas.CompassLensOut,
+    status_code=201,
+)
+def compass_create(
+    req: schemas.CompassQuestionIn,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Save a research question and return its fully-computed lens.
+
+    Returning the lens (not just the row) collapses what would otherwise
+    be a two-roundtrip dance — create → immediately fetch — into one
+    request, which matters because the lens is the *only* thing the
+    user cares about; the persisted row is just bookkeeping.
+    """
+    qid = store.add_question(req.text)
+    qrow = store.get_question(qid)
+    assert qrow is not None
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    return compass_engine.lens_to_dict(lens)
+
+
+@app.get(
+    "/compass/questions/{question_id}",
+    response_model=schemas.CompassLensOut,
+)
+def compass_get(
+    question_id: int,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    qrow = store.get_question(question_id)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    return compass_engine.lens_to_dict(lens)
+
+
+@app.post(
+    "/compass/questions/{question_id}/read",
+    response_model=schemas.CompassLensOut,
+)
+def compass_read(
+    question_id: int,
+    req: schemas.CompassReadIn,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Mark ``note_id`` as read *for this question* and return the
+    refreshed lens.
+
+    This is distinct from the global ``/notes/{id}/touch`` — a note may
+    be read for question A but cold for question B; coverage and the
+    working answer are per-question state.
+    """
+    qrow = store.get_question(question_id)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+    if not store.mark_read(question_id, req.note_id):
+        raise HTTPException(404, "note not found")
+    # Mirror the read into the global ``last_seen_at`` so the Daily
+    # Brief's staleness scorer doesn't keep nagging the user about a
+    # note they just engaged with — even via Compass.
+    store.touch_note(req.note_id)
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    return compass_engine.lens_to_dict(lens)
+
+
+@app.delete(
+    "/compass/questions/{question_id}/read/{note_id}",
+    response_model=schemas.CompassLensOut,
+)
+def compass_unread(
+    question_id: int,
+    note_id: int,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    qrow = store.get_question(question_id)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+    if not store.unmark_read(question_id, note_id):
+        # Already absent — return the lens anyway so the FE doesn't
+        # split error handling for the "already unread" case.
+        pass
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    return compass_engine.lens_to_dict(lens)
+
+
+@app.delete("/compass/questions/{question_id}")
+def compass_delete(question_id: int) -> Response:
+    if not store.delete_question(question_id):
+        raise HTTPException(404, "question not found")
+    return Response(status_code=204)
+
+
+@app.get("/compass/questions/{question_id}/export.md")
+def compass_export(
+    question_id: int,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> Response:
+    qrow = store.get_question(question_id)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    md = compass_engine.to_markdown(lens)
+    safe = "".join(c if c.isalnum() else "-" for c in qrow["text"][:60]).strip("-").lower() or "compass"
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe}.md"'},
     )
