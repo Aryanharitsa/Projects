@@ -747,3 +747,76 @@ class SparkReportOut(BaseModel):
     total_clusters: int
     sparks: list[SparkOut]
     summary: dict
+
+
+# --------------------------------------------------------------- compass
+
+
+class CompassQuestionIn(BaseModel):
+    text: str = Field(..., min_length=2, max_length=600)
+
+
+class CompassQuestionSummary(BaseModel):
+    id: int
+    text: str
+    created_at: str
+    archived_at: str | None = None
+    reads_count: int
+    last_read_at: str | None = None
+    coverage_pct: float
+
+
+class CompassReadIn(BaseModel):
+    note_id: int = Field(..., ge=1)
+
+
+class LensNoteOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    relevance: float
+    info_gain: float
+    cosine: float
+    lexical: float
+    title_hit: bool
+    read: bool
+    read_at: str | None = None
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class CompassCitationOut(BaseModel):
+    ref: int
+    note_id: int
+    title: str
+    excerpt: str
+    relevance: float
+
+
+class CompassSubquestionOut(BaseModel):
+    term: str
+    note_count: int
+    covered: int
+    coverage_pct: float
+    sample_note_id: int
+
+
+class CompassLensOut(BaseModel):
+    question_id: int
+    question_text: str
+    created_at: str
+    archived_at: str | None = None
+    generated_at: str
+    total_notes: int
+    in_lens: int
+    relevance_mass_total: float
+    relevance_mass_read: float
+    coverage_pct: float
+    notes: list[LensNoteOut]
+    frontiers: list[LensNoteOut]
+    subquestions: list[CompassSubquestionOut]
+    working_answer: str
+    citations: list[CompassCitationOut]
+    stats: dict

@@ -90,6 +90,43 @@ def init_db() -> None:
         )
         con.execute("CREATE INDEX IF NOT EXISTS idx_trails_updated ON trails(updated_at)")
 
+        # Compass: persistent research-session questions + per-question
+        # read markers. ``compass_reads`` is its own table (not a flag
+        # on ``notes``) because a single note can be "read for question
+        # A" but "still cold for question B" — coverage is per-question
+        # state, not global. ``ON DELETE CASCADE`` against ``notes``
+        # would be ideal but SQLite needs the FK pragma flipped on per
+        # connection; we instead clean up dangling rows lazily on read
+        # via ``reads_for`` which joins against ``notes``.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS compass_questions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                text         TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                archived_at  TEXT
+            )
+            """
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compass_q_created "
+            "ON compass_questions(created_at)"
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS compass_reads (
+                question_id  INTEGER NOT NULL,
+                note_id      INTEGER NOT NULL,
+                read_at      TEXT NOT NULL,
+                PRIMARY KEY (question_id, note_id)
+            )
+            """
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compass_reads_q "
+            "ON compass_reads(question_id)"
+        )
+
 
 def add_note(title: str, body: str, tags: list[str]) -> int:
     vec = embed(f"{title}\n\n{body}")
@@ -292,4 +329,157 @@ def delete_trail(trail_id: int) -> bool:
 def trails_count() -> int:
     with _conn() as con:
         (n,) = con.execute("SELECT COUNT(*) FROM trails").fetchone()
+        return int(n)
+
+
+# ---------------------------------------------------------------- compass
+
+def add_question(text: str) -> int:
+    """Persist a new research question. Returns its id."""
+    with _conn() as con:
+        cur = con.execute(
+            "INSERT INTO compass_questions(text, created_at) VALUES (?, ?)",
+            (text.strip(), _iso_now()),
+        )
+        return int(cur.lastrowid)
+
+
+def list_questions(*, include_archived: bool = False) -> list[dict]:
+    """List questions newest-first. Each row carries ``reads_count`` and
+    ``last_read_at`` already aggregated so the rail can render without a
+    second query per question."""
+    with _conn() as con:
+        rows = con.execute(
+            """
+            SELECT q.id, q.text, q.created_at, q.archived_at,
+                   COUNT(r.note_id) AS reads_count,
+                   MAX(r.read_at) AS last_read_at
+            FROM compass_questions q
+            LEFT JOIN compass_reads r ON r.question_id = q.id
+            GROUP BY q.id
+            ORDER BY q.created_at DESC, q.id DESC
+            """
+        ).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            archived = r["archived_at"]
+            if archived and not include_archived:
+                continue
+            out.append(
+                {
+                    "id": int(r["id"]),
+                    "text": r["text"],
+                    "created_at": r["created_at"],
+                    "archived_at": archived,
+                    "reads_count": int(r["reads_count"] or 0),
+                    "last_read_at": r["last_read_at"],
+                }
+            )
+        return out
+
+
+def get_question(qid: int) -> dict | None:
+    with _conn() as con:
+        row = con.execute(
+            "SELECT id, text, created_at, archived_at "
+            "FROM compass_questions WHERE id = ?",
+            (qid,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": int(row["id"]),
+            "text": row["text"],
+            "created_at": row["created_at"],
+            "archived_at": row["archived_at"],
+        }
+
+
+def archive_question(qid: int) -> bool:
+    with _conn() as con:
+        cur = con.execute(
+            "UPDATE compass_questions SET archived_at = ? "
+            "WHERE id = ? AND archived_at IS NULL",
+            (_iso_now(), qid),
+        )
+        if cur.rowcount > 0:
+            return True
+        # Hard-delete the reads + the row so a re-create starts clean.
+        exists = con.execute(
+            "SELECT 1 FROM compass_questions WHERE id = ?", (qid,)
+        ).fetchone()
+        if not exists:
+            return False
+        # Already archived; treat as no-op success.
+        return True
+
+
+def delete_question(qid: int) -> bool:
+    """Hard-delete a question and all of its read markers."""
+    with _conn() as con:
+        cur = con.execute("DELETE FROM compass_questions WHERE id = ?", (qid,))
+        con.execute("DELETE FROM compass_reads WHERE question_id = ?", (qid,))
+        return cur.rowcount > 0
+
+
+def mark_read(qid: int, note_id: int, *, when: str | None = None) -> bool:
+    """Record that the user engaged with ``note_id`` for ``qid``.
+
+    Idempotent on the primary key — re-marking refreshes the ``read_at``
+    timestamp. Returns ``False`` if either the question or the note has
+    been deleted (so the caller can 404 cleanly without a second probe).
+    """
+    ts = when or _iso_now()
+    with _conn() as con:
+        q_exists = con.execute(
+            "SELECT 1 FROM compass_questions WHERE id = ?", (qid,)
+        ).fetchone()
+        if not q_exists:
+            return False
+        n_exists = con.execute(
+            "SELECT 1 FROM notes WHERE id = ?", (note_id,)
+        ).fetchone()
+        if not n_exists:
+            return False
+        con.execute(
+            """
+            INSERT INTO compass_reads(question_id, note_id, read_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(question_id, note_id) DO UPDATE SET read_at = excluded.read_at
+            """,
+            (qid, note_id, ts),
+        )
+        return True
+
+
+def unmark_read(qid: int, note_id: int) -> bool:
+    with _conn() as con:
+        cur = con.execute(
+            "DELETE FROM compass_reads WHERE question_id = ? AND note_id = ?",
+            (qid, note_id),
+        )
+        return cur.rowcount > 0
+
+
+def reads_for(qid: int) -> dict[int, str]:
+    """Return ``{note_id: read_at}`` for this question, filtered to notes
+    that still exist (lazy cleanup of dangling rows from deleted notes)."""
+    with _conn() as con:
+        rows = con.execute(
+            """
+            SELECT r.note_id, r.read_at
+            FROM compass_reads r
+            JOIN notes n ON n.id = r.note_id
+            WHERE r.question_id = ?
+            """,
+            (qid,),
+        ).fetchall()
+        return {int(r["note_id"]): r["read_at"] for r in rows}
+
+
+def questions_count() -> int:
+    with _conn() as con:
+        (n,) = con.execute(
+            "SELECT COUNT(*) FROM compass_questions WHERE archived_at IS NULL"
+        ).fetchone()
         return int(n)

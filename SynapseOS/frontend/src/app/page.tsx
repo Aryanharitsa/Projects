@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Atlas } from "@/components/Atlas";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Chronicle } from "@/components/Chronicle";
+import { Compass } from "@/components/Compass";
 import { DailyBrief } from "@/components/DailyBrief";
 import { Distill } from "@/components/Distill";
 import { Echo } from "@/components/Echo";
@@ -61,6 +62,8 @@ export default function Page() {
   const [pulseBadge, setPulseBadge] = useState<number | null>(null);
   const [sparkOpen, setSparkOpen] = useState(false);
   const [sparkBadge, setSparkBadge] = useState<number | null>(null);
+  const [compassOpen, setCompassOpen] = useState(false);
+  const [compassBadge, setCompassBadge] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -236,6 +239,24 @@ export default function Page() {
     };
   }, [graph]);
 
+  // Compass badge — count of pinned research questions. The modal
+  // lazy-loads each lens on demand; the rail itself is cheap enough
+  // that this single count is all the header needs.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .compassQuestions()
+      .then((qs) => {
+        if (!cancelled) setCompassBadge(qs.length);
+      })
+      .catch(() => {
+        if (!cancelled) setCompassBadge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, compassOpen]);
+
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
       const n = await api.createNote(payload);
@@ -358,6 +379,8 @@ export default function Page() {
         pulseBadge={pulseBadge ?? undefined}
         onOpenSpark={() => setSparkOpen(true)}
         sparkBadge={sparkBadge ?? undefined}
+        onOpenCompass={() => setCompassOpen(true)}
+        compassBadge={compassBadge ?? undefined}
       />
 
       <DailyBrief
@@ -490,6 +513,17 @@ export default function Page() {
           setIsolated(null);
         }}
         onAfterUse={() => setSparkOpen(false)}
+      />
+
+      <Compass
+        open={compassOpen}
+        onClose={() => setCompassOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+          setCompassOpen(false);
+        }}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
