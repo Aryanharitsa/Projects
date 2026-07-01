@@ -2078,3 +2078,161 @@ export function lineageExportUrl(opts: {
   qs.set("window_days", String(opts.window_days ?? 30));
   return `${API_BASE}/aml/lineage/export.md?${qs.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Precedent — case-similarity kNN + Bayesian disposition prior (round-15, day-70)
+// ---------------------------------------------------------------------------
+
+export type PrecedentDisposition = "sar_filed" | "cleared" | "in_flight";
+
+export type PrecedentRecommendationCode =
+  | "file_sar_probable"
+  | "expedite_clearance"
+  | "weigh_evidence"
+  | "novel_investigate"
+  | "insufficient_precedent";
+
+export type PrecedentDriver = {
+  block: "factor" | "typology" | "amount" | "posture" | string;
+  weight: number;
+  cosine: number;
+  contribution: number;
+};
+
+export type PrecedentDelta = {
+  axis: string;
+  query: number;
+  candidate: number;
+  delta: number;
+};
+
+export type PrecedentMatch = {
+  case_id: string;
+  account_id: string;
+  similarity: number;
+  status: string;
+  disposition: PrecedentDisposition;
+  band: "low" | "medium" | "high" | "critical" | string;
+  priority: string;
+  typology_code: string | null;
+  typology_name: string | null;
+  opened_at_iso: string | null;
+  closed_at_iso: string | null;
+  resolution_hours: number | null;
+  summary: string;
+  top_factors: string[];
+  drivers: PrecedentDriver[];
+  deltas: PrecedentDelta[];
+};
+
+export type PrecedentQuery = {
+  case_id: string;
+  account_id: string;
+  display_name: string;
+  summary: string;
+  status: string;
+  priority: string;
+  band: string;
+  typology_code: string | null;
+  typology_name: string | null;
+};
+
+export type PrecedentRecommendation = {
+  code: PrecedentRecommendationCode;
+  label: string;
+  accent: string;
+  rationale: string;
+};
+
+export type PrecedentRules = {
+  ok: boolean;
+  engine: string;
+  defaults: Record<string, number>;
+  blocks: { block: string; weight: number; size: number }[];
+  detectors: string[];
+  typologies: string[];
+  recommendations: { code: PrecedentRecommendationCode; label: string; accent: string }[];
+};
+
+export type PrecedentReport = {
+  ok: boolean;
+  engine: string;
+  query: PrecedentQuery;
+  corpus_size: number;
+  considered: number;
+  matches: PrecedentMatch[];
+  disposition_counts: Record<PrecedentDisposition, number>;
+  posterior: Record<"sar_filed" | "cleared", number>;
+  median_resolution_hours: number | null;
+  p95_resolution_hours: number | null;
+  in_flight_median_hours: number | null;
+  recommendation: PrecedentRecommendation;
+  generated_at_iso: string;
+  rules: PrecedentRules;
+};
+
+export type PrecedentCandidate = {
+  case_id: string;
+  account_id: string;
+  display_name: string;
+  status: string;
+  priority: string;
+  band: string;
+  opened_at_iso: string | null;
+  typology_code: string | null;
+  summary: string;
+};
+
+export async function getPrecedentRules(): Promise<PrecedentRules> {
+  const r = await fetch(`${API_BASE}/aml/precedent/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function listPrecedentCandidates(opts: {
+  limit?: number;
+  include_closed?: boolean;
+} = {}): Promise<{ ok: boolean; engine: string; count: number; include_closed: boolean; candidates: PrecedentCandidate[] }> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(opts.limit ?? 100));
+  qs.set("include_closed", String(opts.include_closed ?? false));
+  const r = await fetch(`${API_BASE}/aml/precedent/candidates?${qs.toString()}`);
+  return jsonOrThrow(r);
+}
+
+export async function getPrecedentForCase(
+  case_id: string,
+  opts: { k?: number; min_sim?: number } = {},
+): Promise<PrecedentReport> {
+  const qs = new URLSearchParams();
+  qs.set("k", String(opts.k ?? 8));
+  qs.set("min_sim", String(opts.min_sim ?? 0.5));
+  const r = await fetch(
+    `${API_BASE}/aml/precedent/case/${encodeURIComponent(case_id)}?${qs.toString()}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function seedPrecedentSamples(force = false): Promise<{
+  ok: boolean;
+  engine: string;
+  seeded: number;
+  families?: string[];
+  reason?: string;
+  terminal_count?: number;
+  terminal_count_after?: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set("force", String(force));
+  const r = await fetch(`${API_BASE}/aml/precedent/seed?${qs.toString()}`, {
+    method: "POST",
+  });
+  return jsonOrThrow(r);
+}
+
+export function precedentExportUrl(opts: { case_id: string; k?: number; min_sim?: number }): string {
+  const qs = new URLSearchParams();
+  qs.set("case_id", opts.case_id);
+  qs.set("k", String(opts.k ?? 8));
+  qs.set("min_sim", String(opts.min_sim ?? 0.5));
+  return `${API_BASE}/aml/precedent/export.md?${qs.toString()}`;
+}

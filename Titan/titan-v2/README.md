@@ -13,6 +13,45 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-70 — Precedent · the case-similarity + disposition prior.**
+> Every prior TITAN surface *judges* one case in isolation — `risk`
+> fires rules, `typology` names the playbook, `network` finds cross-
+> account links, `lineage` follows value through time, `pulse` compares
+> this week to last, `profile`/`peer`/`drift` compose the customer view.
+> None of them answer the analyst's *very first* question when a new
+> case lands on their queue: *"have we seen a case like this before,
+> and how did it end?"*. New `apps/ai-aml/precedent.py` (~800 LOC, pure
+> stdlib, **zero new deps**) is that answer. Given an open case it
+> extracts a **19-dim block-partitioned feature vector** — 9-dim
+> normalized detector firing intensities, 6-dim primary-typology one-hot
+> weighted by confidence, 2-dim log10 inbound/outbound totals, 2-dim
+> band ordinal + sanctions gate — and runs a **block-weighted cosine
+> kNN** over the entire case store (block weights: `factor 0.55 ·
+> typology 0.20 · posture 0.15 · amount 0.10`). Every match ships a
+> **similarity-driver breakdown** (which axes contributed) and a
+> **top-6 delta view** (which axes distinguish it from the query).
+> Terminal precedents feed a **Bayesian disposition prior** with
+> Laplace smoothing (α = 0.5 per class) — a lone precedent doesn't
+> collapse the posterior to 100% — plus a **median time-to-resolution**
+> from the same set. The engine emits one of five explicit
+> recommendation verdicts — `file_sar_probable`, `expedite_clearance`,
+> `weigh_evidence`, `novel_investigate`, `insufficient_precedent` —
+> tied to named precedent IDs, so every recommendation is regulator-
+> auditable. **Surface** — new `/precedent` route between Lineage and
+> Drift: verdict-accent-tinted hero banner + query summary + 4 aggregate
+> tiles (precedent count / posterior P(SAR) / median TTR / considered
+> corpus), a searchable candidate picker, a Bayesian posterior bar with
+> 50/50 base-rate reference, k precedent cards each with a conic
+> similarity ring + disposition/band/typology chips + top-factor
+> summary + block-attribution bars + delta chips, paste-able "precedent
+> memo" markdown export, and a one-click seed of the bundled 30-case
+> six-family demo portfolio (`SMURF-heavy · LAYER-cycle · MULE-
+> passthrough · TBML-cross-border · SANCEV-watchlist · Baseline-quiet`)
+> chosen so retrieval exercises every rung of the recommendation
+> ladder. Deterministic — same case store + same query case → identical
+> ranking, identical posterior, identical recommendation. Engine:
+> `titan-precedent/0.1.0`.
+
 > **Day-65 — Lineage · the temporal fund-flow tracer.** Every prior
 > TITAN surface answers a *structural* or *aggregate* question — `risk`
 > scores one batch, `network` shows who an account is *connected to*,
@@ -1139,6 +1178,7 @@ defensible to a regulator the same way a rule-based alert is.
 | `/profile` | **(day-50)** Customer Risk Profile console: portfolio rail with bucket + refresh + search filters; customer detail with composite ring (engine-composite hint when overridden), 6-axis `FactorWheel` polar fingerprint, per-surface evidence cards, append-only history sparkline with bucket-band guides + override halos, and an analyst-override dialog; portfolio overview tab with bucket-share + refresh-state + domicile + top-of-book panels |
 | `/aml` | Drag-drop CSV → ranked accounts, factor bars, transaction graph, sanctions hits, **what-if weight sliders**, SAR draft, case promotion (per-row chip and bulk header button), `Network →` deep-link, **+ inline typology badge on every alerted row** and a full `TypologyPanel` with confidence ring + ranked evidence bars + narrative + recommended-action in the detail drawer |
 | `/network` | Resolved entities, risk-coloured force graph, sortable sidebar, counterfactual ablation panel, per-account attribution view |
+| `/precedent` | **(new — day-70)** Case-precedent console: verdict-accent-tinted hero banner with recommendation label + rationale, 4-tile aggregate strip (precedent count · Laplace-smoothed P(SAR) · median time-to-resolve · corpus considered), searchable priority-tinted candidate picker (open/review queue, or include-closed for audit), Bayesian posterior bar with 50/50 base-rate reference and per-disposition counts, `k` precedent cards each rendering a conic similarity ring + disposition/band/typology chips + top firing factors + block-attribution driver bars + top-6 axis delta chips against the query, and a one-click "precedent memo" markdown export. Includes a "seed demo portfolio" affordance for fresh installs |
 | `/drift` | **(new — day-40)** Behavioral-drift console: verdict-tinted hero ring with plain-English narrative + recommended action, 10-axis polar fingerprint (baseline ring on the outer rim, drift dents inward), baseline-vs-current window cards, ranked per-dimension breakdown with score × weight × contribution bars, baseline-vs-current hour-of-day and day-of-week distribution overlays, rolling-KS change-point timeline with onset pulse, and counterparty contribution table flagging new entrants and sudden-activity spikes. Portfolio mode adds a 6-tile summary banner + a ranked left rail that swaps the active report on click |
 | `/validation` | Model-validation console: verdict banner, six headline tiles (ROC AUC · avg precision · recommended cut · recall/alert-rate @ rec · base rate, each with Δ-vs-canonical when you tune), an interactive confusion matrix + ROC curve + scrubable metric-sweep (precision/recall/Fβ/alert-rate vs threshold), ranked per-detector discrimination bars, the scored-account ledger with per-row outcome chips, and a live weight-tuning panel that re-validates a hypothesis |
 | `/cases` | Kanban-style queue: 6-tile stats banner, priority swim lanes (critical/high/medium), low-priority collapsed list, search + assignee + SLA filters, live nav badge |
