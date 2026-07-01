@@ -11,6 +11,8 @@ import type {
   ChatStatus,
   ClusterDigest,
   Community,
+  CompassLens,
+  CompassQuestionSummary,
   EchoCluster,
   EchoMergeResult,
   EchoReport,
@@ -367,4 +369,33 @@ export const api = {
     const qs = q.toString();
     return `${BASE}/spark/export.md${qs ? `?${qs}` : ""}`;
   },
+
+  compassQuestions: () =>
+    j<CompassQuestionSummary[]>(`/compass/questions`),
+
+  compassCreate: (text: string) =>
+    j<CompassLens>(`/compass/questions`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
+  compassLens: (id: number) =>
+    j<CompassLens>(`/compass/questions/${id}`),
+
+  compassMarkRead: (id: number, noteId: number) =>
+    j<CompassLens>(`/compass/questions/${id}/read`, {
+      method: "POST",
+      body: JSON.stringify({ note_id: noteId }),
+    }),
+
+  compassUnmarkRead: (id: number, noteId: number) =>
+    j<CompassLens>(`/compass/questions/${id}/read/${noteId}`, {
+      method: "DELETE",
+    }),
+
+  compassDelete: (id: number) =>
+    j<void>(`/compass/questions/${id}`, { method: "DELETE" }),
+
+  compassExportUrl: (id: number) =>
+    `${BASE}/compass/questions/${id}/export.md`,
 };

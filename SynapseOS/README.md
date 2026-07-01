@@ -3,9 +3,10 @@
 > **Watch your brain organize itself.**
 > Notes auto-link via embedding-based synapses. Clusters and their names
 > emerge automatically. Isolated thoughts surface as rescuable orphans.
-> **Spark** then turns the gaps in your graph into a queue of concrete
-> next-note drafts — title, opener, tags, predicted cluster, predicted
-> synapses — that you click to commit.
+> **Spark** turns the gaps in your graph into a queue of concrete
+> next-note drafts you click to commit. **Compass** (new) pins a research
+> question, re-ranks the vault against it, and grows a citation-stitched
+> working answer as you mark notes read.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -30,6 +31,93 @@ Every PKM tool falls into one of two camps:
 SynapseOS splits the difference. Links are automatic *and* inspectable.
 You can see every synapse, why it exists (cosine similarity), tune the
 threshold live, and watch your topical clusters discover themselves.
+
+---
+
+## What's new — Compass (Day 69)
+
+Every other surface is **observational** (Atlas, Pulse, Chronicle,
+Tensions, Echoes, Synthesis) or **generative-writing** (Spark, Distill).
+**Compass is generative-reading.** Pin one research question; the entire
+vault re-ranks against it; a citation-stitched working answer assembles
+beneath you as you mark notes read for *this* question (a per-question
+read marker, not the global `last_seen_at`).
+
+The chat surface answers one shot and forgets. A trail captures a path
+you've already walked. **Compass is the in-flight research session** —
+the surface that's open while you're actually trying to figure
+something out.
+
+**Per-note relevance** = `0.65·cosine + 0.25·lexical + 0.10·title_hit`,
+floored at `0.06` to keep noise off the queue. Each in-lens note ships
+with its **best excerpt** (the body sentence with the highest content-
+word overlap with the question), a **relevance dial**, and an
+**info_gain** score (`relevance · (read ? 0.30 : 1.00)`) that drives
+the queue order — re-skims still surface, just at lower priority.
+
+**Coverage** is **mass-weighted**, not count-weighted: marking the
+top-1 most-relevant note read can jump coverage from 0 → 35% if that
+note dominates the relevance distribution. That's the right framing —
+you've answered the question, not "read 1/N notes."
+
+**Working answer** is the headline surface. It's **extractive on
+purpose**: every line is verbatim from one of your notes, every claim
+carries an inline `[n]` citation that resolves back to a clickable note
+jump, and the same `(question, reads)` always produces the same answer.
+No LLM call; nothing to hallucinate.
+
+**Sub-themes** mine the top distinctive content-words across the
+most-relevant slice (excluding the question's own words and a small
+stoplist) and surface them as chips with **per-term coverage** —
+*which* sub-aspect you've answered vs. which is still cold.
+
+**Frontiers** is the "read next" panel: the top 3 un-read notes by
+info_gain, separate from the full queue so the next decision is one
+click.
+
+### Compass API
+
+```
+GET    /compass/questions                      # list with coverage %
+POST   /compass/questions      {text}          # create → returns full lens
+GET    /compass/questions/{id}                 # full lens
+POST   /compass/questions/{id}/read {note_id}  # mark read → returns lens
+DELETE /compass/questions/{id}/read/{note_id}  # unread → returns lens
+DELETE /compass/questions/{id}                 # hard-delete + cascade reads
+GET    /compass/questions/{id}/export.md       # portable working-answer brief
+```
+
+Sample lens payload:
+
+```json
+{
+  "question_id": 1,
+  "question_text": "how does memory compound in a second brain?",
+  "in_lens": 7,
+  "relevance_mass_total": 1.28,
+  "relevance_mass_read": 0.50,
+  "coverage_pct": 38.8,
+  "notes": [
+    {
+      "note_id": 11,
+      "title": "Spaced repetition for ideas",
+      "snippet": "Anki works for facts; ideas need a different cadence.",
+      "relevance": 0.24, "info_gain": 0.24,
+      "cosine": 0.18, "lexical": 0.10, "title_hit": true,
+      "read": true, "read_at": "2026-06-30T03:42:11+00:00",
+      "cluster_name": "Memory", "cluster_color": "#22d3ee"
+    }
+  ],
+  "frontiers": [ { "note_id": 7, "title": "Second brain, not second inbox", "..." } ],
+  "subquestions": [
+    { "term": "system", "note_count": 4, "covered": 1, "coverage_pct": 25.0 }
+  ],
+  "working_answer": "Anki works for facts; ideas need a different cadence. [1] A knowledge system that only intakes but never resurfaces is a landfill. [2]",
+  "citations": [
+    { "ref": 1, "note_id": 11, "title": "Spaced repetition for ideas", "excerpt": "...", "relevance": 0.24 }
+  ]
+}
+```
 
 ---
 

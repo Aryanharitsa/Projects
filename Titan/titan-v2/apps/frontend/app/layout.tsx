@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/aml", label: "AML Console" },
   { href: "/network", label: "Network" },
   { href: "/lineage", label: "Lineage" },
+  { href: "/precedent", label: "Precedent" },
   { href: "/drift", label: "Drift" },
   { href: "/validation", label: "Validation" },
   { href: "/cases", label: "Cases", pill: "cases" },
