@@ -5908,3 +5908,597 @@ def render_echo_empty(
         """,
         unsafe_allow_html=True,
     )
+
+
+# ==========================================================================
+# Prism — Persona-Aware Risk Lens (Day 71)
+# ==========================================================================
+_PRISM_CSS = """
+<style>
+:root {
+  --prism-safe:    #7ED9A5;
+  --prism-caut:    #F6C560;
+  --prism-high:    #F58F5B;
+  --prism-dgr:     #EF6D7A;
+  --prism-line:    rgba(255,255,255,0.08);
+  --prism-glass:   rgba(255,255,255,0.03);
+}
+.ws-prism-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 168px 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 24px;
+  margin: 8px 0 18px 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 60% 70% at 18% 10%, var(--glow), transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid var(--hue, #3DA9FC);
+  box-shadow: 0 10px 36px var(--glow, rgba(61,169,252,0.20));
+}
+.ws-prism-ring {
+  position: relative;
+  width: 168px; height: 168px; border-radius: 50%;
+  background:
+    conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  display: grid; place-items: center;
+  box-shadow: 0 0 30px var(--glow, rgba(61,169,252,0.22));
+}
+.ws-prism-ring::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-prism-ring-inner {
+  position: relative; z-index: 1;
+  display: grid; place-items: center;
+  text-align: center;
+}
+.ws-prism-persona-glyph {
+  font-size: 40px; line-height: 1;
+}
+.ws-prism-persona-name {
+  font-size: 12px; color: #E6E9F2; margin-top: 6px; font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ws-prism-persona-band {
+  font-size: 11px; color: var(--hue); margin-top: 4px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-prism-hero-body { display: flex; flex-direction: column; gap: 6px; }
+.ws-prism-pill {
+  align-self: flex-start;
+  display: inline-flex; gap: 8px; align-items: center;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--pill-bg, rgba(61,169,252,0.14));
+  border: 1px solid var(--hue, #3DA9FC);
+  color: var(--hue, #3DA9FC);
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-prism-hero-title {
+  font-size: 22px; font-weight: 800; color: #E6E9F2;
+  letter-spacing: -0.02em; margin-top: 2px;
+}
+.ws-prism-hero-blurb {
+  font-size: 13px; color: #B0B7CC; margin: 4px 0 6px 0; line-height: 1.4;
+}
+.ws-prism-hero-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+}
+.ws-prism-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #C9CFDD; font-size: 11px; font-weight: 600;
+}
+.ws-prism-chip b { color: #E6E9F2; }
+.ws-prism-mood {
+  display: grid; place-items: center;
+  padding: 12px 18px; border-radius: 14px;
+  background: var(--glow, rgba(61,169,252,0.12));
+  border: 1px solid var(--hue, #3DA9FC);
+  min-width: 140px;
+}
+.ws-prism-mood-glyph { font-size: 28px; }
+.ws-prism-mood-name  { font-size: 12px; color: var(--hue); font-weight: 800;
+                       text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+.ws-prism-mood-note  { font-size: 11px; color: #C9CFDD; margin-top: 2px; }
+
+/* Persona chip strip — click one to switch persona. */
+.ws-prism-personas {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin: 8px 0 16px 0;
+}
+.ws-prism-persona-card {
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--prism-glass);
+  border: 1px solid var(--prism-line);
+  display: flex; flex-direction: column; gap: 4px;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.ws-prism-persona-card.active {
+  border-color: var(--hue, #3DA9FC);
+  background:
+    radial-gradient(ellipse 60% 80% at 30% 20%, var(--glow), transparent 70%),
+    var(--prism-glass);
+  box-shadow: 0 6px 22px var(--glow, rgba(61,169,252,0.18));
+}
+.ws-prism-persona-glyph-sm { font-size: 22px; line-height: 1; }
+.ws-prism-persona-label-sm { font-size: 12px; color: #E6E9F2; font-weight: 700; }
+.ws-prism-persona-alpha    { font-size: 10px; color: #8892A6; font-weight: 600; }
+.ws-prism-persona-blurb-sm { font-size: 11px; color: #C9CFDD; line-height: 1.35; }
+
+/* Watched points grid — one card per point with base vs persona rings. */
+.ws-prism-points {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px; margin-top: 10px;
+}
+.ws-prism-point {
+  padding: 14px 16px; border-radius: 16px;
+  background: var(--prism-glass);
+  border: 1px solid var(--prism-line);
+  display: flex; flex-direction: column; gap: 10px;
+  border-left: 4px solid var(--hue, #3DA9FC);
+}
+.ws-prism-point-header {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
+.ws-prism-point-label {
+  font-size: 14px; font-weight: 700; color: #E6E9F2;
+}
+.ws-prism-point-delta {
+  font-size: 12px; font-weight: 800;
+  padding: 2px 10px; border-radius: 999px;
+  background: var(--pill-bg, rgba(255,255,255,0.06));
+  color: var(--hue, #C9CFDD);
+  border: 1px solid var(--hue, rgba(255,255,255,0.10));
+}
+.ws-prism-dual-rings {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  align-items: center;
+}
+.ws-prism-ring-sm {
+  position: relative;
+  width: 90px; height: 90px; border-radius: 50%;
+  background:
+    conic-gradient(var(--hue) calc(var(--pct,0) * 1%), rgba(255,255,255,0.06) 0);
+  display: grid; place-items: center;
+  margin: 0 auto;
+}
+.ws-prism-ring-sm::after {
+  content: "";
+  position: absolute; inset: 8px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-prism-ring-sm-inner {
+  position: relative; z-index: 1;
+  text-align: center;
+}
+.ws-prism-ring-sm-score {
+  font-size: 22px; font-weight: 800; color: #E6E9F2; line-height: 1;
+}
+.ws-prism-ring-sm-tag { font-size: 10px; color: #8892A6; margin-top: 2px;
+                        text-transform: uppercase; letter-spacing: 0.08em; }
+.ws-prism-ring-sm-cap { font-size: 10px; color: #C9CFDD; margin-top: 4px; font-weight: 600; }
+
+.ws-prism-headline { font-size: 12px; color: #B0B7CC; line-height: 1.4; }
+
+/* Factor delta bars — one row per factor, base + persona bar side by side. */
+.ws-prism-factors { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ws-prism-factor-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px;
+  padding: 6px 8px; border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--hue, rgba(255,255,255,0.10));
+}
+.ws-prism-factor-label { font-size: 11px; color: #E6E9F2; font-weight: 600; }
+.ws-prism-factor-reason { font-size: 10px; color: #8892A6; margin-top: 2px; }
+.ws-prism-factor-values {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: 11px; font-weight: 700; color: #C9CFDD;
+}
+.ws-prism-factor-arrow { color: var(--hue, #C9CFDD); }
+.ws-prism-factor-delta {
+  font-weight: 800; color: var(--hue, #C9CFDD);
+}
+.ws-prism-factor-bar {
+  height: 4px; border-radius: 4px; background: rgba(255,255,255,0.06);
+  overflow: hidden; margin-top: 6px; position: relative;
+}
+.ws-prism-factor-bar > span {
+  display: block; height: 100%;
+  background: var(--hue, #3DA9FC);
+}
+.ws-prism-extras {
+  margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+  background: rgba(239,109,122,0.08); border: 1px solid rgba(239,109,122,0.35);
+}
+.ws-prism-extras-title {
+  font-size: 10px; color: #EF6D7A; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.10em; margin-bottom: 4px;
+}
+.ws-prism-extras-item { font-size: 11px; color: #FDDDD9; margin: 2px 0; }
+.ws-prism-extras-item small { color: #C9CFDD; }
+
+/* Lessons + checklist */
+.ws-prism-lessons { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.ws-prism-lesson {
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--prism-glass);
+  border-left: 3px solid var(--hue, #7ED9A5);
+  font-size: 12px; color: #E6E9F2; line-height: 1.45;
+}
+.ws-prism-checklist {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px; margin-top: 8px;
+}
+.ws-prism-check {
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--prism-glass);
+  border: 1px solid var(--prism-line);
+  font-size: 12px; color: #E6E9F2; line-height: 1.4;
+  display: flex; gap: 8px; align-items: flex-start;
+}
+.ws-prism-check-box {
+  flex-shrink: 0; width: 14px; height: 14px; border-radius: 4px;
+  border: 1.5px solid #667080; margin-top: 2px;
+}
+.ws-prism-section-title {
+  font-size: 13px; font-weight: 800; color: #E6E9F2;
+  margin: 14px 0 6px 0; text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+/* Cross-persona matrix */
+.ws-prism-matrix {
+  margin-top: 14px; overflow-x: auto;
+  padding: 12px; border-radius: 14px;
+  background: var(--prism-glass); border: 1px solid var(--prism-line);
+}
+.ws-prism-matrix-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.ws-prism-matrix-table th, .ws-prism-matrix-table td {
+  padding: 8px 10px; text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ws-prism-matrix-table th {
+  color: #C9CFDD; font-weight: 700; text-transform: uppercase;
+  font-size: 10px; letter-spacing: 0.08em;
+}
+.ws-prism-matrix-table td:first-child, .ws-prism-matrix-table th:first-child {
+  text-align: left;
+}
+.ws-prism-matrix-row-label { color: #E6E9F2; font-weight: 700; }
+.ws-prism-matrix-base { color: #C9CFDD; font-weight: 600; }
+.ws-prism-matrix-cell {
+  display: inline-block; padding: 3px 8px; border-radius: 8px;
+  font-weight: 800; min-width: 44px;
+}
+.ws-prism-matrix-agg {
+  background: rgba(255,255,255,0.03); font-weight: 800;
+}
+.ws-prism-matrix-aggcell {
+  color: #E6E9F2; font-weight: 800;
+}
+
+.ws-prism-empty {
+  padding: 24px; border-radius: 16px;
+  background: var(--prism-glass); border: 1px dashed var(--prism-line);
+  text-align: center;
+}
+.ws-prism-empty-title {
+  font-size: 14px; font-weight: 800; color: #E6E9F2; margin-bottom: 6px;
+}
+</style>
+"""
+
+
+def _prism_hue(band: str) -> Tuple[str, str, str]:
+    """(main hue, glow, pill background) for a band."""
+    hue_map = {
+        "Safe":      ("#7ED9A5", "rgba(126,217,165,0.22)", "rgba(126,217,165,0.14)"),
+        "Caution":   ("#F6C560", "rgba(246,197,96,0.22)",  "rgba(246,197,96,0.14)"),
+        "High Risk": ("#F58F5B", "rgba(245,143,91,0.24)",  "rgba(245,143,91,0.14)"),
+        "Danger":    ("#EF6D7A", "rgba(239,109,122,0.26)", "rgba(239,109,122,0.14)"),
+    }
+    return hue_map.get(band, hue_map["Caution"])
+
+
+def _prism_advisory_glyph(level: str) -> str:
+    return {"All clear": "🟢", "Caution": "🟡",
+            "Elevated": "🟠", "Critical": "🔴"}.get(level, "🟡")
+
+
+def _prism_delta_hue(delta: int) -> Tuple[str, str, str]:
+    """Hue for the delta pill — coral when the persona feels worse, lime when better."""
+    if delta <= -8:
+        return ("#EF6D7A", "rgba(239,109,122,0.20)", "rgba(239,109,122,0.14)")
+    if delta <= -3:
+        return ("#F58F5B", "rgba(245,143,91,0.20)", "rgba(245,143,91,0.14)")
+    if delta >= 5:
+        return ("#7ED9A5", "rgba(126,217,165,0.20)", "rgba(126,217,165,0.14)")
+    return ("#C9CFDD", "rgba(255,255,255,0.08)", "rgba(255,255,255,0.06)")
+
+
+def render_prism(report, matrix: dict | None = None) -> None:
+    """Render a `PrismReport` — hero, persona chip strip, watched-point cards,
+    lessons, checklist, and (optionally) a cross-persona matrix."""
+    if report is None:
+        render_prism_empty()
+        return
+
+    st.markdown(_PRISM_CSS, unsafe_allow_html=True)
+
+    # ---- Hero ------------------------------------------------------------
+    persona_hue = "#B4A0FF"
+    persona_glow = "rgba(180,160,255,0.22)"
+    persona_pill_bg = "rgba(180,160,255,0.14)"
+    # Colour the hero by the aggregate persona advisory (worst point's rung).
+    adv_hue, adv_glow, adv_pill = _prism_hue(
+        {"All clear": "Safe", "Caution": "Caution",
+         "Elevated": "High Risk", "Critical": "Danger"}.get(report.advisory, "Caution")
+    )
+
+    avg_pct = max(0, min(100, report.avg_persona_score))
+    st.markdown(
+        f"""
+        <div class="ws-prism-hero" style="--hue:{adv_hue};--glow:{adv_glow};">
+          <div class="ws-prism-ring" style="--hue:{adv_hue};--pct:{avg_pct};--glow:{adv_glow};">
+            <div class="ws-prism-ring-inner">
+              <div class="ws-prism-persona-glyph">{_esc(report.persona_icon)}</div>
+              <div class="ws-prism-persona-name">{_esc(report.persona_label)}</div>
+              <div class="ws-prism-persona-band">{report.avg_persona_score}/100</div>
+            </div>
+          </div>
+          <div class="ws-prism-hero-body">
+            <div class="ws-prism-pill" style="--pill-bg:{adv_pill};--hue:{adv_hue};">
+              PRISM · {_esc(report.advisory).upper()}
+            </div>
+            <div class="ws-prism-hero-title">{_esc(report.headline)}</div>
+            <div class="ws-prism-hero-blurb">{_esc(report.persona_blurb)}</div>
+            <div class="ws-prism-hero-chips">
+              <span class="ws-prism-chip">watch-list avg <b>base {report.avg_base_score}</b> → <b>persona {report.avg_persona_score}</b></span>
+              <span class="ws-prism-chip">route α <b>{report.route_alpha:.1f}</b></span>
+              <span class="ws-prism-chip">broadcast every <b>{report.broadcast_minutes} min</b></span>
+              <span class="ws-prism-chip">Safe ≥{report.band_thresholds[0]} · Caution ≥{report.band_thresholds[1]} · High Risk ≥{report.band_thresholds[2]}</span>
+              {"<span class='ws-prism-chip'>advisory <b>+" + str(report.advisory_bump_level) + " rung</b> for this persona</span>" if report.advisory_bump_level > 0 else ""}
+            </div>
+          </div>
+          <div class="ws-prism-mood" style="--hue:{adv_hue};--glow:{adv_glow};">
+            <div class="ws-prism-mood-glyph">{_prism_advisory_glyph(report.advisory)}</div>
+            <div class="ws-prism-mood-name">{_esc(report.advisory)}</div>
+            <div class="ws-prism-mood-note">worst-of {len(report.points)} points</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---- Watched-point cards --------------------------------------------
+    st.markdown('<div class="ws-prism-section-title">Watched points — base vs persona</div>',
+                unsafe_allow_html=True)
+
+    if not report.points:
+        st.info("No watched points to score under this persona.")
+    else:
+        cards_html: List[str] = ['<div class="ws-prism-points">']
+        for p in report.points:
+            base_hue, base_glow, _ = _prism_hue(p.base_band)
+            pers_hue, pers_glow, pers_pill = _prism_hue(p.persona_band)
+            d_hue, d_glow, d_pill = _prism_delta_hue(p.delta)
+            base_pct = max(0, min(100, p.base_score))
+            pers_pct = max(0, min(100, p.persona_score))
+            arrow_txt = "→" if p.delta == 0 else ("↑" if p.delta > 0 else "↓")
+
+            # Factor delta rows
+            factor_rows: List[str] = []
+            for f in p.factors:
+                # Colour keyed to which way the delta moved.
+                if f.delta < -1:
+                    fhue = "#EF6D7A"
+                elif f.delta > 1:
+                    fhue = "#7ED9A5"
+                else:
+                    fhue = "#C9CFDD"
+                delta_disp = f"{f.delta:+.1f}"
+                factor_rows.append(f"""
+                <div class="ws-prism-factor-row" style="--hue:{fhue};">
+                  <div>
+                    <div class="ws-prism-factor-label">{_esc(f.label)}</div>
+                    <div class="ws-prism-factor-reason">{_esc(f.reason or '')}</div>
+                  </div>
+                  <div class="ws-prism-factor-values">
+                    <span>{f.base_impact:+.1f}</span>
+                    <span class="ws-prism-factor-arrow">→</span>
+                    <span>{f.persona_impact:+.1f}</span>
+                    <span class="ws-prism-factor-delta">({delta_disp})</span>
+                  </div>
+                </div>
+                """)
+            factors_block = ('<div class="ws-prism-factors">' + "".join(factor_rows) + "</div>"
+                             if factor_rows else "")
+
+            # Extras block
+            extras_block = ""
+            if p.extras:
+                items = "".join(
+                    f'<div class="ws-prism-extras-item">• {_esc(e.label)} '
+                    f'<small>({e.persona_impact:+.1f} · {_esc(e.reason or "")})</small></div>'
+                    for e in p.extras
+                )
+                extras_block = f"""
+                <div class="ws-prism-extras">
+                  <div class="ws-prism-extras-title">Persona-only extras</div>
+                  {items}
+                </div>
+                """
+
+            cards_html.append(f"""
+            <div class="ws-prism-point" style="--hue:{pers_hue};--glow:{pers_glow};">
+              <div class="ws-prism-point-header">
+                <div class="ws-prism-point-label">{_esc(p.label)}</div>
+                <div class="ws-prism-point-delta" style="--hue:{d_hue};--pill-bg:{d_pill};">
+                  {p.delta:+d} pts {arrow_txt}
+                </div>
+              </div>
+              <div class="ws-prism-dual-rings">
+                <div>
+                  <div class="ws-prism-ring-sm" style="--hue:{base_hue};--pct:{base_pct};">
+                    <div class="ws-prism-ring-sm-inner">
+                      <div class="ws-prism-ring-sm-score">{p.base_score}</div>
+                      <div class="ws-prism-ring-sm-tag">Base</div>
+                    </div>
+                  </div>
+                  <div class="ws-prism-ring-sm-cap" style="text-align:center;">{_esc(p.base_band)}</div>
+                </div>
+                <div>
+                  <div class="ws-prism-ring-sm" style="--hue:{pers_hue};--pct:{pers_pct};">
+                    <div class="ws-prism-ring-sm-inner">
+                      <div class="ws-prism-ring-sm-score">{p.persona_score}</div>
+                      <div class="ws-prism-ring-sm-tag">Persona</div>
+                    </div>
+                  </div>
+                  <div class="ws-prism-ring-sm-cap" style="color:{pers_hue};text-align:center;">
+                    {_esc(p.persona_band)} · {_esc(p.advisory_level)}
+                  </div>
+                </div>
+              </div>
+              <div class="ws-prism-headline">{_esc(p.headline)}</div>
+              {factors_block}
+              {extras_block}
+            </div>
+            """)
+        cards_html.append("</div>")
+        st.markdown("".join(cards_html), unsafe_allow_html=True)
+
+    # ---- Lessons ---------------------------------------------------------
+    st.markdown('<div class="ws-prism-section-title">Lessons for this persona</div>',
+                unsafe_allow_html=True)
+    lesson_html: List[str] = ['<div class="ws-prism-lessons">']
+    for l in report.lessons:
+        # Colour the left rail from the leading glyph.
+        if l.startswith(("🔴", "🆘")):
+            hue = "#EF6D7A"
+        elif l.startswith(("🟠", "📉", "⚠️", "🚑", "⏱")):
+            hue = "#F58F5B"
+        elif l.startswith(("🟢", "🛡", "✅")):
+            hue = "#7ED9A5"
+        else:
+            hue = "#7EB6EF"
+        lesson_html.append(
+            f'<div class="ws-prism-lesson" style="--hue:{hue};">{_esc(l)}</div>'
+        )
+    lesson_html.append("</div>")
+    st.markdown("".join(lesson_html), unsafe_allow_html=True)
+
+    # ---- Checklist -------------------------------------------------------
+    if report.checklist:
+        st.markdown('<div class="ws-prism-section-title">Pre-departure checklist</div>',
+                    unsafe_allow_html=True)
+        chk_html: List[str] = ['<div class="ws-prism-checklist">']
+        for item in report.checklist:
+            chk_html.append(f"""
+            <div class="ws-prism-check">
+              <div class="ws-prism-check-box"></div>
+              <div>{_esc(item)}</div>
+            </div>
+            """)
+        chk_html.append("</div>")
+        st.markdown("".join(chk_html), unsafe_allow_html=True)
+
+    # ---- Cross-persona matrix -------------------------------------------
+    if matrix and matrix.get("rows"):
+        st.markdown('<div class="ws-prism-section-title">Cross-persona matrix — same corridor, different traveller</div>',
+                    unsafe_allow_html=True)
+        cols = matrix["columns"]
+        header = "".join(
+            f"<th>{_esc(c['icon'])}<br><span style='font-size:10px;'>{_esc(c['label'])}</span></th>"
+            for c in cols
+        )
+        rows_html: List[str] = []
+        for r in matrix["rows"]:
+            base = r["base_score"]
+            cells_html = []
+            for c in r["cells"]:
+                chue, _, cpill = _prism_hue(c["persona_band"])
+                cells_html.append(
+                    f'<td><span class="ws-prism-matrix-cell" '
+                    f'style="background:{cpill};color:{chue};">'
+                    f'{c["persona_score"]}</span></td>'
+                )
+            rows_html.append(
+                f'<tr><td class="ws-prism-matrix-row-label">{_esc(r["label"])}</td>'
+                f'<td class="ws-prism-matrix-base">{base}</td>'
+                + "".join(cells_html) + "</tr>"
+            )
+        # Aggregate row
+        agg_map = {c["persona_id"]: c["avg_persona_score"] for c in matrix["column_aggregates"]}
+        agg_cells = []
+        for c in cols:
+            v = agg_map.get(c["id"], 0)
+            band = "Safe" if v >= 80 else "Caution" if v >= 60 else "High Risk" if v >= 35 else "Danger"
+            chue, _, cpill = _prism_hue(band)
+            agg_cells.append(
+                f'<td><span class="ws-prism-matrix-cell" '
+                f'style="background:{cpill};color:{chue};">{v}</span></td>'
+            )
+        rows_html.append(
+            '<tr class="ws-prism-matrix-agg"><td class="ws-prism-matrix-row-label">Watch-list avg</td>'
+            '<td class="ws-prism-matrix-aggcell">—</td>' + "".join(agg_cells) + "</tr>"
+        )
+        table_html = f"""
+        <div class="ws-prism-matrix">
+          <table class="ws-prism-matrix-table">
+            <thead>
+              <tr><th>Point</th><th>Base</th>{header}</tr>
+            </thead>
+            <tbody>
+              {"".join(rows_html)}
+            </tbody>
+          </table>
+        </div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)
+
+        best = matrix.get("best_persona_id")
+        worst = matrix.get("worst_persona_id")
+        if best and worst:
+            b = next((c for c in matrix["column_aggregates"] if c["persona_id"] == best), None)
+            w = next((c for c in matrix["column_aggregates"] if c["persona_id"] == worst), None)
+            if b and w:
+                st.caption(
+                    f"Best under this watch-list: **{b['persona_icon']} {b['persona_label']}** "
+                    f"({b['avg_persona_score']}) · "
+                    f"toughest for **{w['persona_icon']} {w['persona_label']}** "
+                    f"({w['avg_persona_score']})."
+                )
+
+
+def render_prism_empty(
+    hint: str = (
+        "Prism re-prices every watched point through one of six traveller personas — "
+        "solo woman, family with kids, senior, business, adventure, or backpacker group. "
+        "Pick a persona above to see how the same corridor reads for someone else."
+    ),
+) -> None:
+    st.markdown(_PRISM_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="ws-prism-empty">
+          <div class="ws-prism-empty-title">Prism idle</div>
+          <div>{_esc(hint)}</div>
+          <small style="color:#8892A6;">
+          Prism is a lens, not new physics. Every number traces back to
+          <code>safety.compute_safety</code> — Prism just re-weights the same
+          factor ledger under the chosen persona. Pure-Python, zero new deps.
+          </small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

@@ -33,6 +33,7 @@ from theme import (
     render_refuge, render_refuge_empty,
     render_tempo, render_tempo_empty,
     render_echo, render_echo_empty,
+    render_prism, render_prism_empty,
 )
 import companion as cp
 import itinerary as itn
@@ -43,6 +44,7 @@ import stays as sts
 import refuge as rfg
 import tempo as tmp
 import echo as ech
+import prism as pr
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -335,7 +337,7 @@ if role == "Tourist App":
     tab_labels = [
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
-        "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo",
+        "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -2593,6 +2595,160 @@ if role == "Tourist App":
                     st.session_state.pop("echo_demo_trip", None)
                     st.session_state.pop("echo_demo_broadcasts", None)
                     st.rerun()
+
+    # ---------------- Prism — Persona-Aware Risk Lens (Day 71)
+    # Re-prices every watched point under a chosen traveller persona.  Zero
+    # new physics — the lens rescales the same factor ledger `safety.py`
+    # already emits (geofence / incidents / late-night / help-POI), then
+    # adds two persona-only extras (remote-help penalty, off-hour penalty).
+    with tabs[18]:
+        st.subheader("Prism — Persona-Aware Risk Lens")
+        st.caption(
+            "Every prior WaySafe surface scores the corridor for the *average* "
+            "traveller. Prism re-prices it for **who's actually walking it** — "
+            "solo woman, family with kids, senior, business, adventure, or "
+            "backpacker group. Same physics, six lenses. Zero new measurements."
+        )
+
+        # Persona-picker strip.  Uses a horizontal radio so the row is a
+        # single Streamlit widget (avoids the button-race that a chip grid
+        # would introduce on re-run).
+        persona_ids = list(pr.PERSONAS.keys())
+        persona_labels = [
+            f"{pr.PERSONAS[pid].icon}  {pr.PERSONAS[pid].label}"
+            for pid in persona_ids
+        ]
+        if "prism_persona_id" not in st.session_state:
+            st.session_state.prism_persona_id = pr.DEFAULT_PERSONA
+        default_idx = persona_ids.index(st.session_state.prism_persona_id)
+        picked_label = st.radio(
+            "Traveller persona",
+            persona_labels,
+            index=default_idx,
+            horizontal=True,
+            key="prism_persona_radio",
+            help=(
+                "Rescales the base safety score under the selected persona. "
+                "Nothing new is measured — the same geofence / incident / "
+                "help-POI ledger is re-weighted."
+            ),
+        )
+        selected_pid = persona_ids[persona_labels.index(picked_label)]
+        st.session_state.prism_persona_id = selected_pid
+        persona = pr.PERSONAS[selected_pid]
+
+        # Watched-point roster.  Default = current location + top 3 named
+        # POIs within 6 km of the user.  Persist so the analyst can pick
+        # once and re-tune the persona to see the deltas.
+        if "prism_watched" not in st.session_state:
+            seed: list[dict] = [
+                {"kind": "stay", "label": "Current location",
+                 "lat": float(my["lat"]), "lon": float(my["lon"])},
+            ]
+            if not poi_df.empty:
+                picked = 0
+                for _, row in poi_df.iterrows():
+                    if picked >= 3:
+                        break
+                    name = str(row.get("name") or "").strip()
+                    if not name:
+                        continue
+                    try:
+                        plat = float(row["lat"]); plon = float(row["lon"])
+                    except Exception:
+                        continue
+                    if haversine_km(float(my["lat"]), float(my["lon"]), plat, plon) > 6.0:
+                        continue
+                    seed.append({"kind": "poi", "label": name, "lat": plat, "lon": plon})
+                    picked += 1
+            st.session_state.prism_watched = seed
+
+        # UI for adding a custom point + reset button.
+        with st.expander("Watched points", expanded=False):
+            st.caption(
+                "The roster Prism scores under the selected persona. Add "
+                "any lat/lon; reset to defaults if the list drifts."
+            )
+            for i, w in enumerate(st.session_state.prism_watched):
+                cols = st.columns([4, 2, 2, 1])
+                cols[0].markdown(f"**{w['label']}**")
+                cols[1].markdown(f"`{float(w['lat']):.4f}`")
+                cols[2].markdown(f"`{float(w['lon']):.4f}`")
+                if cols[3].button("Remove", key=f"prism_rm_{i}"):
+                    st.session_state.prism_watched.pop(i)
+                    st.rerun()
+            with st.form(key="prism_add_form", clear_on_submit=True):
+                a, b, c = st.columns([3, 2, 2])
+                new_label = a.text_input("Label", value="", placeholder="e.g. Baga Beach")
+                new_lat = b.number_input("Lat", value=float(my["lat"]),
+                                         format="%.5f", key="prism_new_lat")
+                new_lon = c.number_input("Lon", value=float(my["lon"]),
+                                         format="%.5f", key="prism_new_lon")
+                if st.form_submit_button("Add point"):
+                    label = new_label.strip() or f"({new_lat:.3f}, {new_lon:.3f})"
+                    st.session_state.prism_watched.append({
+                        "kind": "custom", "label": label,
+                        "lat": float(new_lat), "lon": float(new_lon),
+                    })
+                    st.rerun()
+            if st.button("Reset to defaults", key="prism_reset"):
+                st.session_state.pop("prism_watched", None)
+                st.rerun()
+
+        watched = st.session_state.get("prism_watched", [])
+        if not watched:
+            render_prism_empty(
+                "No watched points on the roster. Open the expander above "
+                "and add at least one lat/lon (your stay + a destination is "
+                "a good starting pair)."
+            )
+        else:
+            inc_rec = inc_df.to_dict("records") if not inc_df.empty else []
+            poi_rec = poi_df.to_dict("records") if not poi_df.empty else []
+            now = datetime.utcnow()
+            report = pr.compute_prism_report(
+                watched, persona, inc_rec, GEOFENCES, poi_rec, now=now,
+            )
+
+            show_matrix = st.toggle(
+                "Show cross-persona matrix",
+                value=True,
+                key="prism_show_matrix",
+                help=(
+                    "Score every watched point under EVERY persona side by "
+                    "side. Answers 'who does this corridor work for?'"
+                ),
+            )
+            matrix = None
+            if show_matrix:
+                matrix = pr.compute_persona_matrix(
+                    watched, inc_rec, GEOFENCES, poi_rec, now=now,
+                )
+            render_prism(report, matrix=matrix)
+
+            st.markdown("---")
+            colj, colm = st.columns(2)
+            with colj:
+                st.download_button(
+                    "Download JSON (waysafe.prism.v1)",
+                    data=report.to_json(),
+                    file_name=f"waysafe_prism_{persona.id}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with colm:
+                st.download_button(
+                    "Download Markdown brief",
+                    data=report.to_markdown(),
+                    file_name=f"waysafe_prism_{persona.id}.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+            t_md, t_json = st.tabs(["Markdown preview", "JSON preview"])
+            with t_md:
+                st.markdown(report.to_markdown())
+            with t_json:
+                st.code(report.to_json(indent=2), language="json")
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")
