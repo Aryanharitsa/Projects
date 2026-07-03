@@ -12,7 +12,6 @@ import {
   ensureInterviewsForHires,
   interviewsByKey,
   listOutcomes,
-  outcomeMap,
   setOutcome,
   type DimensionCalibration,
   type HindsightSummary,
@@ -360,8 +359,6 @@ function WeightDeltaBar({ d }: { d: DimensionCalibration }) {
   const maxAxis = 0.5; // weights cap visualisation at 0.5
   const cur = Math.min(maxAxis, d.currentWeight);
   const sug = Math.min(maxAxis, d.suggestedWeight);
-  const left = (Math.min(cur, sug) / maxAxis) * 100;
-  const right = (Math.max(cur, sug) / maxAxis) * 100;
   const fillStart = Math.min(cur, sug) / maxAxis * 100;
   const fillEnd = Math.max(cur, sug) / maxAxis * 100;
   const delta = d.suggestedWeight - d.currentWeight;
@@ -464,7 +461,7 @@ function HireRow({
             )}
           </div>
           {hire.outcome.note && !editing && (
-            <div className="mt-2 text-[12px] text-white/65">"{hire.outcome.note}"</div>
+            <div className="mt-2 text-[12px] text-white/65">&ldquo;{hire.outcome.note}&rdquo;</div>
           )}
         </div>
         <div className="shrink-0">
@@ -964,7 +961,7 @@ export default function HindsightPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-wider text-white/55">Tenure × recommendation band</div>
-            <div className="mt-1 text-lg font-semibold">Do "strong hires" actually stick longer?</div>
+            <div className="mt-1 text-lg font-semibold">Do &ldquo;strong hires&rdquo; actually stick longer?</div>
           </div>
           <span className="text-[11px] text-white/50">days tenure · mean perf per band</span>
         </div>

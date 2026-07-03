@@ -18,8 +18,9 @@ from app.routers.cadence import router as cadence_router
 from app.routers.crosswind import router as crosswind_router
 from app.routers.revive import router as revive_router
 from app.routers.hindsight import router as hindsight_router
+from app.routers.verdict import router as verdict_router
 
-app = FastAPI(title="Credicrew API", version="0.15.0")
+app = FastAPI(title="Credicrew API", version="0.16.0")
 
 # Allow local dev UI
 app.add_middleware(
@@ -47,6 +48,7 @@ app.include_router(cadence_router)
 app.include_router(crosswind_router)
 app.include_router(revive_router)
 app.include_router(hindsight_router)
+app.include_router(verdict_router)
 
 
 @app.get("/")
@@ -85,5 +87,8 @@ async def root() -> dict[str, str]:
         "hindsight_summary": "POST /hindsight/summary",
         "hindsight_brief": "POST /hindsight/brief",
         "hindsight_defaults": "GET /hindsight/defaults",
+        "verdict_summary": "POST /verdict/summary",
+        "verdict_portfolio": "POST /verdict/portfolio",
+        "verdict_defaults": "GET /verdict/defaults",
         "docs": "/docs",
     }
