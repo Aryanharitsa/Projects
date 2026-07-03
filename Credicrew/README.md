@@ -33,13 +33,93 @@ tells you exactly which interview dims actually predicted who succeeded
 — flags false positives the panel over-scored, false negatives it
 under-scored, and writes a 50/50 evidence-and-intent reweighting of the
 rubric so next quarter you're hiring on what worked, not what felt
-right. All from a dark, fast, single-page workspace.
+right, and now **opens the graveyard with Verdict** — every candidate
+sitting in a role's shortlist with status `passed` is re-scored,
+categorised into a seven-cell rejection ontology in strict priority
+order, rolled up into a `signalHealth` verdict on your JD spec (healthy
+/ spec_leak / overfished / mixed), and the Refinement Advisor turns the
+mix into deterministic JD tweaks — *"open the role to remote,"* *"move
+Docker to nice-to-have,"* *"split into Senior + Staff variants"* —
+each with a quantified `+N recoverable` impact chip and a confidence bar
+so you know whether the reject pile is your JD or your pool. All from a
+dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Verdict (Day 72)
+
+Every prior surface answers *who to pick.* Discover ranks the pool.
+Decision Studio ranks who interviewed best. Forecast Studio predicts
+whether a hire will close. Crosswind reroutes whom you have. Revive
+reactivates whom you passed on. Hindsight looks at hires 90 days on.
+Nobody, until now, opens the graveyard and asks the two questions every
+quarter-two recruiter opens with:
+
+> Why am I passing everyone?
+> Is my JD the reason, or is my pool the reason?
+
+**Verdict** (`/verdict`) is the diagnostic. For every candidate sitting
+in a role's shortlist with status `passed`, it re-computes
+`matchCandidate(plan, candidate)` and drops the pass into one of a
+seven-cell ontology in **strict priority order** — the first bucket a
+candidate qualifies for wins, so the mix never double-counts:
+
+1. **culture_signal** — score ≥ 65, skills ≥ 60%, seniority match,
+   location full/partial. Panel said no despite a spec fit. This is the
+   *healthy* category — it means the human signal is filtering what the
+   spec cannot.
+2. **location_gap** — spec has a location constraint (non-remote) that
+   failed hard.
+3. **seniority_over** — candidate tier > wanted tier + 1 (a Principal
+   passed on a Senior role).
+4. **seniority_under** — candidate tier < wanted tier.
+5. **skills_short** — matched < 40% of a spec that asks for at least 3
+   skills.
+6. **mixed_signal** — moderate score 40–64 with no dominant miss.
+7. **other** — default fallback.
+
+The mix rolls up into a **signalHealth** verdict on the whole spec:
+
+- **healthy** — culture_signal ≥ 40% (panel is doing the signal work,
+  spec is well-tuned).
+- **spec_leak** — location_gap + seniority_* ≥ 50% (the JD spec is
+  filtering people the sourcer should have; your recruiter is doing the
+  spec's job).
+- **overfished** — skills_short ≥ 50% (the source pool is off-spec).
+- **mixed** — no dominant pattern.
+
+The **Refinement Advisor** then turns the mix into deterministic,
+impact-quantified JD tweaks — every suggestion carries a `+N recoverable`
+chip, a confidence bar, and a one-click **Apply to JD plan** button that
+mutates the role's plan directly (without touching the JD text, so your
+copy stays yours):
+
+- `seniority_over` ≥ 3 candidates & ≥ 20% share → *split into Senior + Staff variants* (widens plan seniority).
+- `seniority_under` ≥ 3 & ≥ 30% → *tighten the minimum-seniority bar*.
+- `location_gap` ≥ 25% → *open the role to remote or hybrid*.
+- `skills_short` ≥ 40% with a common missing skill ≥ 3 rejects → *move "X" from must-have to nice-to-have*.
+- `culture_signal` ≥ 40% → *advisory only: spec is well-tuned; focus tuning on the interview loop*.
+
+The page renders a **portfolio strip** across the top (Whole portfolio +
+one card per active role, each with its own mixHealth pill and a mini
+stacked bar), a **health ring** that reads "Spec leak / Healthy /
+Overfished / Mixed" before you read the text, a horizontal **rejection
+mix bar** with a chip legend, **reason cards** per non-zero category
+listing the top-5 rejects and the driver behind each drop, a **score-band
+strip** of the reject pile (strong / solid / weak), a **skills
+most-often-missing** leaderboard sorted by count, and a **Current plan**
+sidebar so you know exactly what you're mutating before you click Apply.
+
+Verdict is deterministic — the browser and the FastAPI endpoint (`POST
+/verdict/summary` / `POST /verdict/portfolio`, physics at
+`app/services/verdict.py`) produce byte-identical mixes, health verdicts,
+and refinement suggestions from the same inputs.
 
 ---
 
