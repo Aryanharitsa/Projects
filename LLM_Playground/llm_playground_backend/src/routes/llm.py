@@ -23,6 +23,7 @@ from src import adversary as adversary_lib
 from src import showdown as showdown_lib
 from src import drift as drift_lib
 from src import surgeon as surgeon_lib
+from src import frontier as frontier_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1819,6 +1820,147 @@ def surgeon_run(surgeon_id):
         current_app.logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(exc)}), 500
     return jsonify(payload), status
+
+
+# ---------------------------------------------------------------------------
+# Frontier — Cost/Quality Pareto Explorer. Round-16.
+# For a prompt + candidate model roster, computes each model's quality vs
+# cost, filters to the Pareto frontier, kneedles the elbow, and hands back
+# three shippable recommendations (default / cheapest-at-quality-floor /
+# best-within-budget) plus the monthly $ savings each implies.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/frontier/defaults', methods=['GET'])
+def frontier_defaults():
+    return jsonify({'success': True, 'defaults': frontier_lib.defaults()})
+
+
+@llm_bp.route('/frontier/stats', methods=['GET'])
+def frontier_stats():
+    return jsonify({'success': True, 'stats': frontier_lib.stats()})
+
+
+@llm_bp.route('/frontier', methods=['GET'])
+def frontier_list():
+    args = request.args
+    rows, total = frontier_lib.list_frontiers(
+        q=(args.get('q') or '').strip() or None,
+        status=(args.get('status') or '').strip() or None,
+        limit=int(args.get('limit', 100) or 100),
+        offset=int(args.get('offset', 0) or 0),
+    )
+    return jsonify({'success': True, 'frontiers': rows, 'total': total})
+
+
+@llm_bp.route('/frontier', methods=['POST'])
+def frontier_create():
+    data = request.get_json() or {}
+    try:
+        run = frontier_lib.create_frontier(
+            name=(data.get('name') or '').strip(),
+            description=(data.get('description') or ''),
+            system_prompt=(data.get('system_prompt') or ''),
+            user_prompt=(data.get('user_prompt') or '').strip(),
+            temperature=data.get('temperature', frontier_lib.DEFAULT_TEMPERATURE),
+            top_p=data.get('top_p', frontier_lib.DEFAULT_TOP_P),
+            n_replays=data.get('n_replays', frontier_lib.DEFAULT_N_REPLAYS),
+            monthly_calls=data.get('monthly_calls', frontier_lib.DEFAULT_MONTHLY_CALLS),
+            quality_floor=data.get('quality_floor'),
+            budget_ceiling=data.get('budget_ceiling'),
+            dryrun=bool(data.get('dryrun', False)),
+            roster=data.get('roster') or None,
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'frontier': run}), 201
+
+
+@llm_bp.route('/frontier/seed', methods=['POST'])
+def frontier_seed():
+    run = frontier_lib.seed_demo()
+    return jsonify({'success': True, 'frontier': run}), 201
+
+
+@llm_bp.route('/frontier/<frontier_id>', methods=['GET'])
+def frontier_get(frontier_id):
+    run = frontier_lib.get_frontier(frontier_id)
+    if not run:
+        return jsonify({'success': False, 'error': 'frontier run not found'}), 404
+    return jsonify({'success': True, 'frontier': run})
+
+
+@llm_bp.route('/frontier/<frontier_id>', methods=['DELETE'])
+def frontier_delete(frontier_id):
+    if not frontier_lib.delete_frontier(frontier_id):
+        return jsonify({'success': False, 'error': 'frontier run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/frontier/<frontier_id>/run', methods=['POST'])
+def frontier_run(frontier_id):
+    """Execute the roster sweep. Live mode requires ``{confirm_live: true}``
+    so we never silently spend API credits."""
+    data = request.get_json() or {}
+    try:
+        payload, status = frontier_lib.run_frontier(
+            frontier_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+@llm_bp.route('/frontier/<frontier_id>/recommend', methods=['POST'])
+def frontier_recommend(frontier_id):
+    """Re-derive picks from persisted points against fresh constraints —
+    lets the UI slider (min-quality / max-cost) update the recommendation
+    live without re-firing the whole roster sweep."""
+    run = frontier_lib.get_frontier(frontier_id)
+    if not run:
+        return jsonify({'success': False, 'error': 'frontier run not found'}), 404
+    data = request.get_json() or {}
+    points = run.get('points') or []
+    valid = [p for p in points if p.get('quality') is not None and p.get('cost_per_call') is not None]
+    if not valid:
+        return jsonify({'success': True, 'quality_pick': None, 'budget_pick': None}), 200
+    top = max(valid, key=lambda x: (x['quality'], -x['cost_per_call']))
+    monthly_calls = int(data.get('monthly_calls') or run.get('monthly_calls') or 50000)
+
+    def _rec(pt):
+        if not pt:
+            return None
+        s = max(0.0, (top['cost_per_call'] or 0) - (pt['cost_per_call'] or 0)) * monthly_calls
+        kept = round(100.0 * (pt['quality'] or 0) / (top['quality'] or 1), 1)
+        return {
+            'provider': pt['provider'], 'model': pt['model'],
+            'key': f"{pt['provider']}:{pt['model']}",
+            'tier': pt.get('tier'),
+            'quality': pt.get('quality'),
+            'cost_per_call': pt.get('cost_per_call'),
+            'monthly_cost': round((pt.get('cost_per_call') or 0) * monthly_calls, 2),
+            'monthly_savings': round(s, 2),
+            'quality_kept_pct': kept,
+        }
+
+    quality_floor = data.get('quality_floor')
+    budget_ceiling = data.get('budget_ceiling')
+    q_pick = None
+    b_pick = None
+    if quality_floor is not None:
+        eligible = [p for p in valid if p['quality'] >= float(quality_floor)]
+        q_pick = min(eligible, key=lambda x: (x['cost_per_call'], -x['quality'])) if eligible else None
+    if budget_ceiling is not None:
+        eligible = [p for p in valid if p['cost_per_call'] <= float(budget_ceiling)]
+        b_pick = max(eligible, key=lambda x: (x['quality'], -x['cost_per_call'])) if eligible else None
+    return jsonify({
+        'success': True,
+        'top_quality': _rec(top),
+        'quality_pick': _rec(q_pick),
+        'budget_pick': _rec(b_pick),
+    }), 200
 
 
 @llm_bp.route('/august/upload', methods=['POST'])
