@@ -712,6 +712,60 @@ class ApiService {
     });
   }
 
+  // ─── Frontier — Cost/Quality Pareto Explorer ──────────────────────────────
+  // Round-16. For a prompt + candidate roster, computes each model's
+  // quality vs cost, keeps the Pareto-frontier set, and kneedles the
+  // elbow. Returns default / quality-floor / budget-ceiling picks so
+  // "which model do I ship?" has a data-backed answer.
+
+  async listFrontiers(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/frontier${suffix}`);
+  }
+
+  async createFrontier(payload) {
+    return this.request('/frontier', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedFrontier() {
+    return this.request('/frontier/seed', { method: 'POST' });
+  }
+
+  async frontierStats() {
+    return this.request('/frontier/stats');
+  }
+
+  async frontierDefaults() {
+    return this.request('/frontier/defaults');
+  }
+
+  async getFrontier(frontierId) {
+    return this.request(`/frontier/${encodeURIComponent(frontierId)}`);
+  }
+
+  async deleteFrontier(frontierId) {
+    return this.request(`/frontier/${encodeURIComponent(frontierId)}`, { method: 'DELETE' });
+  }
+
+  async runFrontier(frontierId, payload = {}) {
+    return this.request(`/frontier/${encodeURIComponent(frontierId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async recommendFrontier(frontierId, payload = {}) {
+    return this.request(`/frontier/${encodeURIComponent(frontierId)}/recommend`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

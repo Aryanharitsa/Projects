@@ -12,19 +12,151 @@ into a measurably better one, **stress‑test** prompts with **Adversary Lab**
 prompts head‑to‑head with **Showdown Arena** (paired mean Δ, 95 % bootstrap
 CI, sign‑test p‑value, Cohen's d, ship / keep / no‑decision verdict), measure
 output non‑determinism with **Drift Lab** (lexical + length + latency
-Stability Score with pairwise similarity heatmap and a medoid pick) — and,
-new this round, **Prompt Surgeon**: section‑level ablation that splits
-your system prompt into paragraphs, ablates each one, scores the difference,
-and tells you which sections are **critical**, **supporting**, **dead
-weight**, or actively **harmful** — then ships you a leaner prompt and a
-**monthly $ savings projection** at your call rate. Stop guessing which
-paragraph is doing real work; measure it.
+Stability Score with pairwise similarity heatmap and a medoid pick),
+**Prompt Surgeon** (section‑level ablation of a system prompt, banded
+critical / supporting / dead‑weight / harmful, ships a lean prompt +
+monthly $ savings) — and, new this round, **Frontier**: a cost / quality
+Pareto explorer that fans your prompt across a candidate roster, plots
+the frontier, kneedles the elbow, and hands you the cheapest model that
+keeps ~95 % of flagship‑tier quality. Stop guessing which model to ship;
+measure it against the shape of the curve.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Prompt Surgeon (Day 68)
+## 🆕 What's new — Frontier: Cost / Quality Pareto Explorer (Day 73)
+
+> Round‑16. Every prior studio in the playground answers *a* question
+> about a prompt — Arena/Vote/Rubrics compare responses, Suites batches
+> across cases, Drift measures determinism, Adversary hits it with typos
+> and injections, Showdown pits it against a challenger, Optimizer
+> evolves it, Surgeon slices it. None of them answers the *last* question
+> every team hits the day they have to ship: **which model do I actually
+> run this on?** A flagship model at $30 / M‑tokens gets you a 92‑point
+> answer; a mid‑tier one at $0.15 / M gets you an 87‑point answer — same
+> prompt, same day, same customer. On 50 k calls a month the delta is a
+> $2,000 AWS invoice you did not need to pay. Frontier is the surface
+> that finds that delta.
+
+Hit **Frontier** in the sidebar. A Frontier run is `(system_prompt,
+user_prompt, roster, monthly_calls)` where `roster` is a list of
+`(provider, model)` pairs to sweep. The default roster spans every
+capability tier so a first‑time visitor sees the shape of the curve
+even without customising anything: **flagship** (`gpt‑4‑turbo`,
+`claude‑opus‑4`), **premium** (`gpt‑4o`, `claude‑3‑5‑sonnet`,
+`gemini‑1.5‑pro`), **mid** (`claude‑3‑5‑haiku`), **efficient**
+(`claude‑3‑haiku`, `gpt‑3.5‑turbo`), **budget** (`gpt‑4o‑mini`,
+`gemini‑1.5‑flash`). The engine fires `n_replays` (default 3) calls per
+model in parallel, scores every response against a composite 0–100
+quality function (**50 % coverage** of prompt keywords, **30 % fidelity**
+to the flagship‑tier anchor response, **20 % format** conformance — same
+axes as Surgeon so scores are directly comparable across studios), and
+estimates cost‑per‑call from actual replay tokens run through the
+project's per‑model pricing table.
+
+Then it computes the **Pareto frontier**: model A dominates B iff A has
+≥ B's quality AND ≤ B's cost with at least one strict. Points nobody
+dominates are on the frontier; every other point is discarded from
+recommendation‑space (dominated ⇒ *strictly worse* on both axes ⇒ no
+reason to ship it). On the frontier, the engine runs the **Kneedle
+elbow** on log‑cost / linear‑quality axes — the single point whose
+normalised (log‑cost, quality) sits highest above the line connecting
+the frontier endpoints. That point is where marginal quality per dollar
+is maximised, and it is the pick the studio defaults to.
+
+Three recommendation shapes ship with every run:
+
+| Pick | Reads | When to use it |
+|---|---|---|
+| ⭐ **Default (elbow)** | Kneedle elbow on the frontier | You want the best cost/quality trade — this is what the studio recommends. |
+| 👑 **Meets quality floor** | Cheapest frontier point with `quality ≥ floor` | You need a hard quality bar (e.g. legal, medical) and want the cheapest model that clears it. |
+| ☕ **Within budget** | Highest‑quality frontier point with `cost ≤ ceiling` | You have a hard spend cap and want the smartest thing that fits. |
+
+Every recommendation carries its **monthly cost** at your call rate,
+its **monthly savings** vs the top‑quality model, and the **% of top
+quality kept** — the numbers that actually justify the switch on a
+review call.
+
+The centrepiece of the studio is a **cost/quality scatter plot** rendered
+as SVG: log‑cost on the x‑axis, quality on the y‑axis, each model a dot
+coloured by tier. The frontier is drawn as a staircase (the only curve
+shape it can actually take — every rise crosses to the next non‑dominated
+point). Dominated models render dimmer. The elbow point is wrapped in a
+gold ring so it's the first thing your eye lands on. Two constraint
+sliders below the plot re‑derive the picks live — dragging the *min
+quality* slider shades the plot above the threshold and updates the
+"meets quality floor" pick; the *max cost* slider does the same on the
+right. This means you can explore the trade‑off space *without re‑running
+the roster* — recommend endpoints re‑derive server‑side against the
+persisted points.
+
+The **models table** below the plot renders every roster entry with its
+tier chip, quality score (with ± stdev across replays), cost/call, $/mo
+projection, mean latency, on‑frontier badge, and a per‑model rationale
+line ("Dominated by gpt‑4o, gemini‑1.5‑pro — both cheaper *and* higher
+quality"). The **Actions strip** at the top of the run surfaces the one
+line the studio wants you to leave with: *"Ship gpt‑4o — the elbow keeps
+95 % of gpt‑4‑turbo's quality at $246/mo savings on 50k calls."*
+
+Like every other studio, the whole loop runs in **dryrun mode without
+any API keys**. Each model's response length, latency, and quality are
+seeded from `SHA‑1(prompt || model || replay_index)` and biased by the
+model's price tier — flagship gets 12 of 14 expected keywords woven in,
+premium 10, mid 7, efficient 4, budget 2 — so composite scores land in
+a plausible 40 → 85 spread. The seed demo loads a fintech‑support
+prompt across nine models: the frontier picks up six candidates, the
+elbow lands on **`gpt‑4o` @ 77 pts / $0.0016/call**, and the
+recommendation is a **$252/mo** save at 50 k calls vs shipping
+`gpt‑4‑turbo`.
+
+### How it works — at a glance
+
+```
+prompt ──► fan out roster           (9 models × n_replays parallel)
+       │      one anchor batch on the highest-tier model
+       │      one batch per candidate
+       │
+       ├──► score every response    (coverage + fidelity + format → 0-100)
+       │      cost_per_call = pricing.estimate_cost(model, in_tok, out_tok)
+       │      latency_ms = mean(replays)
+       │
+       ├──► compute Pareto frontier (non-dominated on quality/cost plane)
+       │      dominated set gets marked but never shown as a pick
+       │
+       ├──► kneedle elbow           (log-cost axis, linear-quality axis)
+       │      recommendation = elbow
+       │
+       ├──► apply constraints       (quality_floor, budget_ceiling)
+       │      cheapest_meeting_quality(q), best_within_budget(b)
+       │
+       └──► ship                     (three picks + actions + savings $)
+```
+
+Every entry point is a `frontier_lib.*` call on the Flask side:
+`create_frontier`, `list_frontiers`, `get_frontier`, `delete_frontier`,
+`run_frontier`, `seed_demo`, `stats`, `defaults`, `compute_pareto`,
+`kneedle_elbow`. Routes at `/api/frontier` mirror the shape of every
+other studio (defaults, stats, list, create, seed, get, delete, run) +
+one extra: `POST /api/frontier/<id>/recommend` re‑derives the picks
+against fresh constraints without re‑running the roster — that's what
+powers the live slider updates.
+
+```bash
+$ curl -sX POST http://localhost:5050/api/frontier/seed \
+    | jq '.frontier | {elbow_model, elbow_quality, monthly_savings, frontier_size, quality_kept_pct}'
+{
+  "elbow_model": "OpenAI:gpt-4o",
+  "elbow_quality": 76.96,
+  "monthly_savings": 251.5,
+  "frontier_size": 6,
+  "quality_kept_pct": 98.4
+}
+```
+
+---
+
+## What's new — Prompt Surgeon (Day 68)
 
 > Round‑15. Every prior quality surface in the playground perturbs
 > *something* about the call: **Adversary** changes the *input* (typos,
@@ -171,7 +303,7 @@ curl -s http://localhost:5050/api/surgeon/seed -X POST | jq .surgeon.summary.act
 
 ---
 
-## 🆕 What's new — Drift Lab (Day 63)
+## What's new — Drift Lab (Day 63)
 
 > Round‑14. Every prior quality surface in the playground perturbs
 > *something* about the call: **Adversary** changes the *input* (typos,
