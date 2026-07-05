@@ -15,6 +15,7 @@ import { NoteComposer } from "@/components/NoteComposer";
 import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
 import { Pulse } from "@/components/Pulse";
+import { Recall } from "@/components/Recall";
 import { SearchBar } from "@/components/SearchBar";
 import { Spark } from "@/components/Spark";
 import { Synthesis } from "@/components/Synthesis";
@@ -64,6 +65,8 @@ export default function Page() {
   const [sparkBadge, setSparkBadge] = useState<number | null>(null);
   const [compassOpen, setCompassOpen] = useState(false);
   const [compassBadge, setCompassBadge] = useState<number | null>(null);
+  const [recallOpen, setRecallOpen] = useState(false);
+  const [recallBadge, setRecallBadge] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -257,6 +260,24 @@ export default function Page() {
     };
   }, [graph, compassOpen]);
 
+  // Recall badge — count of cards currently due. Cheap summary call;
+  // refreshes when the graph or the modal changes. The badge nudges
+  // the user toward the modal without pushing a session on them.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .recallSummary()
+      .then((s) => {
+        if (!cancelled) setRecallBadge(s.due_now);
+      })
+      .catch(() => {
+        if (!cancelled) setRecallBadge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, recallOpen]);
+
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
       const n = await api.createNote(payload);
@@ -381,6 +402,8 @@ export default function Page() {
         sparkBadge={sparkBadge ?? undefined}
         onOpenCompass={() => setCompassOpen(true)}
         compassBadge={compassBadge ?? undefined}
+        onOpenRecall={() => setRecallOpen(true)}
+        recallBadge={recallBadge ?? undefined}
       />
 
       <DailyBrief
@@ -523,6 +546,16 @@ export default function Page() {
           setSelected(real ?? (stub as GraphNode));
           setIsolated(null);
           setCompassOpen(false);
+        }}
+      />
+
+      <Recall
+        open={recallOpen}
+        onClose={() => setRecallOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
         }}
       />
 

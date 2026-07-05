@@ -33,6 +33,7 @@ from . import chat as chat_engine
 from . import chronicle as chronicle_engine
 from . import compass as compass_engine
 from . import pulse as pulse_engine
+from . import recall as recall_engine
 from . import spark as spark_engine
 from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
 from .embed import cosine
@@ -61,6 +62,7 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     store.init_db()
+    recall_engine.init_recall_schema()
 
 
 @app.get("/health")
@@ -1335,3 +1337,132 @@ def compass_export(
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{safe}.md"'},
     )
+
+
+# ------------------------------------------------------------ recall
+
+
+def _recall_graph_snapshot(
+    threshold: float, top_k: int
+) -> tuple[
+    list[dict],
+    dict[int, int],
+    dict[int, dict],
+    dict[int, float],
+    list[tuple[int, int, float]],
+]:
+    """Load the artifacts every recall endpoint needs, once per request.
+
+    Returns ``(notes, cmap, community_lookup, centrality_weights, edges)``.
+    Every value is a plain dict/list so the ``recall`` engine can stay
+    ignorant of pydantic and dataclass shapes."""
+    notes = store.all_notes()
+    if not notes:
+        return [], {}, {}, {}, []
+    g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+    cmap = {int(n["id"]): int(n.get("community", 0)) for n in g.nodes}
+    notes_for_community = {int(n["id"]): n for n in g.nodes}
+    built = community.build_communities(cmap, notes_for_community)
+    community_lookup: dict[int, dict] = {
+        c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+        for c in built
+    }
+    weights = {int(n["id"]): float(n.get("weight", 0.0)) for n in g.nodes}
+    edges = [(int(e["source"]), int(e["target"]), float(e["strength"])) for e in g.edges]
+    return notes, cmap, community_lookup, weights, edges
+
+
+@app.get("/recall/session", response_model=schemas.RecallSessionOut)
+def recall_session(
+    k: int = Query(recall_engine.DEFAULT_K, ge=1, le=recall_engine.MAX_K),
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+    session: str | None = Query(None, max_length=64, description="Client-supplied session id; if omitted, defaults to today's UTC date"),
+) -> dict:
+    """Deterministic active-recall session.
+
+    Same ``session`` id + same store contents → same cards. This is what
+    lets a browser reload continue mid-quiz without the underlying
+    scheduler having to remember which specific card was mid-flight.
+    """
+    now = datetime.now(timezone.utc)
+    salt = (session or now.strftime("%Y-%m-%d")).strip()[:64] or now.strftime("%Y-%m-%d")
+
+    notes, cmap, community_lookup, weights, edges = _recall_graph_snapshot(
+        threshold=threshold, top_k=top_k
+    )
+    if not notes:
+        empty = recall_engine.SessionOut(
+            generated_at=now.isoformat(),
+            session_id=salt,
+            total_notes=0,
+            eligible_notes=0,
+            k=0,
+            cards=[],
+            streak_days=0,
+            due_now=0,
+        )
+        return recall_engine.serialize_session(empty)
+
+    session_out = recall_engine.build_session(
+        k=k,
+        now=now,
+        notes=notes,
+        cmap=cmap,
+        community_lookup=community_lookup,
+        weights=weights,
+        graph_edges=edges,
+        session_salt=salt,
+    )
+    return recall_engine.serialize_session(session_out)
+
+
+@app.post("/recall/grade", response_model=schemas.RecallGradeOut)
+def recall_grade(payload: schemas.RecallGradeIn) -> dict:
+    """Persist a grade for one card and return the updated schedule.
+
+    The client is trusted for grade (there's no server-side truth for
+    "did the user recall the phrase" without an LLM); we do surface a
+    dedicated ``/recall/check-cloze`` helper for the auto-graded cloze
+    path so the client can distinguish "I typed the right thing" from
+    "I *say* I got it right"."""
+    if not store.get_note(payload.note_id):
+        raise HTTPException(404, "note not found")
+    result = recall_engine.grade_card(
+        note_id=payload.note_id,
+        grade=payload.grade,
+    )
+    # Also update the note's last_seen_at so Revisit / Pulse see this as
+    # engagement — grading a card counts as re-engaging with the note.
+    store.touch_note(payload.note_id)
+    return recall_engine.serialize_grade(result)
+
+
+@app.get("/recall/summary", response_model=schemas.RecallSummaryOut)
+def recall_summary(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Per-cluster mastery snapshot + overall streak."""
+    now = datetime.now(timezone.utc)
+    notes, cmap, community_lookup, _weights, _edges = _recall_graph_snapshot(
+        threshold=threshold, top_k=top_k
+    )
+    summary = recall_engine.build_summary(
+        now=now,
+        notes=notes,
+        cmap=cmap,
+        community_lookup=community_lookup,
+    )
+    return recall_engine.serialize_summary(summary)
+
+
+@app.post("/recall/check-cloze", response_model=schemas.RecallClozeCheckOut)
+def recall_check_cloze(payload: schemas.RecallClozeCheckIn) -> dict:
+    """Fuzzy-match a typed cloze answer against the canonical phrase.
+
+    Server-side so the exact dice threshold stays consistent even if the
+    frontend build drifts. Similarity in ``[0, 1]``; correct when
+    ``similarity >= 0.72``."""
+    ok, sim = recall_engine.check_cloze_answer(payload.user_answer, payload.canonical)
+    return {"is_correct": ok, "similarity": round(sim, 4)}
