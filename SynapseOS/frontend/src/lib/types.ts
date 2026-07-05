@@ -827,3 +827,103 @@ export type CompassQuestionSummary = {
   last_read_at: string | null;
   coverage_pct: number;
 };
+
+// ----------------------------------------------------------------- recall
+
+export type RecallCardKind = "cloze" | "prompt" | "neighbor";
+
+export type RecallNeighborChoice = {
+  note_id: number;
+  title: string;
+  is_correct: boolean;
+  cluster_id: number | null;
+  cluster_color: string | null;
+};
+
+export type RecallCard = {
+  id: string;
+  kind: RecallCardKind;
+  note_id: number;
+  title: string;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+  prompt_text: string;
+  answer_text: string;
+  cloze_answer: string;
+  body_before: string;
+  body_after: string;
+  body_snippet: string;
+  choices: RecallNeighborChoice[];
+  correct_choice_id: number | null;
+  ease: number;
+  interval_hours: number;
+  next_due: string;
+  streak: number;
+  reviews: number;
+  lapses: number;
+  days_overdue: number;
+  days_since_seen: number | null;
+  reasons: string[];
+};
+
+export type RecallSession = {
+  generated_at: string;
+  session_id: string;
+  total_notes: number;
+  eligible_notes: number;
+  k: number;
+  cards: RecallCard[];
+  streak_days: number;
+  due_now: number;
+  stats: {
+    reviewed_notes?: number;
+    mean_ease?: number;
+    cloze_count?: number;
+    prompt_count?: number;
+    neighbor_count?: number;
+  };
+};
+
+export type RecallGrade = 0 | 1 | 2 | 3;
+
+export type RecallGradeResult = {
+  note_id: number;
+  grade: number;
+  ease: number;
+  interval_hours: number;
+  next_due: string;
+  streak: number;
+  reviews: number;
+  lapses: number;
+  next_due_phrase: string;
+};
+
+export type RecallClusterMastery = {
+  cluster_id: number;
+  cluster_name: string;
+  cluster_color: string;
+  size: number;
+  reviewed: number;
+  known: number;
+  mastery: number;
+  mean_ease: number;
+  due_now: number;
+};
+
+export type RecallSummary = {
+  generated_at: string;
+  total_notes: number;
+  reviewed_notes: number;
+  due_now: number;
+  streak_days: number;
+  mean_ease: number;
+  total_reviews: number;
+  mastery_overall: number;
+  clusters: RecallClusterMastery[];
+};
+
+export type RecallClozeCheck = {
+  is_correct: boolean;
+  similarity: number;
+};
