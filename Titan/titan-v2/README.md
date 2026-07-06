@@ -13,6 +13,63 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-75 — Triage · cleared-case suppression + FP mining.**
+> Every prior TITAN surface *judges* one alert — how severe, what
+> typology, what network, what precedent. Real AML operations run at
+> a 90-95% false-positive rate, so the *opposite* question is where
+> the analyst hours actually go: *"is this alert noise? which of
+> today's queue looks like a signature we've routinely cleared
+> before?"*. New `apps/ai-aml/triage.py` (~900 LOC, pure stdlib,
+> **zero new deps**) mines the case store's `cleared` vs `sar_filed`
+> disposition history and answers that question deterministically.
+> Every candidate alert gets a **signature** — the top-K (default 4)
+> firing factor names — from which the engine builds every
+> singleton + unordered pair combo (a 4-factor signature → 4
+> singletons + 6 pairs = 10 combos). For each combo *c* it tallies
+> `n_seen`, `n_cleared`, `n_sar` across the closed corpus, computes
+> a Beta-Bernoulli clearance posterior with Laplace α = 0.5
+> (`p_clear(c) = (n_cleared + α) / (n_seen + 2α)`), and takes the
+> `log₂` lift over the portfolio prior. Combos aggregate through an
+> evidence-weighted mean into a bounded score `S = tanh(Σ w(c)·lift(c)
+> / |combos_scored|)`; `suppression = (S+1)/2 ∈ [0,1]`.
+>
+> Six explicit **verdict rungs** — `suppress_high_confidence`,
+> `suppress_review_lightly`, `no_prior_signal`, `elevate_review`,
+> `escalate_critical`, `insufficient_history` — each tied to a
+> hard-coded S threshold and a support gate, so every decision is
+> regulator-auditable back to the exact case IDs it cites. A
+> **sanctions veto** caps `S` from *above* at −0.2 whenever
+> `sanctions_hit` is in the signature: a sanctions-touching alert
+> can never suppress, but escalation propagates through unchanged.
+> Combos with fewer than `MIN_SUPPORT_ANY = 3` precedents are
+> excluded from the aggregate; combos below `MIN_SUPPORT_STRONG = 5`
+> weight linearly so under-supported evidence never dominates.
+>
+> **Surface** — new `/triage` route between Precedent and Drift:
+> verdict-tone-tinted hero banner + a 132-px suppression conic ring
+> + query-signature chips (sanctions_hit gets a rose ⛔ marker); a
+> 4-tile aggregate strip (closed corpus / portfolio prior / aggregate
+> S / suppression %); a searchable priority-tinted candidate picker
+> with a *sanctions-touching only* filter; a per-case **scored-combo
+> table** with symmetric log₂-lift bars (rose→amber→teal, centred on
+> zero), a cleared-vs-SAR count chip, and a support pill; a **9×9
+> factor-pair suppression matrix** shaded by lift with per-cell
+> clearance-rate labels + hover-detail row; two **evidence panels**
+> — up to 3 cleared precedents + up to 3 SAR precedents that share
+> ≥ 2 signature factors, each with disposition/band/typology chips
+> and a shared-factor chip row; two portfolio leaderboards (top
+> noise combos + top signal combos) below the matrix; and a verdict-
+> ladder footer where the current verdict lights up with a matching
+> glow. A one-click seed of a **12-family FP-rich supplementary
+> corpus** (`round_amount-alone`, `fan_in-alone`, `round_amount+fan_in`,
+> `velocity+high_risk_geo` on the noise side; `structuring+sanctions`,
+> `round_trip+high_risk_geo`, `structuring+velocity`, `adverse_media+sanctions`
+> on the signal side; plus two mixed-signal MULE-flavoured combos)
+> takes the miner from cold-start to a demo-ready ~76-case terminal
+> corpus in one POST. Deterministic — same case store snapshot →
+> identical bytes returned, identical case IDs cited, identical
+> matrix. Engine: `titan-triage/1.0.0`.
+
 > **Day-70 — Precedent · the case-similarity + disposition prior.**
 > Every prior TITAN surface *judges* one case in isolation — `risk`
 > fires rules, `typology` names the playbook, `network` finds cross-
@@ -522,6 +579,17 @@ here's the freeze-and-investigate paragraph".
 | **Drift rules** | `GET  /aml/drift/rules` | Auditor view of the drift engine's 10 weights, 5 verdict bands, change-point floor, and min-tx guards |
 | **Drift sample** | `GET  /aml/drift/sample` | Bundled three-account demo (`ACC-STABLE`, `ACC-MILD`, `ACC-DRIFT` sleeper-burst) + a recommended ISO split timestamp |
 | **Drift** | `POST /aml/drift` | Account-vs-self drift across ten axes (KS · JS · TVD · HHI · log-ratio) → verdict + driver ranking + change-point onset + per-counterparty contribution; portfolio mode ranks every eligible account |
+| **Precedent rules** | `GET  /aml/precedent/rules` | Block weights + tunables + recommendation ladder for the case-similarity engine |
+| **Precedent candidates** | `GET  /aml/precedent/candidates` | Open/review cases eligible as precedent queries |
+| **Precedent for case** | `GET  /aml/precedent/case/{case_id}` | Top-k similar cases + block-attribution + Bayesian disposition prior + recommendation |
+| **Precedent seed** | `POST /aml/precedent/seed` | Seed the case store with the six-family demo portfolio (idempotent unless `force=true`) |
+| **Precedent export** | `GET  /aml/precedent/export.md` | Paste-able precedent memo for one case |
+| **Triage rules** | `GET  /aml/triage/rules` | Signature-K + Laplace α + support gates + verdict ladder + detector list |
+| **Triage profile** | `GET  /aml/triage/profile` | Portfolio prior + per-factor stats + 9x9 factor-pair suppression matrix + top noise/signal combos |
+| **Triage candidates** | `GET  /aml/triage/candidates` | Open/review/escalated cases eligible for suppression scoring |
+| **Triage for case** | `GET  /aml/triage/case/{case_id}` | Per-case Bayesian suppression report — scored combos, S score, verdict, cleared + SAR precedent chains |
+| **Triage seed** | `POST /aml/triage/seed` | Seed the 12-family FP-rich supplementary corpus (idempotent unless `force=true`) |
+| **Triage export** | `GET  /aml/triage/export.md` | Paste-able triage memo for one case (drops straight into a case note) |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and
