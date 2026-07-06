@@ -888,3 +888,76 @@ async def aml_precedent_export(
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
+
+
+# ----- Triage pass-through (round-16, day-75)
+
+
+@app.get("/aml/triage/rules")
+async def aml_triage_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/triage/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/triage/profile")
+async def aml_triage_profile() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(f"{AML_SVC}/aml/triage/profile")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/triage/candidates")
+async def aml_triage_candidates(
+    limit: int = 100,
+    include_closed: bool = False,
+) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/triage/candidates",
+            params={"limit": limit, "include_closed": include_closed},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/triage/case/{case_id}")
+async def aml_triage_case(case_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(f"{AML_SVC}/aml/triage/case/{case_id}")
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.post("/aml/triage/seed")
+async def aml_triage_seed(force: bool = False) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            f"{AML_SVC}/aml/triage/seed",
+            params={"force": force},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/triage/export.md")
+async def aml_triage_export(case_id: str):
+    from fastapi.responses import PlainTextResponse
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/triage/export.md",
+            params={"case_id": case_id},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
