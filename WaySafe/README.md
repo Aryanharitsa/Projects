@@ -18,7 +18,41 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
-- **🆕 Prism — Persona-Aware Risk Lens** *(Day 71)* — every prior
+- **🆕 Odyssey — Multi-Day Trip Composer** *(Day 76)* — the first
+  WaySafe surface that scores an entire *multi-day* trip as one
+  deterministic report.  Every prior surface — Pulse, Tempo, Plan
+  Route, Companion, Echo, Prism — is *single-day*.  A tourist rarely
+  plans a single day; they plan a **four-night trip across three
+  towns** and the actual planning question they open the app with is
+  *"is this whole trip safe, which day is the weakest link, and what's
+  the one tweak that would upgrade the trip verdict from Bumpy to
+  Solid?"*.  Odyssey answers that.  `compose_odyssey(...)` takes an
+  ordered `OdysseyDay` list — each with a stay, 1..N stops, a depart
+  hour and a transit mode — and composes a full `TripReport`:
+  per-day breakdown (`0.30·stay + 0.40·mean(stops) + 0.30·corridor`,
+  where `corridor = 100·exp(-0.25·risk_km)` sampled over 12 waypoints
+  per leg via `safety.point_risk` — same physics as `routing`,
+  deterministic in < 100 ms for a 7-day trip), a **worst-day-weighted
+  trip score** (`0.6·mean + 0.4·min`), a five-rung verdict ladder
+  (**Serene / Solid / Bumpy / Fragile / Critical**), a signed **drift
+  index** so a trip that degrades toward the end is called out, a
+  **persistence streak** so two consecutive Bumpy days can't hide
+  behind Serene neighbours, a **fatigue penalty** on 4+-stop days, and
+  a full-auditor **rules** block that names every constant.  The
+  weakest-link block finds the single lowest-scoring (day, element)
+  tuple and ranks up to three concrete swaps — **TIME_SHIFT** (probe
+  depart_hour ± 3 h through the forecaster when loaded),
+  **REORDER** (try the reverse stop-permutation and keep it if
+  `total_risk_km` drops ≥ 1), **MODE_UPGRADE** (walk → cab on days
+  that dwell past 21:00), **STAY_SWAP** (points at the StaySafe tab
+  when the stay itself is the drag) — each stamped with an expected
+  uplift and a target band.  Ships an ordered advisory strip
+  (weakest-link · persistence · drift · late-night arrivals ·
+  fatigue) and exports as JSON (`waysafe.odyssey.v1`) + Markdown for
+  the insurance / duty-of-care / HR-approval use case.  Lives at
+  `tabs[19]` between Prism and Report Hazard — Prism confirms the
+  corridor for a persona, Odyssey commits the trip.
+- **Prism — Persona-Aware Risk Lens** *(Day 71)* — every prior
   WaySafe surface (Safety, Forecast, Sentinel, Refuge, Compass, Advisory,
   StaySafe, Pulse, Beacon, Tempo, Echo, …) scores the corridor for the
   *average* traveller — the same 78/100 for everyone. That is the

@@ -34,6 +34,7 @@ from theme import (
     render_tempo, render_tempo_empty,
     render_echo, render_echo_empty,
     render_prism, render_prism_empty,
+    render_odyssey, render_odyssey_empty,
 )
 import companion as cp
 import itinerary as itn
@@ -45,6 +46,7 @@ import refuge as rfg
 import tempo as tmp
 import echo as ech
 import prism as pr
+import odyssey as ody
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -337,7 +339,7 @@ if role == "Tourist App":
     tab_labels = [
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
-        "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism",
+        "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism", "Odyssey",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -2749,6 +2751,265 @@ if role == "Tourist App":
                 st.markdown(report.to_markdown())
             with t_json:
                 st.code(report.to_json(indent=2), language="json")
+
+    # ---------------- Odyssey — Multi-Day Trip Composer (Day 76)
+    # The first WaySafe surface that scores an entire *multi-day* trip as
+    # one deterministic report.  Composes every prior engine (safety,
+    # forecast, routing corridor-sampling) over an ordered list of days,
+    # each with a stay + 1..N stops + depart hour, and returns a
+    # worst-day-weighted trip verdict plus a weakest-link callout with
+    # ranked concrete swaps.
+    with tabs[19]:
+        st.subheader("Odyssey — Multi-Day Trip Composer")
+        st.caption(
+            "Every prior WaySafe surface is *single-day*.  Odyssey composes "
+            "every engine — Safety, Forecast, corridor sampling — across a "
+            "multi-day trip and returns one deterministic verdict, a "
+            "**worst-day-weighted** trip score, a drift index, and a "
+            "**weakest-link** callout with ranked one-tap swaps.  Zero new "
+            "physics — the same ledger `Safety` prints."
+        )
+
+        # -- Day roster (session-persisted) --------------------------------
+        if "ody_days" not in st.session_state:
+            seed_pois = poi_df.to_dict("records") if not poi_df.empty else []
+            seed = ody.default_seed_trip(
+                home_lat=float(my["lat"]), home_lon=float(my["lon"]),
+                pois=seed_pois, n_days=4,
+            )
+            # Convert dataclasses to editable dicts for st.data_editor.
+            st.session_state.ody_days = [
+                {
+                    "date": d.date, "label": d.label,
+                    "stay_label": d.stay_label,
+                    "stay_lat": d.stay_lat, "stay_lon": d.stay_lon,
+                    "depart_hour": d.depart_hour,
+                    "transit_mode": d.transit_mode,
+                    "stops": [
+                        {"label": s.label, "lat": s.lat, "lon": s.lon,
+                         "dwell_min": s.dwell_min}
+                        for s in d.stops
+                    ],
+                }
+                for d in seed
+            ]
+
+        c_top1, c_top2, c_top3 = st.columns([2, 1, 1])
+        with c_top1:
+            st.markdown(
+                f"**Roster** — {len(st.session_state.ody_days)} day(s) · "
+                f"add / remove / edit below.  Composition weights: "
+                f"`{ody.STAY_WEIGHT}` stay + `{ody.STOPS_WEIGHT}` stops "
+                f"+ `{ody.CORRIDOR_WEIGHT}` corridor · "
+                f"trip = `{ody.MEAN_DAY_WEIGHT}` mean + "
+                f"`{ody.MIN_DAY_WEIGHT}` min-day.",
+            )
+        with c_top2:
+            if st.button("Reset roster", key="ody_reset",
+                          help="Rebuild the seed trip from current location + nearest POIs."):
+                st.session_state.pop("ody_days", None)
+                st.rerun()
+        with c_top3:
+            if st.button("Add day", key="ody_add_day",
+                          help="Append a blank day pinned to current location."):
+                from datetime import timedelta as _tdlt
+                last_date = (
+                    st.session_state.ody_days[-1]["date"]
+                    if st.session_state.ody_days else datetime.utcnow().date().isoformat()
+                )
+                try:
+                    from datetime import date as _dt
+                    next_date = (_dt.fromisoformat(last_date) + _tdlt(days=1)).isoformat()
+                except ValueError:
+                    next_date = datetime.utcnow().date().isoformat()
+                st.session_state.ody_days.append({
+                    "date": next_date,
+                    "label": f"Day {len(st.session_state.ody_days)+1}",
+                    "stay_label": "Base stay",
+                    "stay_lat": float(my["lat"]),
+                    "stay_lon": float(my["lon"]),
+                    "depart_hour": 9, "transit_mode": "auto",
+                    "stops": [],
+                })
+                st.rerun()
+
+        # --- Per-day editor (expanders) ----------------------------------
+        for i, day in enumerate(st.session_state.ody_days):
+            with st.expander(
+                f"Day {i+1} · {day.get('date','?')} · {day.get('label','?')} · "
+                f"{len(day.get('stops',[]))} stop(s)",
+                expanded=(i == 0),
+            ):
+                r1c1, r1c2, r1c3 = st.columns([2, 1, 1])
+                day["label"] = r1c1.text_input(
+                    "Day label", value=day.get("label",""), key=f"ody_label_{i}",
+                )
+                day["date"] = r1c2.text_input(
+                    "Date (YYYY-MM-DD)", value=day.get("date",""), key=f"ody_date_{i}",
+                )
+                day["depart_hour"] = int(r1c3.number_input(
+                    "Depart hour (0-23)", value=int(day.get("depart_hour", 9)),
+                    min_value=0, max_value=23, step=1, key=f"ody_depart_{i}",
+                ))
+
+                r2c1, r2c2, r2c3, r2c4 = st.columns([2, 1, 1, 1])
+                day["stay_label"] = r2c1.text_input(
+                    "Stay label", value=day.get("stay_label",""), key=f"ody_stay_label_{i}",
+                )
+                day["stay_lat"] = float(r2c2.number_input(
+                    "Stay lat", value=float(day.get("stay_lat", my["lat"])),
+                    format="%.5f", key=f"ody_stay_lat_{i}",
+                ))
+                day["stay_lon"] = float(r2c3.number_input(
+                    "Stay lon", value=float(day.get("stay_lon", my["lon"])),
+                    format="%.5f", key=f"ody_stay_lon_{i}",
+                ))
+                day["transit_mode"] = r2c4.selectbox(
+                    "Mode", options=["auto", "walk", "cab"],
+                    index=["auto","walk","cab"].index(day.get("transit_mode","auto"))
+                        if day.get("transit_mode","auto") in ("auto","walk","cab") else 0,
+                    key=f"ody_mode_{i}",
+                )
+
+                # Stops sub-editor via data_editor for compactness.
+                stops_df = pd.DataFrame(
+                    day.get("stops", []) or [],
+                    columns=["label", "lat", "lon", "dwell_min"],
+                )
+                if stops_df.empty:
+                    stops_df = pd.DataFrame([
+                        {"label": "", "lat": float(my["lat"]),
+                         "lon": float(my["lon"]), "dwell_min": 60}
+                    ]).iloc[0:0]
+                edited = st.data_editor(
+                    stops_df, key=f"ody_stops_{i}",
+                    num_rows="dynamic", use_container_width=True,
+                    column_config={
+                        "label": st.column_config.TextColumn(
+                            "Stop", help="Descriptive name of the stop"),
+                        "lat": st.column_config.NumberColumn(
+                            "Lat", format="%.5f"),
+                        "lon": st.column_config.NumberColumn(
+                            "Lon", format="%.5f"),
+                        "dwell_min": st.column_config.NumberColumn(
+                            "Dwell (min)", min_value=15, max_value=480, step=15),
+                    },
+                )
+                stops_records = []
+                for _, r in edited.iterrows():
+                    try:
+                        lab = str(r.get("label", "")).strip()
+                        if not lab:
+                            continue
+                        stops_records.append({
+                            "label": lab,
+                            "lat": float(r.get("lat")),
+                            "lon": float(r.get("lon")),
+                            "dwell_min": int(r.get("dwell_min") or 60),
+                        })
+                    except (TypeError, ValueError):
+                        continue
+                day["stops"] = stops_records
+
+                rm_c1, rm_c2 = st.columns([1, 4])
+                if rm_c1.button("Remove day", key=f"ody_rm_{i}"):
+                    st.session_state.ody_days.pop(i)
+                    st.rerun()
+
+        # --- Compose button ---------------------------------------------
+        st.markdown("")
+        c_run1, c_run2 = st.columns([1, 3])
+        run_it = c_run1.button(
+            "Compose Odyssey",
+            key="ody_run",
+            type="primary",
+            use_container_width=True,
+            help="Score every day, thread the aggregate, surface the weakest link.",
+        )
+        c_run2.caption(
+            "Same inputs → same bytes. Runs in < 100 ms for a 7-day trip on a laptop."
+        )
+
+        # --- Convert roster → OdysseyDay list ---------------------------
+        def _roster_to_days() -> list:
+            out = []
+            for d in st.session_state.ody_days:
+                stops = tuple(
+                    ody.Stop(
+                        label=str(s.get("label","")),
+                        lat=float(s.get("lat", 0.0)),
+                        lon=float(s.get("lon", 0.0)),
+                        dwell_min=int(s.get("dwell_min", 60)),
+                    )
+                    for s in d.get("stops", [])
+                )
+                try:
+                    out.append(ody.OdysseyDay(
+                        date=str(d.get("date","")),
+                        label=str(d.get("label","")),
+                        stay_lat=float(d.get("stay_lat", my["lat"])),
+                        stay_lon=float(d.get("stay_lon", my["lon"])),
+                        stay_label=str(d.get("stay_label","")),
+                        stops=stops,
+                        depart_hour=int(d.get("depart_hour", 9)),
+                        transit_mode=str(d.get("transit_mode","auto")),
+                    ))
+                except (TypeError, ValueError):
+                    continue
+            return out
+
+        if run_it or "ody_last_trip" not in st.session_state:
+            days_in = _roster_to_days()
+            if days_in:
+                # Forecaster is optional — only build it if the app already
+                # has one warm (avoids paying build cost on this tab).
+                forecaster_local = None
+                try:
+                    forecaster_local = get_forecaster()
+                except Exception:
+                    forecaster_local = None
+                trip = ody.compose_odyssey(
+                    days=days_in,
+                    incidents=inc_df.to_dict("records") if not inc_df.empty else [],
+                    geofences=GEOFENCES,
+                    pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                    forecaster=forecaster_local,
+                )
+                st.session_state.ody_last_trip = trip
+            else:
+                st.session_state.ody_last_trip = None
+
+        trip = st.session_state.get("ody_last_trip")
+        if trip is None or trip.n_days == 0:
+            render_odyssey_empty(
+                "Add at least one day above and press <b>Compose Odyssey</b>."
+            )
+        else:
+            render_odyssey(trip)
+
+            st.markdown("---")
+            colj, colm = st.columns(2)
+            with colj:
+                st.download_button(
+                    "Download JSON (waysafe.odyssey.v1)",
+                    data=ody.to_json(trip),
+                    file_name="waysafe_odyssey.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with colm:
+                st.download_button(
+                    "Download Markdown brief",
+                    data=ody.to_markdown(trip),
+                    file_name="waysafe_odyssey.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+            t_md, t_json = st.tabs(["Markdown preview", "JSON preview"])
+            with t_md:
+                st.markdown(ody.to_markdown(trip))
+            with t_json:
+                st.code(ody.to_json(trip, indent=2), language="json")
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")

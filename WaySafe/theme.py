@@ -6502,3 +6502,674 @@ def render_prism_empty(
         """,
         unsafe_allow_html=True,
     )
+
+# ------------------------------------------------------------------ Odyssey
+# Day 76: Multi-Day Trip Composer.
+#
+# Renders a `odyssey.TripReport`: hero score ring, per-day accordion strip,
+# corridor heat rows, weakest-link callout with ranked swaps, drift +
+# persistence chips, and an ordered advisory block.
+
+
+_ODYSSEY_CSS = """
+<style>
+:root {
+  --od-serene:  #53E3A6;
+  --od-solid:   #7BC5F1;
+  --od-bumpy:   #F9C440;
+  --od-frag:    #FF9F43;
+  --od-crit:    #FF3D60;
+  --od-line:    rgba(255,255,255,0.08);
+  --od-glass:   rgba(255,255,255,0.03);
+  --od-glass-2: rgba(255,255,255,0.055);
+  --od-ink:     #E6E9F2;
+  --od-mute:    #8892A6;
+  --od-dim:     #6B7280;
+}
+
+.ws-od-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 172px 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 22px 24px;
+  margin: 6px 0 18px 0;
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse 60% 70% at 18% 12%, var(--glow), transparent 70%),
+    linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.008) 100%);
+  border: 1px solid var(--hue, #7BC5F1);
+  box-shadow: 0 12px 40px var(--glow, rgba(123,197,241,0.20));
+}
+.ws-od-ring {
+  position: relative;
+  width: 172px; height: 172px; border-radius: 50%;
+  background: conic-gradient(var(--hue) calc(var(--pct,0) * 1%),
+                             rgba(255,255,255,0.05) 0);
+  display: grid; place-items: center;
+  box-shadow: 0 0 32px var(--glow, rgba(123,197,241,0.22));
+}
+.ws-od-ring::after {
+  content: "";
+  position: absolute; inset: 12px;
+  border-radius: 50%;
+  background: #0E1117;
+}
+.ws-od-ring-inner {
+  position: relative; z-index: 1;
+  display: grid; place-items: center; text-align: center;
+}
+.ws-od-score {
+  font-size: 42px; line-height: 1; font-weight: 900;
+  color: var(--od-ink); letter-spacing: -0.02em;
+}
+.ws-od-score small { font-size: 14px; color: var(--od-mute); font-weight: 700; }
+.ws-od-verdict {
+  font-size: 11px; color: var(--hue); margin-top: 6px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.14em;
+}
+.ws-od-hero-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ws-od-pill {
+  align-self: flex-start;
+  display: inline-flex; gap: 8px; align-items: center;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--pill-bg, rgba(123,197,241,0.14));
+  border: 1px solid var(--hue, #7BC5F1);
+  color: var(--hue, #7BC5F1);
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-od-hero-title {
+  font-size: 22px; font-weight: 800; color: var(--od-ink);
+  letter-spacing: -0.02em; margin-top: 2px;
+}
+.ws-od-hero-blurb {
+  font-size: 13px; color: var(--od-mute); line-height: 1.45; margin: 4px 0 6px 0;
+}
+.ws-od-hero-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;
+}
+.ws-od-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  background: var(--od-glass-2);
+  border: 1px solid var(--od-line);
+  color: var(--od-ink); font-size: 11px; font-weight: 600;
+}
+.ws-od-chip b { color: var(--od-ink); font-weight: 800; }
+.ws-od-chip.pos { color: var(--od-serene); border-color: rgba(83,227,166,0.28); }
+.ws-od-chip.neg { color: var(--od-crit);   border-color: rgba(255,61,96,0.30); }
+.ws-od-mood {
+  display: grid; place-items: center; text-align: center;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--glow) 0%, transparent 100%);
+  border: 1px solid var(--hue, #7BC5F1);
+  min-width: 130px;
+}
+.ws-od-mood-glyph { font-size: 34px; line-height: 1; }
+.ws-od-mood-name  { font-size: 12px; font-weight: 800; color: var(--hue);
+                    letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+.ws-od-mood-note  { font-size: 10.5px; color: var(--od-mute); margin-top: 2px; }
+
+/* --- Aggregate tiles ------------------------------------------------ */
+.ws-od-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 10px; margin: 6px 0 18px 0;
+}
+.ws-od-tile {
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--od-glass); border: 1px solid var(--od-line);
+}
+.ws-od-tile-label { font-size: 10.5px; color: var(--od-mute);
+                    text-transform: uppercase; letter-spacing: 0.10em; font-weight: 700; }
+.ws-od-tile-value { font-size: 22px; color: var(--od-ink); font-weight: 800;
+                    letter-spacing: -0.02em; margin-top: 4px; }
+.ws-od-tile-hint  { font-size: 11px; color: var(--od-mute); margin-top: 2px; }
+
+/* --- Day strip ------------------------------------------------------ */
+.ws-od-section-title {
+  font-size: 13px; color: var(--od-ink); font-weight: 800;
+  margin: 14px 0 8px 2px;
+  letter-spacing: 0.02em;
+}
+.ws-od-day-strip { display: flex; gap: 10px; overflow-x: auto; padding: 4px 0 12px 0; }
+.ws-od-day-card {
+  min-width: 220px; max-width: 260px;
+  padding: 14px 14px 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--glow) 0%, rgba(255,255,255,0.008) 100%);
+  border: 1px solid var(--hue); flex: 0 0 auto;
+}
+.ws-od-day-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.ws-od-day-num {
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--od-line);
+  color: var(--od-ink); font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.ws-od-day-band {
+  padding: 2px 10px; border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--hue);
+  color: var(--hue); font-size: 10px; font-weight: 800;
+  letter-spacing: 0.10em; text-transform: uppercase;
+}
+.ws-od-day-title { font-size: 14px; font-weight: 800; color: var(--od-ink);
+                   line-height: 1.25; margin: 2px 0 4px 0; }
+.ws-od-day-date  { font-size: 11px; color: var(--od-mute); margin-bottom: 6px; }
+.ws-od-day-score {
+  display: flex; align-items: baseline; gap: 6px;
+  color: var(--hue); font-weight: 900; font-size: 30px; letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.ws-od-day-score small { color: var(--od-mute); font-size: 12px; font-weight: 700; }
+.ws-od-day-reason { font-size: 11px; color: var(--od-mute); line-height: 1.35; }
+.ws-od-day-sub {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;
+}
+.ws-od-daychip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--od-line);
+  color: var(--od-ink); font-size: 10.5px; font-weight: 600;
+}
+.ws-od-daychip b { color: var(--od-ink); font-weight: 800; }
+
+/* --- Day details (drill-in) ---------------------------------------- */
+.ws-od-detail {
+  padding: 14px 16px; border-radius: 14px;
+  background: var(--od-glass); border: 1px solid var(--od-line);
+  margin-bottom: 8px;
+}
+.ws-od-detail h4 {
+  font-size: 13px; color: var(--od-ink); font-weight: 800;
+  margin: 0 0 8px 0; letter-spacing: 0.02em;
+}
+.ws-od-leg-row {
+  display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 10px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--od-line); margin-bottom: 4px;
+  align-items: center; font-size: 12.5px; color: var(--od-ink);
+}
+.ws-od-leg-arrow { color: var(--od-mute); font-weight: 800; margin: 0 4px; }
+.ws-od-leg-num { color: var(--hue); font-weight: 800; font-variant-numeric: tabular-nums; }
+.ws-od-leg-mini {
+  color: var(--od-mute); font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.ws-od-leg-strip {
+  height: 8px; border-radius: 4px; overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  display: flex; margin: 6px 0 2px 0;
+}
+.ws-od-leg-strip span { display: block; height: 100%; flex: 1 1 0; min-width: 0; }
+.ws-od-stop-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--od-line);
+  align-items: center; margin-bottom: 4px; font-size: 12.5px; color: var(--od-ink);
+}
+.ws-od-stop-badge {
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--pill-bg); border: 1px solid var(--hue);
+  color: var(--hue); font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+/* --- Weakest-link callout ------------------------------------------ */
+.ws-od-weak {
+  padding: 16px 18px; border-radius: 16px;
+  background: linear-gradient(135deg, var(--glow) 0%, rgba(255,255,255,0.006) 100%);
+  border: 1px solid var(--hue);
+  margin: 8px 0 16px 0;
+}
+.ws-od-weak-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.ws-od-weak-tag {
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--pill-bg); border: 1px solid var(--hue);
+  color: var(--hue); font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-od-weak-name {
+  font-size: 15px; color: var(--od-ink); font-weight: 800;
+}
+.ws-od-weak-score {
+  color: var(--hue); font-weight: 900; font-size: 15px; margin-left: auto;
+}
+.ws-od-weak-reason {
+  font-size: 12.5px; color: var(--od-mute); margin-bottom: 10px; line-height: 1.45;
+}
+.ws-od-swap {
+  padding: 10px 12px; border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--od-line);
+  margin-bottom: 6px;
+}
+.ws-od-swap-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.ws-od-swap-kind {
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--od-line);
+  color: var(--od-ink); font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.10em;
+}
+.ws-od-swap-label { font-size: 13px; color: var(--od-ink); font-weight: 700; }
+.ws-od-swap-uplift {
+  margin-left: auto;
+  color: var(--od-serene); font-weight: 800; font-size: 12px;
+}
+.ws-od-swap-uplift.negband { color: var(--od-solid); }
+.ws-od-swap-detail { font-size: 12px; color: var(--od-mute); line-height: 1.4; }
+
+/* --- Advisory ------------------------------------------------------ */
+.ws-od-advisory {
+  padding: 14px 16px; border-radius: 14px;
+  background: var(--od-glass); border: 1px solid var(--od-line);
+  margin: 8px 0 12px 0;
+}
+.ws-od-advisory ol { margin: 4px 0 0 22px; padding: 0; }
+.ws-od-advisory li {
+  font-size: 12.5px; color: var(--od-ink); line-height: 1.5; margin-bottom: 4px;
+}
+.ws-od-advisory li b { color: var(--od-ink); }
+
+/* --- Empty state --------------------------------------------------- */
+.ws-od-empty {
+  padding: 22px 24px; border-radius: 16px;
+  background: linear-gradient(135deg, rgba(123,197,241,0.05) 0%, transparent 100%);
+  border: 1px dashed rgba(123,197,241,0.35);
+  color: var(--od-mute); font-size: 13.5px; line-height: 1.55;
+}
+.ws-od-empty b { color: var(--od-ink); }
+.ws-od-empty-title {
+  font-size: 15px; font-weight: 800; color: var(--od-ink); margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+/* --- Drift chart --------------------------------------------------- */
+.ws-od-drift {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
+  align-items: end;
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--od-glass); border: 1px solid var(--od-line);
+  margin-bottom: 10px;
+}
+.ws-od-drift-title {
+  font-size: 10.5px; color: var(--od-mute);
+  text-transform: uppercase; letter-spacing: 0.10em;
+  font-weight: 700;
+}
+.ws-od-drift-bars { display: flex; gap: 4px; align-items: end; height: 60px; }
+.ws-od-drift-bar {
+  flex: 1 1 0; min-width: 12px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--barhue);
+  height: var(--h);
+  position: relative;
+  border: 1px solid var(--od-line);
+}
+.ws-od-drift-bar::after {
+  content: attr(data-lbl);
+  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 9.5px; color: var(--od-mute); font-weight: 700; white-space: nowrap;
+}
+</style>
+"""
+
+
+# Composition weights — mirror `odyssey.STAY_WEIGHT / STOPS_WEIGHT /
+# CORRIDOR_WEIGHT` so the composition line reads the same numbers as the
+# engine.  Kept as constants in theme.py so the module has no back-import
+# to feature code.
+_OD_STAY_W = 0.30
+_OD_STOPS_W = 0.40
+_OD_CORRIDOR_W = 0.30
+
+_ODYSSEY_BAND_HUE = {
+    "Serene":   ("#53E3A6", "rgba(83,227,166,0.22)",  "rgba(83,227,166,0.14)"),
+    "Solid":    ("#7BC5F1", "rgba(123,197,241,0.22)", "rgba(123,197,241,0.14)"),
+    "Bumpy":    ("#F9C440", "rgba(249,196,64,0.22)",  "rgba(249,196,64,0.14)"),
+    "Fragile":  ("#FF9F43", "rgba(255,159,67,0.22)",  "rgba(255,159,67,0.14)"),
+    "Critical": ("#FF3D60", "rgba(255,61,96,0.24)",   "rgba(255,61,96,0.16)"),
+    "Safe":     ("#53E3A6", "rgba(83,227,166,0.22)",  "rgba(83,227,166,0.14)"),
+    "Caution":  ("#F9C440", "rgba(249,196,64,0.22)",  "rgba(249,196,64,0.14)"),
+    "High Risk":("#FF9F43", "rgba(255,159,67,0.22)",  "rgba(255,159,67,0.14)"),
+    "Danger":   ("#FF3D60", "rgba(255,61,96,0.24)",   "rgba(255,61,96,0.16)"),
+}
+
+
+def _od_hue(band: str):
+    return _ODYSSEY_BAND_HUE.get(band, ("#8892A6", "rgba(136,146,166,0.20)", "rgba(136,146,166,0.12)"))
+
+
+def _od_verdict_glyph(verdict: str) -> str:
+    return {
+        "Serene": "✦", "Solid": "◆", "Bumpy": "▲",
+        "Fragile": "◈", "Critical": "◉", "empty": "…",
+    }.get(verdict, "◇")
+
+
+def _od_risk_hue(risk_0_1: float) -> str:
+    """Waypoint colour on the leg heat strip. Green → amber → red."""
+    r = max(0.0, min(1.0, risk_0_1))
+    if r < 0.15: return "#53E3A6"
+    if r < 0.30: return "#7BC5F1"
+    if r < 0.50: return "#F9C440"
+    if r < 0.70: return "#FF9F43"
+    return "#FF3D60"
+
+
+def render_odyssey_empty(hint: str = None) -> None:
+    """Placeholder shown when there's no TripReport yet."""
+    st.markdown(_ODYSSEY_CSS, unsafe_allow_html=True)
+    hint = hint or (
+        "Pick your <b>stay</b>, add 1–4 <b>stops per day</b> across 2–7 days, "
+        "then press <b>Compose Odyssey</b>. Every day is scored under the same "
+        "physics as Safety, Compass and Tempo — no new measurements, no extra "
+        "config. The trip verdict is <b>worst-day-weighted</b>, so a single "
+        "Fragile day can't hide behind Serene neighbours."
+    )
+    st.markdown(
+        f"""
+        <div class="ws-od-empty">
+          <div class="ws-od-empty-title">Odyssey — Multi-Day Trip Composer</div>
+          {hint}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_odyssey(trip) -> None:
+    """Render a `odyssey.TripReport`. Falls back to empty state when None
+    or `verdict == "empty"`."""
+    if trip is None or getattr(trip, "verdict", "") == "empty":
+        render_odyssey_empty()
+        return
+
+    st.markdown(_ODYSSEY_CSS, unsafe_allow_html=True)
+
+    hue, glow, pill = _od_hue(trip.verdict)
+    pct = max(0, min(100, trip.trip_score))
+
+    # ------------------------------------------------------------ hero
+    drift = trip.drift_index
+    drift_chip_cls = "pos" if drift > 3 else ("neg" if drift < -3 else "")
+    drift_arrow = "↗" if drift > 3 else ("↘" if drift < -3 else "→")
+    persistence_chip = (
+        f'<span class="ws-od-chip neg">persistence <b>{trip.persistence_streak} d</b></span>'
+        if trip.persistence_streak >= 2 else
+        f'<span class="ws-od-chip">persistence <b>0</b></span>'
+    )
+    st.markdown(
+        f"""
+        <div class="ws-od-hero" style="--hue:{hue};--glow:{glow};">
+          <div class="ws-od-ring" style="--hue:{hue};--pct:{pct};--glow:{glow};">
+            <div class="ws-od-ring-inner">
+              <div class="ws-od-score">{trip.trip_score}<small>/100</small></div>
+              <div class="ws-od-verdict">{_esc(trip.verdict)}</div>
+            </div>
+          </div>
+          <div class="ws-od-hero-body">
+            <div class="ws-od-pill" style="--pill-bg:{pill};--hue:{hue};">
+              ODYSSEY · {_esc(trip.verdict).upper()}
+            </div>
+            <div class="ws-od-hero-title">
+              {trip.n_days}-day trip · mean {trip.mean_day_score:.0f} · min {trip.min_day_score}
+            </div>
+            <div class="ws-od-hero-blurb">{_esc(trip.verdict_reason)}</div>
+            <div class="ws-od-hero-chips">
+              <span class="ws-od-chip">stops <b>{trip.total_stops}</b></span>
+              <span class="ws-od-chip">distance <b>{trip.total_distance_km:.1f} km</b></span>
+              <span class="ws-od-chip">risk-km <b>{trip.total_risk_km:.2f}</b></span>
+              <span class="ws-od-chip">ETA <b>{trip.total_eta_min:.0f} min</b></span>
+              <span class="ws-od-chip {drift_chip_cls}">drift {drift_arrow} <b>{drift:+.1f}</b></span>
+              {persistence_chip}
+            </div>
+          </div>
+          <div class="ws-od-mood" style="--hue:{hue};--glow:{glow};">
+            <div class="ws-od-mood-glyph">{_od_verdict_glyph(trip.verdict)}</div>
+            <div class="ws-od-mood-name">{_esc(trip.verdict)}</div>
+            <div class="ws-od-mood-note">worst-day-weighted</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ------------------------------------------------------------ tiles
+    st.markdown(
+        f"""
+        <div class="ws-od-tiles">
+          <div class="ws-od-tile">
+            <div class="ws-od-tile-label">Trip score</div>
+            <div class="ws-od-tile-value">{trip.trip_score}<span style="font-size:14px;color:var(--od-mute);"> /100</span></div>
+            <div class="ws-od-tile-hint">0.6·mean + 0.4·min</div>
+          </div>
+          <div class="ws-od-tile">
+            <div class="ws-od-tile-label">Mean day</div>
+            <div class="ws-od-tile-value">{trip.mean_day_score:.1f}</div>
+            <div class="ws-od-tile-hint">arith mean across days</div>
+          </div>
+          <div class="ws-od-tile">
+            <div class="ws-od-tile-label">Weakest day</div>
+            <div class="ws-od-tile-value">{trip.min_day_score}</div>
+            <div class="ws-od-tile-hint">min sets the verdict ceiling</div>
+          </div>
+          <div class="ws-od-tile">
+            <div class="ws-od-tile-label">Drift index</div>
+            <div class="ws-od-tile-value">{trip.drift_index:+.1f}</div>
+            <div class="ws-od-tile-hint">signed sum of Δ(day, day+1)</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ------------------------------------------------------------ day strip
+    st.markdown('<div class="ws-od-section-title">Days</div>', unsafe_allow_html=True)
+    day_cards = ['<div class="ws-od-day-strip">']
+    for i, dr in enumerate(trip.days, 1):
+        d_hue, d_glow, d_pill = _od_hue(dr.day_band)
+        stops_chip = f"stops <b>{dr.n_stops}</b>"
+        dist_chip = f"km <b>{dr.total_distance_km:.1f}</b>"
+        risk_chip = f"risk-km <b>{dr.total_risk_km:.2f}</b>"
+        fat_chip = ""
+        if dr.fatigue_penalty > 0:
+            fat_chip = f'<span class="ws-od-daychip" style="color:{_ODYSSEY_BAND_HUE["Fragile"][0]};border-color:rgba(255,159,67,0.25);">fatigue <b>-{dr.fatigue_penalty:.0f}</b></span>'
+        day_cards.append(f"""
+            <div class="ws-od-day-card" style="--hue:{d_hue};--glow:{d_glow};--pill-bg:{d_pill};">
+              <div class="ws-od-day-head">
+                <span class="ws-od-day-num">Day {i}</span>
+                <span class="ws-od-day-band">{_esc(dr.day_band)}</span>
+              </div>
+              <div class="ws-od-day-title">{_esc(dr.day.label)}</div>
+              <div class="ws-od-day-date">{_esc(dr.day.date)} · depart {dr.day.depart_hour:02d}:00 · {_esc(dr.day.transit_mode)}</div>
+              <div class="ws-od-day-score">{dr.day_score}<small>/100</small></div>
+              <div class="ws-od-day-reason">{_esc(dr.reason)}</div>
+              <div class="ws-od-day-sub">
+                <span class="ws-od-daychip">{stops_chip}</span>
+                <span class="ws-od-daychip">{dist_chip}</span>
+                <span class="ws-od-daychip">{risk_chip}</span>
+                {fat_chip}
+              </div>
+            </div>
+        """)
+    day_cards.append('</div>')
+    st.markdown("\n".join(day_cards), unsafe_allow_html=True)
+
+    # ------------------------------------------------------------ drift chart
+    if trip.n_days >= 2:
+        chart_bars: list = []
+        # normalise heights against 100 pt scale.
+        for i, dr in enumerate(trip.days, 1):
+            h = max(4, int(round(dr.day_score * 0.55)))  # px in 60-px chart
+            bhue, _, _ = _od_hue(dr.day_band)
+            chart_bars.append(
+                f'<div class="ws-od-drift-bar" style="--barhue:{bhue};--h:{h}px;" '
+                f'data-lbl="D{i} · {dr.day_score}"></div>'
+            )
+        st.markdown(
+            f"""
+            <div class="ws-od-drift">
+              <div class="ws-od-drift-title">day scores</div>
+              <div class="ws-od-drift-bars">{"".join(chart_bars)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ------------------------------------------------------------ weakest link
+    if trip.weakest_link is not None:
+        w = trip.weakest_link
+        w_hue, w_glow, w_pill = _od_hue(w.band)
+        st.markdown('<div class="ws-od-section-title">Weakest link</div>', unsafe_allow_html=True)
+        swaps_html = ""
+        if w.swaps:
+            rows = []
+            for sw in w.swaps:
+                up_cls = "" if sw.expected_uplift_pts >= 5 else "negband"
+                tgt = f" → <b>{_esc(sw.target_band)}</b>" if sw.target_band else ""
+                rows.append(f"""
+                    <div class="ws-od-swap">
+                      <div class="ws-od-swap-head">
+                        <span class="ws-od-swap-kind">{_esc(sw.kind)}</span>
+                        <span class="ws-od-swap-label">{_esc(sw.label)}</span>
+                        <span class="ws-od-swap-uplift {up_cls}">+{sw.expected_uplift_pts:.1f} pts{tgt}</span>
+                      </div>
+                      <div class="ws-od-swap-detail">{_esc(sw.detail)}</div>
+                    </div>
+                """)
+            swaps_html = "\n".join(rows)
+        else:
+            swaps_html = (
+                '<div class="ws-od-swap-detail" style="padding:10px 12px;">'
+                'No auto-swap improves this day by more than the minimum uplift. '
+                'Re-plan manually via Plan Route + Tempo.</div>'
+            )
+        st.markdown(
+            f"""
+            <div class="ws-od-weak" style="--hue:{w_hue};--glow:{w_glow};--pill-bg:{w_pill};">
+              <div class="ws-od-weak-head">
+                <span class="ws-od-weak-tag">{_esc(w.kind)}</span>
+                <span class="ws-od-weak-name">{_esc(w.day_label)} · {_esc(w.leg_label)}</span>
+                <span class="ws-od-weak-score">{w.score} <span style="color:var(--od-mute);font-size:11px;font-weight:700;">({_esc(w.band)})</span></span>
+              </div>
+              <div class="ws-od-weak-reason">{_esc(w.reason)}</div>
+              {swaps_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ------------------------------------------------------------ advisory
+    if trip.trip_advisory:
+        items = "".join(f"<li>{_esc(a)}</li>" for a in trip.trip_advisory)
+        st.markdown(
+            f"""
+            <div class="ws-od-advisory">
+              <div style="font-size:11px;color:var(--od-mute);text-transform:uppercase;letter-spacing:.10em;font-weight:800;">
+                Advisory — ordered actions
+              </div>
+              <ol>{items}</ol>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ------------------------------------------------------------ per-day details (expanders)
+    st.markdown('<div class="ws-od-section-title">Per-day breakdown</div>', unsafe_allow_html=True)
+    for i, dr in enumerate(trip.days, 1):
+        d_hue, d_glow, d_pill = _od_hue(dr.day_band)
+        with st.expander(f"Day {i} — {dr.day.label} · {dr.day_score} ({dr.day_band})", expanded=(i == 1)):
+            # Stay row
+            stay_hue, _, stay_pill = _od_hue(dr.stay_band)
+            st.markdown(
+                f"""
+                <div class="ws-od-detail">
+                  <h4>Stay</h4>
+                  <div class="ws-od-stop-row" style="--hue:{stay_hue};--pill-bg:{stay_pill};">
+                    <div><b>{_esc(dr.day.stay_label)}</b>
+                      <div style="color:var(--od-mute);font-size:11px;">({dr.day.stay_lat:.4f}, {dr.day.stay_lon:.4f}) · scored at 20:00</div>
+                    </div>
+                    <div class="ws-od-leg-mini">score</div>
+                    <div class="ws-od-stop-badge">{dr.stay_score} · {_esc(dr.stay_band)}</div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if dr.day.stops:
+                st.markdown('<div class="ws-od-detail"><h4>Stops</h4>', unsafe_allow_html=True)
+                for stop, score, band in zip(dr.day.stops, dr.stop_scores, dr.stop_bands):
+                    s_hue, _, s_pill = _od_hue(band)
+                    st.markdown(
+                        f"""
+                        <div class="ws-od-stop-row" style="--hue:{s_hue};--pill-bg:{s_pill};">
+                          <div><b>{_esc(stop.label)}</b>
+                            <div style="color:var(--od-mute);font-size:11px;">dwell {stop.dwell_min} min · ({stop.lat:.4f}, {stop.lon:.4f})</div>
+                          </div>
+                          <div class="ws-od-leg-mini">score</div>
+                          <div class="ws-od-stop-badge">{score} · {_esc(band)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+            if dr.legs:
+                st.markdown('<div class="ws-od-detail"><h4>Corridor legs</h4>', unsafe_allow_html=True)
+                for leg in dr.legs:
+                    l_band = ("Safe" if leg.min_safety_along >= 80 else
+                              "Caution" if leg.min_safety_along >= 60 else
+                              "High Risk" if leg.min_safety_along >= 35 else "Danger")
+                    l_hue, _, l_pill = _od_hue(l_band)
+                    heat_cells = "".join(
+                        f'<span style="background:{_od_risk_hue(r)};"></span>'
+                        for _, _, r in leg.samples
+                    )
+                    st.markdown(
+                        f"""
+                        <div class="ws-od-leg-row" style="--hue:{l_hue};--pill-bg:{l_pill};">
+                          <div><b>{_esc(leg.a_label)}</b>
+                            <span class="ws-od-leg-arrow">→</span>
+                            <b>{_esc(leg.b_label)}</b>
+                            <div class="ws-od-leg-strip">{heat_cells}</div>
+                          </div>
+                          <div><span class="ws-od-leg-mini">dist</span>
+                            <div class="ws-od-leg-num">{leg.distance_km:.2f}</div></div>
+                          <div><span class="ws-od-leg-mini">ETA</span>
+                            <div class="ws-od-leg-num">{leg.eta_min:.0f} m</div></div>
+                          <div><span class="ws-od-leg-mini">risk-km</span>
+                            <div class="ws-od-leg-num">{leg.risk_km:.2f}</div></div>
+                          <div class="ws-od-stop-badge">{leg.min_safety_along}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+            # Composition line
+            st.markdown(
+                f"""
+                <div class="ws-od-detail" style="padding:8px 12px;">
+                  <div class="ws-od-leg-mini">composition</div>
+                  <div style="font-size:12.5px;color:var(--od-ink);margin-top:2px;">
+                    {_OD_STAY_W:.2f}·stay ({dr.stay_score}) + {_OD_STOPS_W:.2f}·mean(stops) ({int(round(sum(dr.stop_scores)/max(1,len(dr.stop_scores))))}) + {_OD_CORRIDOR_W:.2f}·corridor ({dr.corridor_score}) − fatigue ({dr.fatigue_penalty:.0f}) = <b>{dr.day_score}</b>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
