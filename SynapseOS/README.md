@@ -3,9 +3,12 @@
 > **Watch your brain organize itself.**
 > Notes auto-link via embedding-based synapses. Clusters and their names
 > emerge automatically. Isolated thoughts surface as rescuable orphans.
-> **Spark** then turns the gaps in your graph into a queue of concrete
-> next-note drafts — title, opener, tags, predicted cluster, predicted
-> synapses — that you click to commit.
+> **Spark** turns the gaps in your graph into a queue of concrete
+> next-note drafts you click to commit. **Compass** pins a research
+> question, re-ranks the vault against it, and grows a citation-stitched
+> working answer as you mark notes read. **Recall** (new) quizzes your
+> own graph back at you — cloze, prompt and neighbor-choice cards, SM-2
+> spaced repetition, per-cluster mastery.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -30,6 +33,157 @@ Every PKM tool falls into one of two camps:
 SynapseOS splits the difference. Links are automatic *and* inspectable.
 You can see every synapse, why it exists (cosine similarity), tune the
 threshold live, and watch your topical clusters discover themselves.
+
+---
+
+## What's new — Recall (Day 74)
+
+Every other surface in SynapseOS is either **observational** (Atlas,
+Pulse, Chronicle, Tensions, Echoes, Synthesis, Compass) or
+**generative-writing** (Spark, Distill). None of them ever *test* the
+user. That leaves a quiet failure mode: a mature second brain becomes
+read-only. Recall closes that loop.
+
+**Three card types cover distinct retrieval modes:**
+
+- **Cloze** — the most distinctive noun-phrase in the body is masked;
+  you type the missing phrase. The scorer is a TF·IDF flavour with a
+  **1.6× capitalization bonus** (proper nouns and "Louvain method"-style
+  concept phrases beat straddling verb-noun bigrams like *"graphs
+  assigns"*), a common-verb blacklist, and `max(df_a, df_b)` on bigram
+  IDF so a rare word yoked to a common one can't drag the score up on
+  the common word's back. Auto-graded server-side with a **Sørensen–Dice
+  bigram similarity** — ≥ 0.72 counts (typos and pluralisation still
+  pass, "manager" for "management" does not).
+- **Prompt** — the title becomes the question, the body reveals the
+  answer. Tests conceptual recall, not phrase memorisation. Always
+  self-graded — the answer is a body excerpt, not a canonical string.
+- **Neighbor** — given a source note, pick which of four candidates the
+  graph considers its strongest synapse. Tests structural recall — do
+  you remember how ideas are *wired*? Distractors are preferentially
+  drawn from *other* clusters so a same-cluster distractor doesn't get
+  the "correct-adjacent" free pass.
+
+**Card selection** weights hard-to-recall notes highest (lowest ease),
+then overdue notes, then stale × central as a Revisit-style fallback.
+A per-cluster cap of 2 keeps a hot topic from monopolizing the session.
+
+**The scheduler is SM-2 lite:**
+
+```
+grade=0 (again)  →  ease -= 0.20  (floor 1.30)  ·  interval *= 0.30  ·  streak = 0
+grade=1 (hard)   →  ease -= 0.05                ·  interval *= 1.20
+grade=2 (good)   →  ease unchanged              ·  interval *= ease
+grade=3 (easy)   →  ease += 0.15  (cap 3.00)    ·  interval *= ease · 1.30  ·  streak += 1
+```
+
+Interval is capped at 90 days so even easy notes cycle back at least
+quarterly. Every state mutation flows through `POST /recall/grade` and
+persists in the `recall_state` table so a session survives a browser
+reload and the scheduler is honest across restarts. Grading a card
+*also* touches `last_seen_at` so Revisit and Pulse see the review as
+engagement — one action, coherent state across every surface.
+
+**Per-cluster mastery** = `known / size` where a note is "known" once
+its streak clears 2. The mastery strip renders across the top of every
+session so you can see, in the same glance, which parts of the graph
+live in your head and which are still just files on disk. The
+post-session report cards each answered card with its next-review
+phrase (*"in 2d 12h"*, *"in 18h"*), a per-cluster mastery bar, and a
+click-to-open-in-graph hook back to the note.
+
+**Keyboard everything.** Space / Enter reveals. **1 / 2 / 3 / 4** grades
+Again / Hard / Good / Easy. Type into the cloze field and hit Enter to
+check — the auto-verdict fires first, then you self-grade with speed as
+the signal (SM-2 grades *how quickly* the answer came, not *whether* it
+came at all — the auto-check has already told you that).
+
+---
+
+## What's new — Compass (Day 69)
+
+Every other surface is **observational** (Atlas, Pulse, Chronicle,
+Tensions, Echoes, Synthesis) or **generative-writing** (Spark, Distill).
+**Compass is generative-reading.** Pin one research question; the entire
+vault re-ranks against it; a citation-stitched working answer assembles
+beneath you as you mark notes read for *this* question (a per-question
+read marker, not the global `last_seen_at`).
+
+The chat surface answers one shot and forgets. A trail captures a path
+you've already walked. **Compass is the in-flight research session** —
+the surface that's open while you're actually trying to figure
+something out.
+
+**Per-note relevance** = `0.65·cosine + 0.25·lexical + 0.10·title_hit`,
+floored at `0.06` to keep noise off the queue. Each in-lens note ships
+with its **best excerpt** (the body sentence with the highest content-
+word overlap with the question), a **relevance dial**, and an
+**info_gain** score (`relevance · (read ? 0.30 : 1.00)`) that drives
+the queue order — re-skims still surface, just at lower priority.
+
+**Coverage** is **mass-weighted**, not count-weighted: marking the
+top-1 most-relevant note read can jump coverage from 0 → 35% if that
+note dominates the relevance distribution. That's the right framing —
+you've answered the question, not "read 1/N notes."
+
+**Working answer** is the headline surface. It's **extractive on
+purpose**: every line is verbatim from one of your notes, every claim
+carries an inline `[n]` citation that resolves back to a clickable note
+jump, and the same `(question, reads)` always produces the same answer.
+No LLM call; nothing to hallucinate.
+
+**Sub-themes** mine the top distinctive content-words across the
+most-relevant slice (excluding the question's own words and a small
+stoplist) and surface them as chips with **per-term coverage** —
+*which* sub-aspect you've answered vs. which is still cold.
+
+**Frontiers** is the "read next" panel: the top 3 un-read notes by
+info_gain, separate from the full queue so the next decision is one
+click.
+
+### Compass API
+
+```
+GET    /compass/questions                      # list with coverage %
+POST   /compass/questions      {text}          # create → returns full lens
+GET    /compass/questions/{id}                 # full lens
+POST   /compass/questions/{id}/read {note_id}  # mark read → returns lens
+DELETE /compass/questions/{id}/read/{note_id}  # unread → returns lens
+DELETE /compass/questions/{id}                 # hard-delete + cascade reads
+GET    /compass/questions/{id}/export.md       # portable working-answer brief
+```
+
+Sample lens payload:
+
+```json
+{
+  "question_id": 1,
+  "question_text": "how does memory compound in a second brain?",
+  "in_lens": 7,
+  "relevance_mass_total": 1.28,
+  "relevance_mass_read": 0.50,
+  "coverage_pct": 38.8,
+  "notes": [
+    {
+      "note_id": 11,
+      "title": "Spaced repetition for ideas",
+      "snippet": "Anki works for facts; ideas need a different cadence.",
+      "relevance": 0.24, "info_gain": 0.24,
+      "cosine": 0.18, "lexical": 0.10, "title_hit": true,
+      "read": true, "read_at": "2026-06-30T03:42:11+00:00",
+      "cluster_name": "Memory", "cluster_color": "#22d3ee"
+    }
+  ],
+  "frontiers": [ { "note_id": 7, "title": "Second brain, not second inbox", "..." } ],
+  "subquestions": [
+    { "term": "system", "note_count": 4, "covered": 1, "coverage_pct": 25.0 }
+  ],
+  "working_answer": "Anki works for facts; ideas need a different cadence. [1] A knowledge system that only intakes but never resurfaces is a landfill. [2]",
+  "citations": [
+    { "ref": 1, "note_id": 11, "title": "Spaced repetition for ideas", "excerpt": "...", "relevance": 0.24 }
+  ]
+}
+```
 
 ---
 
@@ -123,6 +277,20 @@ Sample card payload (`bridge` kind):
 
 ## What's in the box
 
+- **Recall — active-recall quiz over the graph.** The only surface
+  that *tests* you. **Cloze** (mask the most-distinctive noun-phrase
+  and grade a fuzzy Sørensen–Dice match), **Prompt** (title as
+  question, body as reveal), and **Neighbor** (pick the strongest
+  synapse of a source note out of four candidates — three drawn
+  preferentially from *other* clusters so the "correct-adjacent" free
+  pass doesn't fire). Card selection prioritises **low ease** and
+  **overdue** notes, tempered by staleness + centrality and a
+  per-cluster cap of 2. A **SM-2 lite** scheduler persists per-note
+  ease + interval so a session survives a reload and every grade shifts
+  the note's next-due phrase. Header pill shows cards **due now** and
+  the current **streak**; a mastery strip renders `known / size` per
+  cluster so you can see the graph become known one topic at a time.
+  Keyboard everything: space reveals, **1–4** grade Again/Hard/Good/Easy.
 - **Spark — generative next-note queue.** Reads the *holes* in your
   graph and proposes concrete draft notes (bridge / distill / counter /
   frontier / revive). Each card carries a drafted title + opener +
@@ -822,6 +990,10 @@ duplicate clusters waiting to be merged" without forcing a modal load.
 | `GET`  | `/echo/skips`                | List all currently-skipped pairs.                                                 |
 | `DEL`  | `/echo/skip?a=&b=`           | Forget a single skip so the pair can resurface in the dedup brief.                |
 | `GET`  | `/echo/export.md?threshold=&limit=` | The dedup brief as portable Markdown — one section per cluster with all bodies + the suggested merged body. |
+| `GET`  | `/recall/session?k=&threshold=&top_k=&session=` | Deterministic active-recall session. Returns `{ generated_at, session_id, total_notes, eligible_notes, k, cards: [{ id, kind: "cloze"\|"prompt"\|"neighbor", note_id, title, cluster_*, prompt_text, answer_text, cloze_answer, body_before/after/snippet, choices: [{ note_id, title, is_correct, cluster_* }], correct_choice_id, ease, interval_hours, next_due, streak, reviews, lapses, days_overdue, days_since_seen, reasons[] }], streak_days, due_now, stats }`. Same `session` id + same store → same cards. |
+| `POST` | `/recall/grade`              | SM-2 lite update. Body: `{ note_id, grade: 0..3 }`. Returns `{ note_id, grade, ease, interval_hours, next_due, streak, reviews, lapses, next_due_phrase }`. Also touches `last_seen_at`. |
+| `GET`  | `/recall/summary?threshold=&top_k=` | Per-cluster mastery. Returns `{ generated_at, total_notes, reviewed_notes, due_now, streak_days, mean_ease, total_reviews, mastery_overall, clusters: [{ cluster_id/_name/_color, size, reviewed, known, mastery, mean_ease, due_now }] }`. |
+| `POST` | `/recall/check-cloze`        | Fuzzy-match a typed cloze answer against the canonical phrase. Body: `{ canonical, user_answer }`. Returns `{ is_correct, similarity }` — bigram Sørensen–Dice ≥ 0.72 counts. |
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -909,6 +1081,11 @@ Incremental moves for future rotation days:
       cross-cluster bridges born, hubs born (new notes with degree ≥ 3),
       library-wide vocabulary delta, prioritized recommendations,
       portable Markdown export *(shipped)*
+- [x] **Recall** — active-recall quiz over the graph. Cloze / prompt /
+      neighbor-choice card types, SM-2 lite scheduler with persisted
+      per-note ease + interval, deterministic session salt, auto-graded
+      cloze via bigram Sørensen–Dice, per-cluster mastery strip and
+      post-session report *(shipped)*
 - [ ] Export to Markdown + JSON (with embeddings) for portability
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 

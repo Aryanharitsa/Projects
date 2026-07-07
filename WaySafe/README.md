@@ -18,7 +18,80 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
-- **🆕 Echo — Post-Trip Debrief & Counterfactual** *(Day 66)* — the
+- **🆕 Odyssey — Multi-Day Trip Composer** *(Day 76)* — the first
+  WaySafe surface that scores an entire *multi-day* trip as one
+  deterministic report.  Every prior surface — Pulse, Tempo, Plan
+  Route, Companion, Echo, Prism — is *single-day*.  A tourist rarely
+  plans a single day; they plan a **four-night trip across three
+  towns** and the actual planning question they open the app with is
+  *"is this whole trip safe, which day is the weakest link, and what's
+  the one tweak that would upgrade the trip verdict from Bumpy to
+  Solid?"*.  Odyssey answers that.  `compose_odyssey(...)` takes an
+  ordered `OdysseyDay` list — each with a stay, 1..N stops, a depart
+  hour and a transit mode — and composes a full `TripReport`:
+  per-day breakdown (`0.30·stay + 0.40·mean(stops) + 0.30·corridor`,
+  where `corridor = 100·exp(-0.25·risk_km)` sampled over 12 waypoints
+  per leg via `safety.point_risk` — same physics as `routing`,
+  deterministic in < 100 ms for a 7-day trip), a **worst-day-weighted
+  trip score** (`0.6·mean + 0.4·min`), a five-rung verdict ladder
+  (**Serene / Solid / Bumpy / Fragile / Critical**), a signed **drift
+  index** so a trip that degrades toward the end is called out, a
+  **persistence streak** so two consecutive Bumpy days can't hide
+  behind Serene neighbours, a **fatigue penalty** on 4+-stop days, and
+  a full-auditor **rules** block that names every constant.  The
+  weakest-link block finds the single lowest-scoring (day, element)
+  tuple and ranks up to three concrete swaps — **TIME_SHIFT** (probe
+  depart_hour ± 3 h through the forecaster when loaded),
+  **REORDER** (try the reverse stop-permutation and keep it if
+  `total_risk_km` drops ≥ 1), **MODE_UPGRADE** (walk → cab on days
+  that dwell past 21:00), **STAY_SWAP** (points at the StaySafe tab
+  when the stay itself is the drag) — each stamped with an expected
+  uplift and a target band.  Ships an ordered advisory strip
+  (weakest-link · persistence · drift · late-night arrivals ·
+  fatigue) and exports as JSON (`waysafe.odyssey.v1`) + Markdown for
+  the insurance / duty-of-care / HR-approval use case.  Lives at
+  `tabs[19]` between Prism and Report Hazard — Prism confirms the
+  corridor for a persona, Odyssey commits the trip.
+- **Prism — Persona-Aware Risk Lens** *(Day 71)* — every prior
+  WaySafe surface (Safety, Forecast, Sentinel, Refuge, Compass, Advisory,
+  StaySafe, Pulse, Beacon, Tempo, Echo, …) scores the corridor for the
+  *average* traveller — the same 78/100 for everyone. That is the
+  single biggest blind spot in the product: a corridor that reads
+  *Caution* for two business travellers on a Wednesday afternoon reads
+  *High Risk* for a solo woman at 22:00 and *Danger* for a family with
+  two under-fives. Same physics, same incidents, same geofence —
+  different context, different verdict. Prism re-prices every watched
+  point through one of six preset traveller personas: **♀ Solo woman**,
+  **👨‍👩‍👧 Family with kids**, **🧓 Senior / mobility-conscious**,
+  **💼 Business / punctual**, **🎒 Adventure / solo**, and
+  **🧑‍🤝‍🧑 Backpacker / student group**. Each persona carries a
+  `PersonaProfile` — penalty multipliers (`geofence_mult`,
+  `incident_mult`, `late_night_mult`, `help_poi_mult`, per-category
+  `severity_bumps`), persona-only extras (`remote_penalty` when nearest
+  help POI is beyond `remote_help_km`, `off_hour_penalty` when the
+  depart-hour sits outside the persona's `preferred_hours`), a shifted
+  **band ladder** (Safe / Caution / High Risk / Danger thresholds
+  tightened for solo-woman + family + senior; loosened for adventure +
+  group), a **route α** the Plan Route tab can adopt (family: 7.5,
+  adventure: 3.0 vs base 4.5), a **broadcast cadence** (family 15 min,
+  business 45 min), and an **advisory-bump rung** that force-upgrades
+  the Advisory brief when the base level would understate the risk for
+  this persona. `compute_persona_lens(...)` rebuilds `safety.py`'s
+  factor ledger with those multipliers so the base-vs-persona delta is
+  fully auditable per factor; `compute_prism_report(...)` aggregates
+  the lens across N watched points, composes a deterministic
+  first-match-wins lesson stack (each lesson names the WaySafe tab to
+  open next — Tempo, Advisory, Plan Route, Beacon, Live Trip), and
+  ships the persona's packing / prep checklist. A `compute_persona_matrix(...)`
+  variant scores every point under **every** persona side by side so
+  the analyst can see *who this corridor works for* at a glance.
+  Pure-Python, zero new physics — every number traces back to
+  `safety.compute_safety` — Prism just re-weights the same ledger.
+  Exports as JSON (`waysafe.prism.v1`) and Markdown for the
+  family-share / duty-of-care use case. Lives at `tabs[18]` next to
+  Echo — Echo debriefs *what happened*, Prism reframes *how the day
+  would feel for someone else*.
+- **📼 Echo — Post-Trip Debrief & Counterfactual** *(Day 66)* — the
   *retrospective* lens that closes the temporal loop. Up to Day 65
   every WaySafe surface is forward-looking: **Pulse** opens the day,
   **Tempo** picks the depart-minute, **Plan Route** prices the
@@ -717,6 +790,106 @@ lists *what happened*, Echo explains *why it scored what it scored*.
 
 ---
 
+## 🔎 Prism — Persona-Aware Risk Lens (Day 71)
+
+WaySafe up to Day 70 scores the corridor for the *average* traveller —
+the same 78/100 for everyone. That is the single biggest blind spot in
+the product. A corridor that reads *Caution* for two business travellers
+on a Wednesday afternoon reads *High Risk* for a solo woman at 22:00 and
+*Danger* for a family with two under-fives. **Same physics, same
+incidents, same geofence — different context, different verdict.** Prism
+is the *persona lens* that fixes this: it re-prices every watched point
+through one of six preset traveller personas without introducing new
+measurements — the same factor ledger `safety.py` already emits is
+re-weighted under the chosen persona.
+
+### Six presets
+
+| Persona                           | Icon | Route α | Broadcast | Advisory | Notable knobs                                                            |
+|-----------------------------------|------|--------:|----------:|---------:|--------------------------------------------------------------------------|
+| Solo woman traveller              | ♀    |    6.0 |    20 min | **+1 rung** | late-night ×2.10 · geofence ×1.35 · help-POI ×1.30 · off-hour 22-05 penalised |
+| Family with children              | 👨‍👩‍👧 |    7.5 |    15 min | **+1 rung** | help-POI ×1.40 · accident ×1.30 · remote-help penalty 9 pts >2.5 km      |
+| Senior / mobility-conscious       | 🧓   |    6.5 |    25 min | **+1 rung** | reach short (2 km) · off-hour 19-07 penalised · route bias safest         |
+| Business / punctual               | 💼   |    3.0 |    45 min |         — | fastest-first α · minimal remote-help penalty                            |
+| Adventure / solo                  | 🎒   |    3.0 |    20 min |         — | landslide/flood ×1.30 · **broadcast tightens** at remote distance         |
+| Backpacker / student group        | 🧑‍🤝‍🧑 |    3.5 |    60 min |         — | crowd = safety · bands loosened by ~2 pts per rung                        |
+
+### Physics — how the lens actually re-prices a point
+
+`compute_persona_lens(...)` rebuilds `safety.compute_safety`'s factor
+ledger under the persona:
+
+```
+persona_factor.impact = base_factor.impact × persona_multiplier(factor.kind)
+persona_penalty       = Σ persona_factor.impact (unsigned)
+                      + remote_penalty  if nearest_help_km > persona.remote_help_km
+                      + off_hour_penalty if depart_hour ∉ persona.preferred_hours
+persona_score         = clip(100 − persona_penalty, 0, 100)
+persona_band          = band(persona_score, persona.band_thresholds)   # tightened / loosened ladder
+```
+
+`geofence_mult`, `incident_mult`, `late_night_mult`, `help_poi_mult` are
+the four factor-level multipliers. `severity_bumps` layers on category
+bumps (family × 1.30 on accidents, adventure × 1.30 on landslides).
+The `remote_penalty` fires when the nearest help POI is beyond the
+persona's tolerance (senior: 2 km, family: 2.5 km, adventure: 3.5 km).
+The `off_hour_penalty` fires when the depart hour sits outside the
+persona's `preferred_hours` set. Nothing new is measured — the lens
+consumes the same tables (`incidents`, `pois`, `geofences`) every other
+surface already loads.
+
+### Cross-persona matrix
+
+`compute_persona_matrix(...)` scores every watched point under **every**
+persona side by side, so the analyst can see at a glance *who this
+corridor works for*. The Prism tab renders it as a heat-coloured table
+with a bottom-row watch-list average per persona and best/worst captions:
+
+```
+Point               │ Base │ ♀ SoloW │ 👨‍👩‍👧 Family │ 🧓 Senior │ 💼 Biz │ 🎒 Adv │ 🧑‍🤝‍🧑 Group │
+Aguada Cliffs       │  71  │   43    │      54     │    43   │   66  │   71  │      69     │
+Baga Beach          │  80  │   62    │      65     │    62   │   77  │   80  │      79     │
+Panjim              │  84  │   74    │      70     │    74   │   80  │   84  │      82     │
+────────────────────┼──────┼─────────┼─────────────┼─────────┼───────┼───────┼─────────────┤
+Watch-list avg      │  78  │   60    │      63     │    60   │   74  │   78  │      76     │
+```
+
+### Lessons — persona-tuned, deep-linking
+
+Each lesson is a first-match-wins bullet keyed to *this persona's*
+report:
+
+- `🔴 3 point(s) drop to Danger under the Solo woman lens — reconsider the itinerary or wait for the advisory to clear.`
+- `📉 3 points read ≥8 pts lower than the base traveller — the corridor is more sensitive to who is walking it than the raw score suggests.`
+- `🚑 2 point(s) are outside the 2.5 km help-POI ring — pre-flag the nearest hospital before leaving.`
+- `⏱ You're outside the persona's preferred depart window (hours 07-19). Open Tempo to sweep for a safer slot.`
+- `🛡 This persona favours safest over fastest — Plan Route α = 6.0 (base is 4.5).`
+- `📡 Broadcast cadence recommendation: every 20 min — set it in Live Trip Companion so Beacon receives regular pings.`
+- `⚠️ Advisory forced +1 rung for this persona — the base level would understate the risk for you.`
+
+### Checklist
+
+Every persona ships a deterministic packing / prep checklist:
+
+- **Solo woman:** *Share live location with 2+ trusted contacts · Screenshot the two nearest police POIs · Set 20-min broadcast cadence · Avoid depart 22:00-05:00 unless corridor ≥85 · Carry a whistle · Note the nearest 24/7 tourist help desk on arrival.*
+- **Family with kids:** *Pre-plan two paediatric-capable hospitals · Pack ORS + thermometer + child paracetamol · Route via safest (α ≥ 7.5) · 15-min broadcast · Book stays scored StaySafe ≥80 with a 24/7 desk · Skip depart 21:00-06:00 unless corridor Safe.*
+- **Adventure / solo:** *Download offline map tiles · 20-min broadcast (remote = help is slower) · Carry first-aid + headlamp + water + whistle + offline map · Register itinerary with Beacon · Landslide/flood severity bumped 30% — respect Sentinel escalations.*
+
+### Exports
+
+| Format       | Use                                                                             |
+|--------------|---------------------------------------------------------------------------------|
+| **JSON**     | stable `waysafe.prism.v1` schema — persona, per-point lens, factor ledger, extras, aggregate, profile knobs, lessons, checklist |
+| **Markdown** | a paste-able persona brief (~2 KB) — table of points, lessons, checklist boxes — for family / duty-of-care share |
+
+Engine in `prism.py` (~700 LOC, pure-stdlib + reuse of
+`safety.compute_safety` and `utils.haversine_km`). UI render lives in
+`theme.render_prism`. Lives at `tabs[18]` next to Echo — Echo debriefs
+*what happened*, Prism reframes *how the day would feel for someone
+else*.
+
+---
+
 ## 🛟 Beacon — Group Safety Coordinator (Day 61)
 
 Every other WaySafe surface treats the traveller as a single point. **Beacon
@@ -1284,7 +1457,8 @@ WaySafe/
 │── advisory.py         # Travel Advisory brief — fusion engine + PDF / JSON / markdown
 │── compass.py          # 🆕 Destination Showdown — multi-target ranking + JSON / markdown
 │── companion.py        # Live Trip Companion — trips, alerts, broadcasts
-│── echo.py             # 🆕 Post-Trip Debrief — composite + counterfactual + calibration
+│── echo.py             # Post-Trip Debrief — composite + counterfactual + calibration
+│── prism.py            # 🆕 Persona-Aware Risk Lens — 6 personas × factor rescale
 │── theme.py            # Dark theme + render_* helpers
 │── utils.py            # haversine, point_in_polygon, sha256, build_merkle
 │── data/

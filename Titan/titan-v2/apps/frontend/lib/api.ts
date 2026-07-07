@@ -2078,3 +2078,400 @@ export function lineageExportUrl(opts: {
   qs.set("window_days", String(opts.window_days ?? 30));
   return `${API_BASE}/aml/lineage/export.md?${qs.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Precedent — case-similarity kNN + Bayesian disposition prior (round-15, day-70)
+// ---------------------------------------------------------------------------
+
+export type PrecedentDisposition = "sar_filed" | "cleared" | "in_flight";
+
+export type PrecedentRecommendationCode =
+  | "file_sar_probable"
+  | "expedite_clearance"
+  | "weigh_evidence"
+  | "novel_investigate"
+  | "insufficient_precedent";
+
+export type PrecedentDriver = {
+  block: "factor" | "typology" | "amount" | "posture" | string;
+  weight: number;
+  cosine: number;
+  contribution: number;
+};
+
+export type PrecedentDelta = {
+  axis: string;
+  query: number;
+  candidate: number;
+  delta: number;
+};
+
+export type PrecedentMatch = {
+  case_id: string;
+  account_id: string;
+  similarity: number;
+  status: string;
+  disposition: PrecedentDisposition;
+  band: "low" | "medium" | "high" | "critical" | string;
+  priority: string;
+  typology_code: string | null;
+  typology_name: string | null;
+  opened_at_iso: string | null;
+  closed_at_iso: string | null;
+  resolution_hours: number | null;
+  summary: string;
+  top_factors: string[];
+  drivers: PrecedentDriver[];
+  deltas: PrecedentDelta[];
+};
+
+export type PrecedentQuery = {
+  case_id: string;
+  account_id: string;
+  display_name: string;
+  summary: string;
+  status: string;
+  priority: string;
+  band: string;
+  typology_code: string | null;
+  typology_name: string | null;
+};
+
+export type PrecedentRecommendation = {
+  code: PrecedentRecommendationCode;
+  label: string;
+  accent: string;
+  rationale: string;
+};
+
+export type PrecedentRules = {
+  ok: boolean;
+  engine: string;
+  defaults: Record<string, number>;
+  blocks: { block: string; weight: number; size: number }[];
+  detectors: string[];
+  typologies: string[];
+  recommendations: { code: PrecedentRecommendationCode; label: string; accent: string }[];
+};
+
+export type PrecedentReport = {
+  ok: boolean;
+  engine: string;
+  query: PrecedentQuery;
+  corpus_size: number;
+  considered: number;
+  matches: PrecedentMatch[];
+  disposition_counts: Record<PrecedentDisposition, number>;
+  posterior: Record<"sar_filed" | "cleared", number>;
+  median_resolution_hours: number | null;
+  p95_resolution_hours: number | null;
+  in_flight_median_hours: number | null;
+  recommendation: PrecedentRecommendation;
+  generated_at_iso: string;
+  rules: PrecedentRules;
+};
+
+export type PrecedentCandidate = {
+  case_id: string;
+  account_id: string;
+  display_name: string;
+  status: string;
+  priority: string;
+  band: string;
+  opened_at_iso: string | null;
+  typology_code: string | null;
+  summary: string;
+};
+
+export async function getPrecedentRules(): Promise<PrecedentRules> {
+  const r = await fetch(`${API_BASE}/aml/precedent/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function listPrecedentCandidates(opts: {
+  limit?: number;
+  include_closed?: boolean;
+} = {}): Promise<{ ok: boolean; engine: string; count: number; include_closed: boolean; candidates: PrecedentCandidate[] }> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(opts.limit ?? 100));
+  qs.set("include_closed", String(opts.include_closed ?? false));
+  const r = await fetch(`${API_BASE}/aml/precedent/candidates?${qs.toString()}`);
+  return jsonOrThrow(r);
+}
+
+export async function getPrecedentForCase(
+  case_id: string,
+  opts: { k?: number; min_sim?: number } = {},
+): Promise<PrecedentReport> {
+  const qs = new URLSearchParams();
+  qs.set("k", String(opts.k ?? 8));
+  qs.set("min_sim", String(opts.min_sim ?? 0.5));
+  const r = await fetch(
+    `${API_BASE}/aml/precedent/case/${encodeURIComponent(case_id)}?${qs.toString()}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function seedPrecedentSamples(force = false): Promise<{
+  ok: boolean;
+  engine: string;
+  seeded: number;
+  families?: string[];
+  reason?: string;
+  terminal_count?: number;
+  terminal_count_after?: number;
+}> {
+  const qs = new URLSearchParams();
+  qs.set("force", String(force));
+  const r = await fetch(`${API_BASE}/aml/precedent/seed?${qs.toString()}`, {
+    method: "POST",
+  });
+  return jsonOrThrow(r);
+}
+
+export function precedentExportUrl(opts: { case_id: string; k?: number; min_sim?: number }): string {
+  const qs = new URLSearchParams();
+  qs.set("case_id", opts.case_id);
+  qs.set("k", String(opts.k ?? 8));
+  qs.set("min_sim", String(opts.min_sim ?? 0.5));
+  return `${API_BASE}/aml/precedent/export.md?${qs.toString()}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Triage — cleared-case suppression + FP mining (round-16, day-75)
+// ---------------------------------------------------------------------------
+
+export type TriageVerdictCode =
+  | "suppress_high_confidence"
+  | "suppress_review_lightly"
+  | "no_prior_signal"
+  | "elevate_review"
+  | "escalate_critical"
+  | "insufficient_history";
+
+export type TriageDetector = {
+  name: string;
+  label: string;
+};
+
+export type TriageRules = {
+  ok?: boolean;
+  engine: string;
+  constants: {
+    signature_top_k: number;
+    laplace_alpha: number;
+    min_support_strong: number;
+    min_support_any: number;
+    sanctions_s_ceiling: number;
+    s_suppress_high: number;
+    s_suppress_light: number;
+    s_elevate_review: number;
+    s_escalate: number;
+    max_lift_strong_min: number;
+    max_evidence_per_side: number;
+  };
+  detectors: TriageDetector[];
+  verdict_ladder: {
+    code: TriageVerdictCode;
+    label: string;
+    accent: string;
+    tone: string;
+  }[];
+};
+
+export type TriageFactorRow = {
+  name: string;
+  label: string;
+  n_seen: number;
+  n_cleared: number;
+  n_sar: number;
+  p_clear: number;
+  lift: number;
+  supported: boolean;
+  strongly_supported: boolean;
+};
+
+export type TriageMatrixCell = {
+  a: string;
+  b: string;
+  n_seen: number;
+  n_cleared: number;
+  n_sar: number;
+  p_clear: number;
+  lift: number;
+  supported: boolean;
+};
+
+export type TriageComboRow = {
+  combo: string[];
+  labels?: string[];
+  key: string;
+  size?: number;
+  n_seen: number;
+  n_cleared: number;
+  n_sar: number;
+  p_clear: number;
+  lift: number;
+  weight?: number;
+  supported?: boolean;
+  strongly_supported: boolean;
+};
+
+export type TriageProfile = {
+  ok?: boolean;
+  engine: string;
+  corpus: {
+    closed_total: number;
+    cleared_total: number;
+    sar_total: number;
+    p_clear_prior: number;
+  };
+  per_factor: TriageFactorRow[];
+  matrix: TriageMatrixCell[][];
+  detectors: string[];
+  detector_labels: Record<string, string>;
+  top_noise_combos: TriageComboRow[];
+  top_signal_combos: TriageComboRow[];
+};
+
+export type TriageCandidate = {
+  id: string;
+  account_id: string;
+  display_name: string;
+  band: string;
+  priority: string;
+  status: string;
+  typology_code?: string | null;
+  typology_confidence?: number | null;
+  risk_score: number;
+  signature: string[];
+  signature_labels: string[];
+  summary: string;
+  opened_at_iso?: string | null;
+  has_sanctions: boolean;
+};
+
+export type TriagePrecedent = {
+  id: string;
+  account_id: string;
+  display_name: string;
+  band: string;
+  priority: string;
+  typology_code?: string | null;
+  disposition: "cleared" | "sar_filed";
+  signature: string[];
+  shared_factors: string[];
+  risk_score: number;
+  opened_at_iso?: string | null;
+  closed_at_iso?: string | null;
+  summary: string;
+};
+
+export type TriageReport = {
+  ok?: boolean;
+  engine: string;
+  query: {
+    case_id: string;
+    account_id: string;
+    display_name: string;
+    band: string;
+    priority: string;
+    risk_score: number;
+    status: string;
+    typology_code?: string | null;
+    typology_confidence?: number | null;
+    signature: string[];
+    signature_labels: string[];
+    top_factors: { name: string; label: string; points: number; weight: number }[];
+    summary: string;
+    has_sanctions: boolean;
+    opened_at_iso?: string | null;
+  };
+  corpus: {
+    closed_total: number;
+    cleared_total: number;
+    sar_total: number;
+    p_clear_prior: number;
+  };
+  score: {
+    raw_sum: number;
+    raw_s: number;
+    s: number;
+    suppression: number;
+    scored_combos: number;
+    strongly_supported_combos: number;
+    max_supported_lift: number | null;
+    sanctions_veto_applied: boolean;
+  };
+  verdict: {
+    code: TriageVerdictCode;
+    label: string;
+    accent: string;
+    tone: string;
+    reason: string;
+  };
+  combos: TriageComboRow[];
+  evidence: {
+    cleared: TriagePrecedent[];
+    sar_filed: TriagePrecedent[];
+  };
+  rules: TriageRules;
+};
+
+export async function getTriageRules(): Promise<TriageRules> {
+  const r = await fetch(`${API_BASE}/aml/triage/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function getTriageProfile(): Promise<TriageProfile> {
+  const r = await fetch(`${API_BASE}/aml/triage/profile`);
+  return jsonOrThrow(r);
+}
+
+export async function listTriageCandidates(opts: {
+  limit?: number;
+  include_closed?: boolean;
+} = {}): Promise<{
+  ok: boolean;
+  engine: string;
+  count: number;
+  include_closed: boolean;
+  candidates: TriageCandidate[];
+}> {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(opts.limit ?? 100));
+  qs.set("include_closed", String(!!opts.include_closed));
+  const r = await fetch(`${API_BASE}/aml/triage/candidates?${qs.toString()}`);
+  return jsonOrThrow(r);
+}
+
+export async function getTriageForCase(case_id: string): Promise<TriageReport> {
+  const r = await fetch(
+    `${API_BASE}/aml/triage/case/${encodeURIComponent(case_id)}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function seedTriageSamples(force = false): Promise<{
+  ok: boolean;
+  engine: string;
+  seeded: number;
+  families?: string[];
+  terminal_count_after?: number;
+  terminal_count?: number;
+  reason?: string;
+}> {
+  const qs = new URLSearchParams();
+  qs.set("force", String(force));
+  const r = await fetch(`${API_BASE}/aml/triage/seed?${qs.toString()}`, {
+    method: "POST",
+  });
+  return jsonOrThrow(r);
+}
+
+export function triageExportUrl(case_id: string): string {
+  const qs = new URLSearchParams();
+  qs.set("case_id", case_id);
+  return `${API_BASE}/aml/triage/export.md?${qs.toString()}`;
+}

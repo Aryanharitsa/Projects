@@ -296,6 +296,40 @@ export function importShared(token: string): Role | null {
   return role;
 }
 
+// ---------- Verdict-driven plan mutations ----------
+//
+// Verdict's Refinement Advisor emits `PlanDelta`s that mutate the role
+// plan directly (without waiting for the recruiter to re-edit the JD).
+// The plan changes are reflected in Discover ranking immediately.
+
+export type VerdictPlanDelta =
+  | { kind: 'add_location'; value: string }
+  | { kind: 'demote_skill'; value: string }
+  | { kind: 'widen_seniority'; value: string }
+  | { kind: 'narrow_seniority'; value: string };
+
+export function applyPlanDelta(
+  id: string,
+  delta: VerdictPlanDelta,
+): Role | null {
+  const role = getRole(id);
+  if (!role) return null;
+  const plan = { ...role.plan };
+  switch (delta.kind) {
+    case 'add_location':
+      plan.location = delta.value || 'remote';
+      break;
+    case 'demote_skill':
+      plan.skills = plan.skills.filter(s => s !== delta.value);
+      break;
+    case 'widen_seniority':
+    case 'narrow_seniority':
+      plan.seniority = delta.value;
+      break;
+  }
+  return updateRole(id, { plan });
+}
+
 export function buildShareUrl(role: Role): string {
   if (typeof window === 'undefined') return '';
   const token = encodeShare(role);

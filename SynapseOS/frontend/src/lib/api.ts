@@ -11,6 +11,8 @@ import type {
   ChatStatus,
   ClusterDigest,
   Community,
+  CompassLens,
+  CompassQuestionSummary,
   EchoCluster,
   EchoMergeResult,
   EchoReport,
@@ -21,6 +23,11 @@ import type {
   OrphanSuggestion,
   PathResult,
   PulseReport,
+  RecallClozeCheck,
+  RecallGrade,
+  RecallGradeResult,
+  RecallSession,
+  RecallSummary,
   SearchHit,
   SparkKind,
   SparkReport,
@@ -367,4 +374,62 @@ export const api = {
     const qs = q.toString();
     return `${BASE}/spark/export.md${qs ? `?${qs}` : ""}`;
   },
+
+  compassQuestions: () =>
+    j<CompassQuestionSummary[]>(`/compass/questions`),
+
+  compassCreate: (text: string) =>
+    j<CompassLens>(`/compass/questions`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
+  compassLens: (id: number) =>
+    j<CompassLens>(`/compass/questions/${id}`),
+
+  compassMarkRead: (id: number, noteId: number) =>
+    j<CompassLens>(`/compass/questions/${id}/read`, {
+      method: "POST",
+      body: JSON.stringify({ note_id: noteId }),
+    }),
+
+  compassUnmarkRead: (id: number, noteId: number) =>
+    j<CompassLens>(`/compass/questions/${id}/read/${noteId}`, {
+      method: "DELETE",
+    }),
+
+  compassDelete: (id: number) =>
+    j<void>(`/compass/questions/${id}`, { method: "DELETE" }),
+
+  compassExportUrl: (id: number) =>
+    `${BASE}/compass/questions/${id}/export.md`,
+
+  recallSession: (opts?: {
+    k?: number;
+    threshold?: number;
+    topK?: number;
+    session?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.k !== undefined) q.set("k", String(opts.k));
+    if (opts?.threshold !== undefined) q.set("threshold", String(opts.threshold));
+    if (opts?.topK !== undefined) q.set("top_k", String(opts.topK));
+    if (opts?.session) q.set("session", opts.session);
+    const qs = q.toString();
+    return j<RecallSession>(`/recall/session${qs ? `?${qs}` : ""}`);
+  },
+
+  recallGrade: (noteId: number, grade: RecallGrade) =>
+    j<RecallGradeResult>(`/recall/grade`, {
+      method: "POST",
+      body: JSON.stringify({ note_id: noteId, grade }),
+    }),
+
+  recallSummary: () => j<RecallSummary>(`/recall/summary`),
+
+  recallCheckCloze: (canonical: string, userAnswer: string) =>
+    j<RecallClozeCheck>(`/recall/check-cloze`, {
+      method: "POST",
+      body: JSON.stringify({ canonical, user_answer: userAnswer }),
+    }),
 };

@@ -21,6 +21,10 @@ type Props = {
   pulseBadge?: number;
   onOpenSpark?: () => void;
   sparkBadge?: number;
+  onOpenCompass?: () => void;
+  compassBadge?: number;
+  onOpenRecall?: () => void;
+  recallBadge?: number;
 };
 
 export function Header({
@@ -42,6 +46,10 @@ export function Header({
   pulseBadge,
   onOpenSpark,
   sparkBadge,
+  onOpenCompass,
+  compassBadge,
+  onOpenRecall,
+  recallBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -176,6 +184,25 @@ export function Header({
               )}
             </button>
           )}
+          {onOpenCompass && (
+            <button
+              onClick={onOpenCompass}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-cyan/25 via-synapse-violet/20 to-synapse-amber/15 ring-1 ring-synapse-cyan/45 hover:ring-synapse-cyan/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(34,211,238,0.65)] hover:shadow-[0_0_28px_-6px_rgba(34,211,238,0.85)]"
+              aria-label="open compass"
+              title="Question-anchored lens — pin a research question, mark reads, grow a citation-stitched working answer"
+            >
+              <span aria-hidden className="text-synapse-cyan">🧭</span>
+              compass
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-cyan/35 to-synapse-violet/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {compassBadge !== undefined && compassBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-cyan/35 ring-1 ring-synapse-cyan/70 text-[10px] text-ink-100 px-1">
+                  {compassBadge > 99 ? "99+" : compassBadge}
+                </span>
+              )}
+            </button>
+          )}
           {onOpenSpark && (
             <button
               onClick={onOpenSpark}
@@ -196,6 +223,25 @@ export function Header({
               {sparkBadge !== undefined && sparkBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-violet/35 ring-1 ring-synapse-violet/70 text-[10px] text-ink-100 px-1">
                   {sparkBadge > 99 ? "99+" : sparkBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenRecall && (
+            <button
+              onClick={onOpenRecall}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-cyan/25 via-synapse-violet/20 to-synapse-lime/20 ring-1 ring-synapse-cyan/45 hover:ring-synapse-cyan/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(34,211,238,0.65)] hover:shadow-[0_0_28px_-6px_rgba(163,230,53,0.7)]"
+              aria-label="open recall"
+              title="Active-recall quiz — cloze, prompt and neighbor-choice cards over your graph, SM-2 spaced repetition"
+            >
+              <span aria-hidden className="text-synapse-cyan">↻</span>
+              recall
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-cyan/35 to-synapse-lime/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {recallBadge !== undefined && recallBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-amber/30 ring-1 ring-synapse-amber/60 text-[10px] text-synapse-amber px-1">
+                  {recallBadge > 99 ? "99+" : recallBadge}
                 </span>
               )}
             </button>

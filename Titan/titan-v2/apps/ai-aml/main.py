@@ -85,6 +85,23 @@ GET    /aml/lineage/sample         bundled 28-tx three-arm laundering demo
 GET    /aml/lineage/seeds          curated seed-account picker for the sample
 POST   /aml/lineage/trace          full trace with caller-supplied transactions
 GET    /aml/lineage/export.md      markdown SAR §3 exhibit
+
+Precedent — case-similarity kNN + Bayesian disposition prior (round-15, day-70)
+-------------------------------------------------------------------------------
+GET    /aml/precedent/rules              block weights + tunables + verdict ladder
+GET    /aml/precedent/candidates         cases eligible as queries (open queue)
+GET    /aml/precedent/case/{case_id}     top-k precedents + prior + recommendation
+POST   /aml/precedent/seed               seed the case store with the demo portfolio
+GET    /aml/precedent/export.md          markdown "precedent memo" for a case
+
+Triage — cleared-case suppression + false-positive mining (round-16, day-75)
+----------------------------------------------------------------------------
+GET    /aml/triage/rules                 every constant + verdict ladder + detector list
+GET    /aml/triage/profile               portfolio prior + per-factor stats + 9x9 matrix
+GET    /aml/triage/candidates            open/review cases eligible as triage queries
+GET    /aml/triage/case/{case_id}        per-case Bayesian suppression report + evidence
+POST   /aml/triage/seed                  seed a FP-rich supplementary corpus for the demo
+GET    /aml/triage/export.md             markdown triage memo (paste into a case note)
 """
 
 from __future__ import annotations
@@ -102,14 +119,16 @@ import lineage as lineage_engine
 import media as media_engine
 import network as network_engine
 import peer as peer_engine
+import precedent as precedent_engine
 import profile as profile_engine
 import pulse as pulse_engine
 import risk as risk_engine
 import sanctions as sanctions_engine
 import sar as sar_engine
+import triage as triage_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.12.0"
+ENGINE_VERSION = "titan-aml/1.14.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1222,5 +1241,164 @@ def lineage_export_md(
     )
     return PlainTextResponse(
         lineage_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Precedent — case-similarity kNN + Bayesian disposition prior (round-15, day-70)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/precedent/rules")
+def precedent_rules() -> Dict[str, Any]:
+    return {"ok": True, "engine": ENGINE_VERSION, **precedent_engine.get_rules()}
+
+
+@app.get("/aml/precedent/candidates")
+def precedent_candidates(
+    limit: int = Query(default=100, ge=1, le=500),
+    include_closed: bool = Query(default=False),
+) -> Dict[str, Any]:
+    """List cases the analyst can pick as a Precedent *query*.
+
+    By default only open/review/escalated cases show up — those are the
+    ones the analyst is actually deciding on.  Auditors can flip
+    ``include_closed`` to trace back what a closed case's precedents
+    were at the time.
+    """
+    candidates = precedent_engine.list_query_candidates(
+        limit=limit, include_closed=include_closed,
+    )
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "count": len(candidates),
+        "include_closed": include_closed,
+        "candidates": candidates,
+    }
+
+
+@app.get("/aml/precedent/case/{case_id}")
+def precedent_case(
+    case_id: str,
+    k: int = Query(default=precedent_engine.DEFAULT_K,
+                   ge=1, le=precedent_engine.MAX_K),
+    min_sim: float = Query(default=precedent_engine.MIN_SIM_FLOOR,
+                           ge=0.0, le=1.0),
+) -> Dict[str, Any]:
+    try:
+        report = precedent_engine.compute_for_case(case_id, k=k, min_sim=min_sim)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "engine": ENGINE_VERSION, **report.to_dict()}
+
+
+@app.post("/aml/precedent/seed")
+def precedent_seed(force: bool = Query(default=False)) -> Dict[str, Any]:
+    result = precedent_engine.seed_sample_cases(force=force)
+    return {"ok": True, "engine": ENGINE_VERSION, **result}
+
+
+@app.get("/aml/precedent/export.md", response_class=None)
+def precedent_export(
+    case_id: str = Query(..., min_length=1),
+    k: int = Query(default=precedent_engine.DEFAULT_K,
+                   ge=1, le=precedent_engine.MAX_K),
+    min_sim: float = Query(default=precedent_engine.MIN_SIM_FLOOR,
+                           ge=0.0, le=1.0),
+):
+    from fastapi.responses import PlainTextResponse
+    try:
+        report = precedent_engine.compute_for_case(case_id, k=k, min_sim=min_sim)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    return PlainTextResponse(
+        precedent_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Triage — cleared-case suppression engine (round-16, day-75)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/triage/rules")
+def triage_rules() -> Dict[str, Any]:
+    """Auditor-facing dump — every constant driving the engine plus the
+    verdict ladder.  ``/aml/triage/*`` reads only from this table."""
+    return {"ok": True, "engine": ENGINE_VERSION, **triage_engine.get_rules()}
+
+
+@app.get("/aml/triage/profile")
+def triage_profile() -> Dict[str, Any]:
+    """Portfolio-wide suppression profile.
+
+    Returns the base clearance rate, per-detector clearance stats, the
+    9x9 factor-pair suppression matrix, and the top noise / signal
+    combos.  The /triage surface uses this to paint the portfolio view
+    before an analyst picks a query case.
+    """
+    return {"ok": True, "engine": ENGINE_VERSION,
+            **triage_engine.corpus_summary()}
+
+
+@app.get("/aml/triage/candidates")
+def triage_candidates(
+    limit: int = Query(default=100, ge=1, le=500),
+    include_closed: bool = Query(default=False),
+) -> Dict[str, Any]:
+    """Cases eligible as triage queries.  By default only open /
+    review / escalated — analysts triage what's on their desk, not
+    what's already closed."""
+    picks = triage_engine.candidates(
+        limit=limit, include_closed=include_closed,
+    )
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "count": len(picks),
+        "include_closed": include_closed,
+        "candidates": picks,
+    }
+
+
+@app.get("/aml/triage/case/{case_id}")
+def triage_case(case_id: str) -> Dict[str, Any]:
+    try:
+        report = triage_engine.triage_for_case(case_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, **report}
+
+
+@app.post("/aml/triage/seed")
+def triage_seed(force: bool = Query(default=False)) -> Dict[str, Any]:
+    """Seed the case store with the FP-rich supplementary corpus.
+
+    Idempotent — skips when the store already carries ≥ 20 terminal
+    cases unless ``force`` is set.  Complements the Precedent seed;
+    running both gives the miner a richer signal-vs-noise spectrum.
+    """
+    result = triage_engine.seed_sample_cases(force=force)
+    return {"ok": True, "engine": ENGINE_VERSION, **result}
+
+
+@app.get("/aml/triage/export.md", response_class=None)
+def triage_export(case_id: str = Query(..., min_length=1)):
+    from fastapi.responses import PlainTextResponse
+    try:
+        report = triage_engine.triage_for_case(case_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return PlainTextResponse(
+        triage_engine.to_markdown(report),
         media_type="text/markdown; charset=utf-8",
     )

@@ -747,3 +747,177 @@ class SparkReportOut(BaseModel):
     total_clusters: int
     sparks: list[SparkOut]
     summary: dict
+
+
+# --------------------------------------------------------------- compass
+
+
+class CompassQuestionIn(BaseModel):
+    text: str = Field(..., min_length=2, max_length=600)
+
+
+class CompassQuestionSummary(BaseModel):
+    id: int
+    text: str
+    created_at: str
+    archived_at: str | None = None
+    reads_count: int
+    last_read_at: str | None = None
+    coverage_pct: float
+
+
+class CompassReadIn(BaseModel):
+    note_id: int = Field(..., ge=1)
+
+
+class LensNoteOut(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    tags: list[str]
+    relevance: float
+    info_gain: float
+    cosine: float
+    lexical: float
+    title_hit: bool
+    read: bool
+    read_at: str | None = None
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class CompassCitationOut(BaseModel):
+    ref: int
+    note_id: int
+    title: str
+    excerpt: str
+    relevance: float
+
+
+class CompassSubquestionOut(BaseModel):
+    term: str
+    note_count: int
+    covered: int
+    coverage_pct: float
+    sample_note_id: int
+
+
+class CompassLensOut(BaseModel):
+    question_id: int
+    question_text: str
+    created_at: str
+    archived_at: str | None = None
+    generated_at: str
+    total_notes: int
+    in_lens: int
+    relevance_mass_total: float
+    relevance_mass_read: float
+    coverage_pct: float
+    notes: list[LensNoteOut]
+    frontiers: list[LensNoteOut]
+    subquestions: list[CompassSubquestionOut]
+    working_answer: str
+    citations: list[CompassCitationOut]
+    stats: dict
+
+
+# ---------------------------------------------------------------- recall
+
+
+class RecallNeighborChoiceOut(BaseModel):
+    note_id: int
+    title: str
+    is_correct: bool
+    cluster_id: int | None = None
+    cluster_color: str | None = None
+
+
+class RecallCardOut(BaseModel):
+    id: str
+    kind: Literal["cloze", "prompt", "neighbor"]
+    note_id: int
+    title: str
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+    prompt_text: str
+    answer_text: str
+    cloze_answer: str
+    body_before: str
+    body_after: str
+    body_snippet: str
+    choices: list[RecallNeighborChoiceOut]
+    correct_choice_id: int | None = None
+    ease: float
+    interval_hours: float
+    next_due: str
+    streak: int
+    reviews: int
+    lapses: int
+    days_overdue: float
+    days_since_seen: float | None = None
+    reasons: list[str]
+
+
+class RecallSessionOut(BaseModel):
+    generated_at: str
+    session_id: str
+    total_notes: int
+    eligible_notes: int
+    k: int
+    cards: list[RecallCardOut]
+    streak_days: int
+    due_now: int
+    stats: dict
+
+
+class RecallGradeIn(BaseModel):
+    note_id: int = Field(..., ge=1)
+    grade: int = Field(..., ge=0, le=3)
+
+
+class RecallGradeOut(BaseModel):
+    note_id: int
+    grade: int
+    ease: float
+    interval_hours: float
+    next_due: str
+    streak: int
+    reviews: int
+    lapses: int
+    next_due_phrase: str
+
+
+class RecallClusterMasteryOut(BaseModel):
+    cluster_id: int
+    cluster_name: str
+    cluster_color: str
+    size: int
+    reviewed: int
+    known: int
+    mastery: float
+    mean_ease: float
+    due_now: int
+
+
+class RecallSummaryOut(BaseModel):
+    generated_at: str
+    total_notes: int
+    reviewed_notes: int
+    due_now: int
+    streak_days: int
+    mean_ease: float
+    total_reviews: int
+    mastery_overall: float
+    clusters: list[RecallClusterMasteryOut]
+
+
+class RecallClozeCheckIn(BaseModel):
+    canonical: str = Field(..., min_length=1, max_length=200)
+    user_answer: str = Field(..., min_length=0, max_length=200)
+
+
+class RecallClozeCheckOut(BaseModel):
+    is_correct: bool
+    similarity: float
