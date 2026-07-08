@@ -336,6 +336,29 @@ body::before {
 }
 .cc-hd-rec:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.16); }
 
+/* ---------- Brief (Interviewer Handoff) ---------- */
+
+.cc-br-hero {
+  background-image:
+    radial-gradient(560px 240px at 110% -20%, rgba(99,102,241,0.10), transparent 60%),
+    radial-gradient(420px 200px at -10% 130%, rgba(56,189,248,0.06), transparent 60%);
+}
+
+.cc-br-ring { transition: filter 240ms ease, transform 240ms ease; }
+.cc-br-ring:hover { filter: drop-shadow(0 0 12px rgba(99,102,241,0.55)); transform: scale(1.02); }
+
+.cc-br-tile { transition: transform 140ms ease, border-color 140ms ease; }
+.cc-br-tile:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.18); }
+
+.cc-br-row { transition: transform 130ms ease, background 130ms ease, border-color 130ms ease; }
+.cc-br-row:hover { transform: translateX(2px); background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.18); }
+
+.cc-br-stage { transition: transform 120ms ease, border-color 120ms ease; }
+.cc-br-stage:hover { transform: translateY(-1px); }
+
+.cc-br-btn { transition: transform 120ms ease, background 120ms ease; }
+.cc-br-btn:hover { transform: translateY(-1px); }
+
 /* Print/PDF mode: hide chrome, force light-on-white for the letter article. */
 @media print {
   html, body { background: white !important; color: #111 !important; }
