@@ -41,7 +41,16 @@ order, rolled up into a `signalHealth` verdict on your JD spec (healthy
 mix into deterministic JD tweaks — *"open the role to remote,"* *"move
 Docker to nice-to-have,"* *"split into Senior + Staff variants"* —
 each with a quantified `+N recoverable` impact chip and a confidence bar
-so you know whether the reject pile is your JD or your pool. All from a
+so you know whether the reject pile is your JD or your pool, and now
+**hands the interviewer their prep sheet** through **Brief** — the
+60-second packet the calibrated rubric, the JD plan, and the
+candidate's own profile fold into automatically: which dims THIS stage
+should probe, how many minutes to spend on each, which candidate-specific
+angles to test (missing skills, matched deep-dives, seniority stretch,
+location fit, motivation, ownership), the 5 top-ranked questions from
+the interview kit, the dims *already saturated* so the panel doesn't
+double-probe, and the red flags to watch for — same input bytes → same
+brief bytes, deterministic, printable, and Markdown-exportable. All from a
 dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
@@ -49,6 +58,126 @@ the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Brief (Day 77)
+
+Every prior surface answers *who to interview.* Discover ranks the pool.
+Roles moves them through the pipeline. Interview Kit builds a
+JD-tailored rubric with a stage-aware question bank. Decision Studio
+aggregates what came out. What nobody has ever built is the
+60-second brief the interviewer actually opens the moment before the
+call: what to probe, what to skip, which of THIS candidate's angles
+pays into THIS stage's rubric gaps, and what red flags to watch for.
+
+Prep is where interviews quietly die — most panelists open the calendar
+invite five minutes before the call, skim the resume, and improvise.
+The output is a call that re-tests dims another stage already saturated
+and never probes the ones that matter. That's not an interviewer
+problem; it's an artefact problem.
+
+**Brief** (`/brief`) composes that artefact deterministically. It
+takes the role's `plan`, the candidate profile, the target
+`InterviewStage`, and any existing `InterviewRecord` and turns them
+into a `credicrew.brief.v1` bundle with:
+
+- **Focus this stage** — 4 rubric dims ranked by
+  `weight × gap × (0.5 + stage-affinity)`, where `gap = 0` if the dim
+  is already saturated, `0.4` if partial, `1.0` if open. Each focus
+  dim carries a suggested minute allocation proportional to its
+  priority against the stage's time budget (30m phone screen, 60m
+  technical + system design, 45m behavioral).
+- **Signals to probe** — up to six candidate-specific angles. Missing
+  required skills fire `missing_skill` probes ("probe Redis
+  familiarity — closest thing they've shipped"). Matched skills fire
+  `matched_deepen` probes ("test depth vs. name-drop — hardest bug
+  in Postgres"). Seniority-tier drift fires `seniority_scope`
+  probes ("stretch check — Mid presenting for Senior"). Hybrid
+  locations fire `location_fit`. Phone screens fall back to
+  `motivation`; behaviorals always add an `ownership_probe` with a
+  specific ask for a first-person shipped failure.
+- **Questions to ask** — up to five items from the JD-tailored
+  question bank, filtered to this stage, ranked
+  `0.55 · focus-weight + 0.25 · stage-affinity + 0.20 · difficulty-fit`.
+  Difficulty-fit sweet-spots at 1 for phone screens, 2 for
+  behaviorals, 3 for technicals and system-design.
+- **Skip — already covered** — dims saturated (rated ≥ 4) in prior
+  stages. The panel doesn't burn budget re-probing them.
+- **Warm-up hooks** — 2–3 personalisation lines drawn from the
+  candidate's current title, tag focus, direct-stack-overlap, and
+  city. Signal to the candidate you actually read their profile
+  before dialling in.
+- **Red flags** — enumerated: `low_match_score`,
+  `missing_required_skill`, `seniority_mismatch`, `location_partial`,
+  `key_dim_open` (high-weight dim still open), `thin_signal`,
+  `no_prior_stages`. Each flag names the specific fact behind it
+  ("Missing fastapi, postgres, redis — probe adjacency, not just
+  presence").
+- **Coverage strip** — every rubric dim rendered as a segment on a
+  weight-proportional bar, coloured green / amber / rose for
+  `covered / partial / open` — one glance tells the panelist how much
+  signal the rubric already has.
+- **Match breakdown** — the composite score with per-factor impact
+  (baseline, skills, location, seniority) plus matched-skill and
+  missing-skill chips so the interviewer walks in knowing exactly
+  where the candidate looks strong vs. thin.
+- **Two headline numbers**: **decision confidence** —
+  `(covered-weight + 0.5 · partial-weight) / total-weight` — how close
+  to a decidable rubric we already are; and **criticality** —
+  `focus-weight × 0.7 + score-lever + (100 − decision) / 400`, where
+  `score-lever` steps 0.35 → 0.20 → 0.10 as the composite crosses
+  60 / 75. Criticality tells the panelist how much *this* stage
+  matters for the ultimate call.
+
+Composition is deterministic — same input bytes produce the same
+brief bytes — with no LLM anywhere in the loop. The whole engine ships
+in the browser (`frontend/src/lib/brief.ts`) and is mirrored
+byte-for-byte on the backend (`backend/app/services/brief.py`), with
+three new endpoints under `/brief`:
+
+- `POST /brief/compose` — `{role, candidate, stage, interview?}` →
+  `BriefBundle`
+- `POST /brief/markdown` — same input → a printable Markdown packet
+- `GET /brief/defaults` — physics constants + palettes + stage
+  affinities so the UI stays calibrated without hard-coding numbers
+
+Sample:
+
+```bash
+curl -s -X POST http://localhost:8000/brief/compose \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "role": {"id": "r_demo", "name": "Senior Backend",
+             "plan": {"text": "Senior FastAPI + Postgres in Bengaluru",
+                      "skills": ["fastapi","postgres","redis","python","docker"],
+                      "location": "bengaluru", "seniority": "senior"}},
+    "candidate": {"id": 4, "name": "Vikram Iyer",
+                  "role": "Senior Backend Engineer", "location": "Bengaluru",
+                  "tags": ["fastapi","postgres","docker"],
+                  "headline": "3M-user fintech ETL"},
+    "stage": "technical"
+  }' | jq '{match: .match.score, decision: .decisionConfidence, focus: [.focus[].label], questions: [.questions[].id]}'
+```
+
+lands `match=89`, `decision=0`, `focus=["Backend depth","Data
+systems","Language craft","System design"]`, `questions=["py.001",
+"py.002","pg.001","pg.002","fastapi.001"]` — deterministic to the id.
+
+The UI at `/brief` renders the packet inside a stage-tinted hero (sky
+= phone screen, indigo = technical, violet = system design, emerald =
+behavioral) with a conic score-ring for the match composite, a
+4-tile stat strip (composite match · dims with signal · focus
+minutes · criticality), the weighted coverage strip, an ordered
+Focus card with per-dim priority bars and minute allocations, an
+angle-listed Probes card, a numbered Questions card with signal + diff
++ source metadata, a strikethrough Skip chip row, a candidate
+mini-profile with headline + tag chips, the Match breakdown, the
+Warm-up hooks card, and the Red-flags card. Every brief gets three
+one-click exports — Copy Markdown, Copy JSON, Download `.md` — so it
+travels to Slack, Notion, or the calendar-invite description without
+a rewrite. Every prior surface answered *who to interview*; Brief
+finally answers *what to actually say when you get on the call*.
 
 ---
 
