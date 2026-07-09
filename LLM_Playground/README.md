@@ -15,17 +15,158 @@ output non‑determinism with **Drift Lab** (lexical + length + latency
 Stability Score with pairwise similarity heatmap and a medoid pick),
 **Prompt Surgeon** (section‑level ablation of a system prompt, banded
 critical / supporting / dead‑weight / harmful, ships a lean prompt +
-monthly $ savings) — and, new this round, **Frontier**: a cost / quality
-Pareto explorer that fans your prompt across a candidate roster, plots
-the frontier, kneedles the elbow, and hands you the cheapest model that
-keeps ~95 % of flagship‑tier quality. Stop guessing which model to ship;
-measure it against the shape of the curve.
+monthly $ savings), **Frontier** (cost / quality Pareto explorer that
+kneedles the elbow of a model roster) — and, new this round, **Relay**:
+a cascade router designer that goes past the single‑model pick. Route
+cheap first, escalate to flagship only when the cheap answer trips a
+confidence gate, and watch the expected cost drop while quality holds.
+Deterministic subset scan, live gate slider, and three recommended
+cascade shapes (balanced, cost‑min, latency‑capped) — every dollar of
+routing math surfaced up front.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Frontier: Cost / Quality Pareto Explorer (Day 73)
+## 🆕 What's new — Relay: Cascade Router Designer (Day 78)
+
+> Round‑16. **Frontier** answered *which single model should I run this
+> on?* by sweeping a roster and kneedle‑ing the elbow of the Pareto
+> curve. That answer is correct if you deploy exactly **one** model. In
+> practice, teams deploy a **cascade**: run a cheap model first, and
+> only escalate to a bigger, slower one when the cheap answer looks weak.
+> Cursor, Perplexity, Notdiamond, Martian — the whole shipping wave in
+> 2026 is built around routing. It is the single biggest cost lever in
+> production LLM ops, and Frontier has no way to talk about it because
+> its whole physics is "pick one point". **Relay** is that surface.
+
+Hit **Relay** in the sidebar. A Relay run is `(system_prompt, user_prompt,
+roster, gate_type, gate_threshold, monthly_calls)`. The roster is
+cost‑ordered automatically (cheap → expensive), and the **gate** is the
+rule that decides *"keep this level's answer vs escalate to the next"*.
+Four gates ship:
+
+| Gate | Passes when… |
+|---|---|
+| **composite**    | replay composite quality ≥ threshold (default 55) |
+| **length**       | `output_tokens ≥ threshold` (default 80) |
+| **coverage**     | prompt‑keyword hits ≥ threshold (default 4) |
+| **consistency**  | replay‑set stdev ≤ threshold AND mean quality ≥ 60 |
+
+The engine fires `n_replays` synthetic calls per model, scores every
+response with the same **50 % coverage / 30 % fidelity / 20 % format**
+composite Frontier and Surgeon use (so quality numbers compare directly
+across studios), and computes each level's **pass rate at the gate** —
+the fraction of replays whose answer clears the threshold. That number
+*is* the probability a live prompt terminates at this level instead of
+falling through.
+
+Then it walks the cost‑ordered levels front‑to‑back, computing the full
+cascade physics:
+
+```
+p_reach[0]      = 1.0                                    # every prompt enters at level 0
+p_reach[i]      = p_reach[i-1] * (1 - pass_rate[i-1])    # only fails escalate
+p_terminate[i]  = p_reach[i] * pass_rate[i]              # terminates here
+
+expected_cost   = Σ p_reach[i]     * cost_per_call[i]    # every visit pays that level's cost
+expected_quality= Σ p_terminate[i] * quality[i]          # blend of "what each answer gave"
+expected_latency= Σ p_reach[i]     * latency_ms[i]       # cascading levels add up
+escalation_rate = 1 - pass_rate[0]                       # % of prompts that hop past level 0
+```
+
+The **subset scan** enumerates every non‑empty cost‑ordered subset of
+the roster (2ⁿ ≤ 512 for n ≤ 9), simulates the cascade for each, and
+scores them. Three recommendations ship off one call:
+
+| Pick | Reads | When to use it |
+|---|---|---|
+| 🛡️ **Balanced** | Cheapest shape with `quality_kept_pct ≥ 95%` | Ship what you have with real savings. |
+| 📉 **Cost min** | Cheapest shape with `expected_quality ≥ quality_floor` | Aggressive cost cut, softer quality floor. |
+| ⏱️ **Latency capped** | Highest‑quality shape with `expected_p50 ≤ ceiling` | Latency‑bound SLA, quality secondary. |
+
+Every recommendation carries its **monthly cost**, **monthly savings vs
+always‑flagship**, **quality kept %**, **escalation rate**, and the exact
+`level₁ → level₂ → …` chain — the numbers your review call actually
+argues about.
+
+The centrepiece of the studio is a **live cascade flow** that renders
+every picked level as a horizontal bar shaded by tier hue and filled
+proportional to `p_reach` (light) and `p_terminate` (dark). Rose
+arrows between levels label the escalation percentage at each hop, so
+the story you see is literally *"100 % enter here → 40 % terminate,
+60 % escalate → 55 % terminate at level 2, 5 % escalate to level 3"*.
+A **cost/quality subset scatter** to the right plots every one of the 511
+candidate cascades on log‑cost × linear‑quality axes, coloured by
+cascade size (1‑level grey, 2‑level teal, 3‑level sky, 4+ violet) and
+gold‑ringed at the active pick.
+
+Below the flow, a **gate slider** re‑simulates the whole cascade live
+(without re‑firing any calls) as you drag the threshold — one call to
+`POST /api/relay/<id>/preview` returns the new pass rates, the new
+picked shape, the new monthly savings, all in ~80 ms. **Click any
+roster row to toggle it in or out of the cascade** — the flow, the
+metrics tiles, and the savings number update in place. Preview mode
+stays live until you hit **Reset picks** to snap back to the engine's
+default.
+
+Like every studio, the whole loop runs in **dryrun mode without any
+API keys**. Each model's response length, latency, and quality are
+seeded from `SHA‑1(prompt || model || replay_index)` and biased by
+tier (same physics as Frontier), so the seed demo lands on a
+plausible, deterministic cascade the moment the page loads. The seed
+loads a fintech‑triage prompt across nine models spanning every
+capability tier and, at the default gate, ships a **single‑model
+substitution** (`gemini‑1.5‑pro`) that keeps **97 %** of `gpt‑4‑turbo`
+quality at **$201/mo savings** on 50 k calls — the honest answer for
+that particular prompt. Drag the gate threshold up and the cascade
+grows: `claude‑3‑haiku → gpt‑4‑turbo` at gate 62 escalates 25 % of
+prompts and still saves $190/mo at 92 % kept quality.
+
+### How it works — at a glance
+
+```
+prompt ──► fan out roster           (n models × n_replays parallel)
+       │
+       ├──► score every response    (coverage + fidelity + format → 0-100)
+       │      cost_per_call = pricing.estimate_cost(model, in_tok, out_tok)
+       │      latency_ms   = mean(replays)
+       │      pass_rate    = fraction of replays clearing the gate
+       │
+       ├──► subset scan             (2ⁿ non-empty ordered subsets)
+       │      for each: simulate cascade → (cost, quality, latency, esc)
+       │
+       ├──► pick default            (kept % × 0.6 + savings % × 0.4 - broken-cascade veto)
+       │
+       ├──► compute recommendations (balanced, cost_min, latency_capped)
+       │
+       └──► ship                    (three picks + actions + savings $)
+```
+
+Every entry point is a `relay_lib.*` call on the Flask side:
+`create_relay`, `list_relays`, `get_relay`, `delete_relay`,
+`run_relay`, `seed_demo`, `stats`, `defaults`, `simulate_cascade`,
+`suggest_shapes`, `preview_gate`. Routes at `/api/relay` mirror every
+other studio (defaults, stats, list, create, seed, get, delete, run) +
+one extra: `POST /api/relay/<id>/preview` re‑derives the cascade under
+a new gate / picked subset / constraint set without re‑firing calls —
+that's what powers the live slider and level‑toggle updates.
+
+```bash
+$ curl -sX POST http://localhost:5050/api/relay/seed \
+    | jq '.relay | {picked_levels, cascade_cost, quality_kept_pct, monthly_savings, escalation_rate}'
+{
+  "picked_levels": 1,
+  "cascade_cost": 0.000911,
+  "quality_kept_pct": 97.3,
+  "monthly_savings": 200.95,
+  "escalation_rate": 0.0
+}
+```
+
+---
+
+## What's new — Frontier: Cost / Quality Pareto Explorer (Day 73)
 
 > Round‑16. Every prior studio in the playground answers *a* question
 > about a prompt — Arena/Vote/Rubrics compare responses, Suites batches

@@ -766,6 +766,59 @@ class ApiService {
     });
   }
 
+  // ─── Studio Relay — Cascade Router Designer ────────────────────────────
+  // Given a prompt + a cost-ordered roster + a gate rule, Relay simulates a
+  // cheap→expensive cascade: how much traffic terminates at each level, the
+  // expected cost / quality / latency, and three recommended shapes
+  // (balanced, cost_min, latency_capped).
+  async listRelays(filters = {}) {
+    const qs = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      qs.set(k, String(v));
+    });
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request(`/relay${suffix}`);
+  }
+
+  async createRelay(payload) {
+    return this.request('/relay', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async seedRelay() {
+    return this.request('/relay/seed', { method: 'POST' });
+  }
+
+  async relayStats() {
+    return this.request('/relay/stats');
+  }
+
+  async relayDefaults() {
+    return this.request('/relay/defaults');
+  }
+
+  async getRelay(relayId) {
+    return this.request(`/relay/${encodeURIComponent(relayId)}`);
+  }
+
+  async deleteRelay(relayId) {
+    return this.request(`/relay/${encodeURIComponent(relayId)}`, { method: 'DELETE' });
+  }
+
+  async runRelay(relayId, payload = {}) {
+    return this.request(`/relay/${encodeURIComponent(relayId)}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async previewRelay(relayId, payload = {}) {
+    return this.request(`/relay/${encodeURIComponent(relayId)}/preview`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

@@ -24,6 +24,7 @@ from src import showdown as showdown_lib
 from src import drift as drift_lib
 from src import surgeon as surgeon_lib
 from src import frontier as frontier_lib
+from src import relay as relay_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -1961,6 +1962,119 @@ def frontier_recommend(frontier_id):
         'quality_pick': _rec(q_pick),
         'budget_pick': _rec(b_pick),
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# Relay — Cascade Router Designer.
+# ---------------------------------------------------------------------------
+
+@llm_bp.route('/relay/defaults', methods=['GET'])
+def relay_defaults():
+    return jsonify({'success': True, 'defaults': relay_lib.defaults()})
+
+
+@llm_bp.route('/relay/stats', methods=['GET'])
+def relay_stats():
+    return jsonify({'success': True, 'stats': relay_lib.stats()})
+
+
+@llm_bp.route('/relay', methods=['GET'])
+def relay_list():
+    args = request.args
+    rows, total = relay_lib.list_relays(
+        q=args.get('q') or None,
+        status=args.get('status') or None,
+        limit=int(args.get('limit', 100)),
+        offset=int(args.get('offset', 0)),
+    )
+    return jsonify({'success': True, 'relays': rows, 'total': total})
+
+
+@llm_bp.route('/relay', methods=['POST'])
+def relay_create():
+    data = request.get_json() or {}
+    try:
+        run = relay_lib.create_relay(
+            name=str(data.get('name') or 'Relay run'),
+            description=str(data.get('description') or ''),
+            system_prompt=str(data.get('system_prompt') or ''),
+            user_prompt=str(data.get('user_prompt') or ''),
+            temperature=data.get('temperature', relay_lib.DEFAULT_TEMPERATURE),
+            top_p=data.get('top_p', relay_lib.DEFAULT_TOP_P),
+            n_replays=data.get('n_replays', relay_lib.DEFAULT_N_REPLAYS),
+            monthly_calls=data.get('monthly_calls', relay_lib.DEFAULT_MONTHLY_CALLS),
+            gate_type=str(data.get('gate_type') or relay_lib.DEFAULT_GATE_TYPE),
+            gate_threshold=data.get('gate_threshold'),
+            quality_floor=data.get('quality_floor'),
+            latency_ceiling_ms=data.get('latency_ceiling_ms'),
+            dryrun=bool(data.get('dryrun', True)),
+            roster=data.get('roster'),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'relay': run}), 201
+
+
+@llm_bp.route('/relay/seed', methods=['POST'])
+def relay_seed():
+    run = relay_lib.seed_demo()
+    return jsonify({'success': True, 'relay': run}), 201
+
+
+@llm_bp.route('/relay/<relay_id>', methods=['GET'])
+def relay_get(relay_id):
+    run = relay_lib.get_relay(relay_id)
+    if not run:
+        return jsonify({'success': False, 'error': 'relay run not found'}), 404
+    return jsonify({'success': True, 'relay': run})
+
+
+@llm_bp.route('/relay/<relay_id>', methods=['DELETE'])
+def relay_delete(relay_id):
+    if not relay_lib.delete_relay(relay_id):
+        return jsonify({'success': False, 'error': 'relay run not found'}), 404
+    return jsonify({'success': True})
+
+
+@llm_bp.route('/relay/<relay_id>/run', methods=['POST'])
+def relay_run(relay_id):
+    data = request.get_json() or {}
+    try:
+        payload, status = relay_lib.run_relay(
+            relay_id,
+            provider_factory=provider_factory,
+            confirm_live=bool(data.get('confirm_live', False)),
+        )
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    return jsonify(payload), status
+
+
+@llm_bp.route('/relay/<relay_id>/preview', methods=['POST'])
+def relay_preview(relay_id):
+    """Re-simulate a persisted relay under a new gate / picked-subset /
+    constraint set — no new calls, just re-derives from stored replays.
+    Powers the live gate-threshold slider and the level-toggle."""
+    data = request.get_json() or {}
+    picked = data.get('picked_indexes')
+    if picked is not None:
+        try:
+            picked = [int(x) for x in picked]
+        except (TypeError, ValueError):
+            picked = None
+    result = relay_lib.preview_gate(
+        relay_id,
+        gate_type=data.get('gate_type'),
+        gate_threshold=data.get('gate_threshold'),
+        quality_floor=data.get('quality_floor'),
+        latency_ceiling_ms=data.get('latency_ceiling_ms'),
+        picked_indexes=picked,
+        monthly_calls=data.get('monthly_calls'),
+    )
+    if result is None:
+        return jsonify({'success': False, 'error': 'relay run not found'}), 404
+    return jsonify({'success': True, 'preview': result}), 200
 
 
 @llm_bp.route('/august/upload', methods=['POST'])
