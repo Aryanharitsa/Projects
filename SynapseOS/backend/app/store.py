@@ -127,6 +127,27 @@ def init_db() -> None:
             "ON compass_reads(question_id)"
         )
 
+        # Signal: persistent watches over Compass questions. ``UNIQUE
+        # (question_id)`` enforces the one-watch-per-question invariant
+        # so re-pinning refreshes rather than duplicates. The snapshot
+        # is stored as a JSON blob — this table is read once and diffed
+        # in Python, so column-level indexing isn't worth the write cost.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS signal_watches (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id        INTEGER NOT NULL UNIQUE,
+                snapshot           TEXT NOT NULL,
+                pinned_at          TEXT NOT NULL,
+                last_refreshed_at  TEXT
+            )
+            """
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_signal_watches_pinned "
+            "ON signal_watches(pinned_at)"
+        )
+
 
 def add_note(title: str, body: str, tags: list[str]) -> int:
     vec = embed(f"{title}\n\n{body}")
@@ -482,4 +503,119 @@ def questions_count() -> int:
         (n,) = con.execute(
             "SELECT COUNT(*) FROM compass_questions WHERE archived_at IS NULL"
         ).fetchone()
+        return int(n)
+
+
+# ---------------------------------------------------------------- signal
+
+
+def upsert_signal_watch(qid: int, snapshot_json: str) -> dict:
+    """Create or refresh a watch on ``qid``. Idempotent per question:
+    a second call updates the snapshot in-place and stamps
+    ``last_refreshed_at`` so the delta viewer treats it as a re-baseline.
+
+    Returns the row shape ``{question_id, snapshot, pinned_at,
+    last_refreshed_at}`` — pinned_at is only set on first pin and never
+    moves; refresh advances ``last_refreshed_at`` only.
+    """
+    now = _iso_now()
+    with _conn() as con:
+        existing = con.execute(
+            "SELECT id, pinned_at FROM signal_watches WHERE question_id = ?",
+            (qid,),
+        ).fetchone()
+        if existing:
+            con.execute(
+                "UPDATE signal_watches SET snapshot = ?, last_refreshed_at = ? "
+                "WHERE question_id = ?",
+                (snapshot_json, now, qid),
+            )
+            pinned_at = existing["pinned_at"]
+            last_refreshed_at = now
+        else:
+            con.execute(
+                "INSERT INTO signal_watches(question_id, snapshot, pinned_at, "
+                "last_refreshed_at) VALUES (?, ?, ?, NULL)",
+                (qid, snapshot_json, now),
+            )
+            pinned_at = now
+            last_refreshed_at = None
+        return {
+            "question_id": qid,
+            "snapshot": snapshot_json,
+            "pinned_at": pinned_at,
+            "last_refreshed_at": last_refreshed_at,
+        }
+
+
+def delete_signal_watch(qid: int) -> bool:
+    with _conn() as con:
+        cur = con.execute(
+            "DELETE FROM signal_watches WHERE question_id = ?", (qid,)
+        )
+        return cur.rowcount > 0
+
+
+def get_signal_watch(qid: int) -> dict | None:
+    with _conn() as con:
+        row = con.execute(
+            "SELECT question_id, snapshot, pinned_at, last_refreshed_at "
+            "FROM signal_watches WHERE question_id = ?",
+            (qid,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "question_id": int(row["question_id"]),
+            "snapshot": row["snapshot"],
+            "pinned_at": row["pinned_at"],
+            "last_refreshed_at": row["last_refreshed_at"],
+        }
+
+
+def list_signal_watches() -> list[dict]:
+    """Return every active watch. Joins against ``compass_questions`` so
+    we silently drop watches whose underlying question was deleted — a
+    hard-delete of the question is the correct signal that the watch is
+    dead too, and forcing the caller to filter is boilerplate.
+    """
+    with _conn() as con:
+        rows = con.execute(
+            """
+            SELECT w.question_id, w.snapshot, w.pinned_at, w.last_refreshed_at,
+                   q.text AS question_text, q.created_at AS q_created_at,
+                   q.archived_at AS q_archived_at
+            FROM signal_watches w
+            JOIN compass_questions q ON q.id = w.question_id
+            ORDER BY w.pinned_at DESC
+            """
+        ).fetchall()
+        return [
+            {
+                "question_id": int(r["question_id"]),
+                "snapshot": r["snapshot"],
+                "pinned_at": r["pinned_at"],
+                "last_refreshed_at": r["last_refreshed_at"],
+                "question_text": r["question_text"],
+                "question_created_at": r["q_created_at"],
+                "question_archived_at": r["q_archived_at"],
+            }
+            for r in rows
+        ]
+
+
+def signal_watched_question_ids() -> set[int]:
+    """Cheap probe used by rails that need to know which Compass
+    questions are currently pinned (e.g. to render the pin/unpin toggle
+    without loading the full snapshot)."""
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT question_id FROM signal_watches"
+        ).fetchall()
+        return {int(r["question_id"]) for r in rows}
+
+
+def signal_watches_count() -> int:
+    with _conn() as con:
+        (n,) = con.execute("SELECT COUNT(*) FROM signal_watches").fetchone()
         return int(n)
