@@ -29,6 +29,8 @@ import type {
   RecallSession,
   RecallSummary,
   SearchHit,
+  SignalDelta,
+  SignalReport,
   SparkKind,
   SparkReport,
   TensionReport,
@@ -432,4 +434,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ canonical, user_answer: userAnswer }),
     }),
+
+  signalList: () => j<SignalReport>(`/signal`),
+
+  signalWatch: (questionId: number) =>
+    j<SignalDelta>(`/signal/watch`, {
+      method: "POST",
+      body: JSON.stringify({ question_id: questionId }),
+    }),
+
+  signalUnwatch: (questionId: number) =>
+    j<void>(`/signal/watch/${questionId}`, { method: "DELETE" }),
+
+  signalRefresh: (questionId: number) =>
+    j<SignalDelta>(`/signal/watch/${questionId}/refresh`, { method: "POST" }),
+
+  signalGet: (questionId: number) =>
+    j<SignalDelta>(`/signal/watch/${questionId}`),
+
+  signalPinnedIds: () =>
+    j<{ question_ids: number[] }>(`/signal/pinned_ids`),
+
+  signalExportUrl: () => `${BASE}/signal/export.md`,
 };

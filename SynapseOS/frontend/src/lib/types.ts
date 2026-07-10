@@ -927,3 +927,81 @@ export type RecallClozeCheck = {
   is_correct: boolean;
   similarity: number;
 };
+
+// ----------------------------------------------------------------- signal
+
+export type SignalStatus = "new" | "grown" | "shrunk" | "stable" | "fresh";
+
+export type SignalLensNoteSummary = {
+  note_id: number;
+  title: string;
+  snippet: string;
+  relevance: number;
+  cluster_id: number | null;
+  cluster_name: string | null;
+  cluster_color: string | null;
+};
+
+export type SignalCitationDelta = {
+  note_id: number;
+  title: string;
+  excerpt: string;
+  relevance: number;
+};
+
+export type SignalSubqDelta = {
+  term: string;
+  note_count_now: number;
+  note_count_pinned: number;
+  covered_now: number;
+  covered_pinned: number;
+  coverage_pct_now: number;
+  coverage_pct_pinned: number;
+  coverage_pct_delta: number;
+  sample_note_id: number;
+};
+
+export type SignalDelta = {
+  question_id: number;
+  question_text: string;
+  pinned_at: string;
+  last_refreshed_at: string | null;
+  generated_at: string;
+  coverage_now: number;
+  coverage_pinned: number;
+  coverage_delta: number;
+  in_lens_now: number;
+  in_lens_pinned: number;
+  reads_new_count: number;
+  reads_new: SignalLensNoteSummary[];
+  joined_since_count: number;
+  joined_since: SignalLensNoteSummary[];
+  left_since_count: number;
+  left_since: SignalLensNoteSummary[];
+  citations_added: SignalCitationDelta[];
+  citations_removed: SignalCitationDelta[];
+  subquestion_progress: SignalSubqDelta[];
+  working_answer_changed: boolean;
+  working_answer: string;
+  status: SignalStatus;
+  headline: string;
+  stats: {
+    joined_ids_count?: number;
+    left_ids_count?: number;
+    new_reads_count?: number;
+    citations_added_count?: number;
+    citations_removed_count?: number;
+    subquestion_moves?: number;
+    top_relevance_now?: number;
+  };
+};
+
+export type SignalReport = {
+  generated_at: string;
+  watch_count: number;
+  grown_count: number;
+  shrunk_count: number;
+  stable_count: number;
+  new_count: number;
+  watches: SignalDelta[];
+};
