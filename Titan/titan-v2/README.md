@@ -13,6 +13,79 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-80 — Nexus · beneficial ownership discovery + sanctions/PEP reach.**
+> Every prior TITAN surface reasons about a *transaction* or an *alert*.
+> Nexus reasons about the *legal structure* — who really owns and controls
+> this legal entity once you unwind the holding companies, the nominee
+> directors, and the offshore chain. It answers four regulator questions
+> in one deterministic pass: **FinCEN CTA** (who is the ≥25% beneficial
+> owner?), **OFAC 50% Rule** (does aggregate sanctioned control block the
+> target, whether or not it appears on the SDN list?), **FATF Rec. 24**
+> (how layered is the corporate structure?), and **EU 6AMLD** (do nominee
+> or trustee edges obscure the UBO?). New `apps/ai-aml/nexus.py`
+> (~1,000 LOC, pure stdlib, **zero new deps**) models the ownership
+> graph, walks every simple path from any root to any target, and sums
+> the products of edge percentages — the standard beneficial-ownership
+> arithmetic every regulator expects. Cycles are legal in reality
+> (mutual-holding companies) so the engine tolerates them, tags them,
+> and treats a repeated node in a walk as a zero-weight extension.
+>
+> **UBO ladder** — `beneficial_owner` (aggregate ≥ 25%), `screening_
+> required` (10–24%), `corporate_owner` (control chain still passes
+> through a company — traverse upstream), `de_minimis` (below the
+> screening floor). A **substantial-control** edge (edge type `control`)
+> always upgrades to `beneficial_owner` regardless of percentage — a
+> senior officer with 2% shares is still a UBO under the CTA. Only
+> natural persons qualify; corporate controllers get labelled and the
+> traversal continues.
+>
+> **Sanctions reach** — for every sanctioned root `S` and every target
+> `T`, `eff(S, T) ≥ 0.50` → `BLOCKED_REACH` (target inherits SDN status
+> per the OFAC 50% rule); `≥ 0.25` → `REPORTABLE_REACH`; anything else
+> → `EXPOSED_LINK`. Aggregation across multiple blocked persons follows
+> the OFAC "aggregate across all blocked persons" rule so two sanctioned
+> individuals holding 30% and 25% jointly block a target even though
+> neither alone would. **PEP reach** uses the same arithmetic with
+> softer 25%/10% thresholds and flips the risk grade instead of blocking.
+>
+> **Opacity score** — a composite [0, 100] per target computed from
+> seven components (chain depth, shell-node share, offshore share,
+> nominee/trustee share, controller dispersal, cycle penalty,
+> thin-capital share) with weights that sum to 1.0. Verdict ladder
+> collapses everything into five explicit rungs — `blocked_by_
+> sanctions`, `sanctions_exposed`, `pep_edd_required`, `opaque_
+> structure`, `transparent_structure` — each tied to a hard threshold
+> so an examiner can trace every conclusion back to a constant in
+> `get_rules()`.
+>
+> **Surface** — new `/nexus` route between Triage and Drift.
+> Verdict-tone-tinted hero + 148-px opacity conic ring + entity chips
+> (kind / jurisdiction / risk / shell indicators); a 7-tile portfolio
+> strip (entities · edges · offshore nodes · shell-flagged · sanctioned
+> hits · PEP hits · avg opacity) plus a verdict-distribution ribbon;
+> a searchable verdict-tinted **target picker** across the seven
+> bundled topologies; a hand-rolled **radial ownership-chain SVG**
+> — target anchored at bottom-centre, controllers spread across the
+> top, path stroke width scaled to weight, sanctioned paths glow rose
+> and PEP paths glow amber, every intermediate holding node
+> in-lined on its chain, per-path weight labels at midpoint; a
+> **controllers panel** with per-controller aggregate bars marked at
+> the 25% CTA threshold and UBO-class badges; a two-part **sanctions
+> + PEP nexus panel** with tri-band aggregate meters and per-hit
+> reach-code rows; a **7-bar opacity breakdown** with raw values,
+> weights, and contribution; a **top-10 ownership paths table** with
+> the exact percentage sequence for each chain; a **downstream reach
+> viz** — pick any sanctioned or PEP controller and see every
+> downstream target arranged on concentric depth rings, node radius
+> scaled to aggregate reach, coloured by OFAC band; and a verdict-
+> ladder footer with the FinCEN/OFAC/PEP thresholds and the corpus
+> hash for reproducibility. A one-click **memo export** (`export.md`)
+> composes a paste-into-case-note document with the UBO table,
+> sanctions/PEP nexus, top ownership paths, opacity components, and
+> any cycles detected. Deterministic — same `(entities, edges)` →
+> identical bytes, identical path IDs, identical opacity score.
+> Engine: `titan-nexus/1.0.0`. AML: `titan-aml/1.15.0`.
+
 > **Day-75 — Triage · cleared-case suppression + FP mining.**
 > Every prior TITAN surface *judges* one alert — how severe, what
 > typology, what network, what precedent. Real AML operations run at
@@ -590,6 +663,13 @@ here's the freeze-and-investigate paragraph".
 | **Triage for case** | `GET  /aml/triage/case/{case_id}` | Per-case Bayesian suppression report — scored combos, S score, verdict, cleared + SAR precedent chains |
 | **Triage seed** | `POST /aml/triage/seed` | Seed the 12-family FP-rich supplementary corpus (idempotent unless `force=true`) |
 | **Triage export** | `GET  /aml/triage/export.md` | Paste-able triage memo for one case (drops straight into a case note) |
+| **Nexus rules** | `GET  /aml/nexus/rules` | FinCEN CTA / OFAC / PEP thresholds + opacity component weights + jurisdiction-risk table + verdict ladder |
+| **Nexus sample** | `GET  /aml/nexus/sample` | Bundled 29-entity / 24-edge portfolio: seven topologies exercising every branch (diamond just-below-UBO, OFAC cascade, hidden PEP, four-way clean split, five-layer shell chain, mutual-holding cycle, substantial-control officer) |
+| **Nexus analyze** | `POST /aml/nexus/analyze` | Analyse a caller-supplied ownership graph — every target's UBO ladder, sanctions/PEP nexus, opacity, and verdict in one deterministic pass |
+| **Nexus candidates** | `GET  /aml/nexus/candidates` | Every sanctioned / PEP / substantial-control natural person in the bundled corpus (picker for the reach view) |
+| **Nexus entity** | `GET  /aml/nexus/entity/{id}` | Per-target UBO report, controllers with aggregate control, sanctions/PEP hits, opacity components, and cycles touching |
+| **Nexus reach** | `GET  /aml/nexus/reach/{root_id}` | Downstream reach of a controller — every target with cumulative control + OFAC/PEP reach code |
+| **Nexus export** | `GET  /aml/nexus/export.md` | Paste-able ownership memo — UBO table + sanctions/PEP nexus + top paths + opacity components + cycles |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and

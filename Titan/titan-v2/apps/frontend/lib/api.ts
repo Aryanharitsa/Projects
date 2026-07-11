@@ -2475,3 +2475,260 @@ export function triageExportUrl(case_id: string): string {
   qs.set("case_id", case_id);
   return `${API_BASE}/aml/triage/export.md?${qs.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Nexus — beneficial ownership + sanctions/PEP reach (round-17, day-80)
+// ---------------------------------------------------------------------------
+
+export type NexusVerdictCode =
+  | "blocked_by_sanctions"
+  | "sanctions_exposed"
+  | "pep_edd_required"
+  | "opaque_structure"
+  | "transparent_structure";
+
+export type NexusPathEdge = {
+  parent: string;
+  child: string;
+  pct: number;
+  type: string;
+};
+
+export type NexusPath = {
+  root: string;
+  target: string;
+  chain: string[];
+  weight: number;
+  depth: number;
+  edges: NexusPathEdge[];
+};
+
+export type NexusUboCode =
+  | "beneficial_owner"
+  | "screening_required"
+  | "corporate_owner"
+  | "de_minimis";
+
+export type NexusController = {
+  root: string;
+  aggregate: number;
+  path_count: number;
+  max_path_weight: number;
+  shortest_depth: number;
+  paths: NexusPath[];
+  name?: string;
+  kind?: string;
+  jurisdiction?: string;
+  sanctioned?: boolean;
+  pep?: boolean;
+  role?: string | null;
+  pep_position?: string | null;
+  sanctions_list?: string | null;
+  substantial_control?: boolean;
+  ubo?: { code: NexusUboCode; reason: string; threshold: number | null };
+};
+
+export type NexusSanctionsHit = NexusController & {
+  reach_code: "BLOCKED_REACH" | "REPORTABLE_REACH" | "EXPOSED_LINK";
+};
+
+export type NexusPepHit = NexusController & {
+  reach_code: "EDD_REQUIRED" | "PEP_LINKED" | "PEP_NEXUS";
+};
+
+export type NexusOpacity = {
+  score: number;
+  band: "clean" | "moderate" | "layered" | "opaque";
+  components: Record<
+    "depth" | "shell" | "offshore" | "nominee" | "dispersal" | "cycle" | "thinness",
+    number
+  >;
+  max_depth?: number;
+};
+
+export type NexusTargetReport = {
+  target: {
+    id: string;
+    name: string;
+    kind: string;
+    jurisdiction: string;
+    jurisdiction_risk: number;
+    incorporation_year?: number | null;
+    shell_indicators: string[];
+  };
+  controllers: NexusController[];
+  ubos: {
+    id: string;
+    name: string;
+    aggregate: number;
+    kind: string;
+    jurisdiction: string;
+    sanctioned: boolean;
+    pep: boolean;
+    substantial_control: boolean;
+  }[];
+  sanctions: {
+    aggregate: number;
+    verdict: "BLOCKED" | "REPORTABLE" | "EXPOSED" | "CLEAN";
+    hits: NexusSanctionsHit[];
+  };
+  pep: {
+    count: number;
+    max_aggregate: number;
+    hits: NexusPepHit[];
+  };
+  opacity: NexusOpacity;
+  path_count: number;
+  verdict: {
+    code: NexusVerdictCode;
+    label: string;
+    tone: string;
+    reason: string;
+  };
+  cycles_touching: string[][];
+};
+
+export type NexusRules = {
+  ok?: boolean;
+  engine: string;
+  thresholds: {
+    ubo: number;
+    ubo_screen: number;
+    ofac_block: number;
+    ofac_report: number;
+    pep_edd: number;
+    pep_link: number;
+    opacity_opaque_band: number;
+  };
+  traversal: { max_depth: number; max_paths_per_target: number };
+  opacity_weights: Record<string, number>;
+  jurisdiction_risk: Record<string, number>;
+  default_jurisdiction_risk: number;
+  verdict_ladder: { code: NexusVerdictCode; label: string; tone: string }[];
+  entity_kinds: string[];
+  edge_types: string[];
+  shell_indicators: string[];
+};
+
+export type NexusPortfolio = {
+  entities: number;
+  edges: number;
+  individuals: number;
+  offshore: number;
+  shell_flagged: number;
+  targets: number;
+  verdict_hist: Record<NexusVerdictCode, number>;
+  opacity_avg: number;
+  sanctioned_hits: number;
+  pep_hits: number;
+};
+
+export type NexusSampleReport = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  portfolio: NexusPortfolio;
+  reports: NexusTargetReport[];
+  highlight_target_id: string | null;
+  cycles: string[][];
+  rules: NexusRules;
+};
+
+export type NexusEntityResponse = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  report: NexusTargetReport;
+  rules: NexusRules;
+};
+
+export type NexusCandidate = {
+  id: string;
+  name: string;
+  kind: string;
+  jurisdiction: string;
+  sanctioned: boolean;
+  pep: boolean;
+  role?: string | null;
+  sanctions_list?: string | null;
+  pep_position?: string | null;
+  child_count: number;
+};
+
+export type NexusReachRow = {
+  target: string;
+  name?: string;
+  kind?: string;
+  jurisdiction?: string;
+  sanctioned?: boolean;
+  pep?: boolean;
+  aggregate: number;
+  shortest_depth: number;
+  path_count: number;
+  paths: NexusPath[];
+};
+
+export type NexusReachReport = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  root: {
+    id: string;
+    name: string;
+    kind: string;
+    jurisdiction: string;
+    sanctioned: boolean;
+    pep: boolean;
+    role?: string | null;
+    pep_position?: string | null;
+    sanctions_list?: string | null;
+    listed_on?: string | null;
+  };
+  root_kind: "sanctioned" | "pep" | "controller";
+  thresholds: { block: number | null; report: number };
+  reach: NexusReachRow[];
+  counts: { blocked: number; reportable: number; exposed: number };
+};
+
+export async function getNexusRules(): Promise<NexusRules> {
+  const r = await fetch(`${API_BASE}/aml/nexus/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function getNexusSample(): Promise<NexusSampleReport> {
+  const r = await fetch(`${API_BASE}/aml/nexus/sample`);
+  return jsonOrThrow(r);
+}
+
+export async function getNexusEntity(
+  entity_id: string,
+): Promise<NexusEntityResponse> {
+  const r = await fetch(
+    `${API_BASE}/aml/nexus/entity/${encodeURIComponent(entity_id)}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function getNexusReach(
+  root_id: string,
+): Promise<NexusReachReport> {
+  const r = await fetch(
+    `${API_BASE}/aml/nexus/reach/${encodeURIComponent(root_id)}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function listNexusCandidates(): Promise<{
+  ok: boolean;
+  engine: string;
+  candidates: NexusCandidate[];
+}> {
+  const r = await fetch(`${API_BASE}/aml/nexus/candidates`);
+  return jsonOrThrow(r);
+}
+
+export function nexusExportUrl(entity_id: string): string {
+  const qs = new URLSearchParams();
+  qs.set("entity_id", entity_id);
+  return `${API_BASE}/aml/nexus/export.md?${qs.toString()}`;
+}

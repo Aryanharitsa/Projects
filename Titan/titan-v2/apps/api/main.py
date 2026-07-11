@@ -961,3 +961,86 @@ async def aml_triage_export(case_id: str):
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Nexus — beneficial ownership + sanctions/PEP reach (round-17, day-80)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/nexus/rules")
+async def aml_nexus_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/nexus/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/nexus/sample")
+async def aml_nexus_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.get(f"{AML_SVC}/aml/nexus/sample")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.post("/aml/nexus/analyze")
+async def aml_nexus_analyze(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.post(f"{AML_SVC}/aml/nexus/analyze", json=payload)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/nexus/candidates")
+async def aml_nexus_candidates() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/nexus/candidates")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/nexus/entity/{entity_id}")
+async def aml_nexus_entity(entity_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/nexus/entity/{entity_id}")
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/nexus/reach/{root_id}")
+async def aml_nexus_reach(root_id: str) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/nexus/reach/{root_id}")
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/nexus/export.md")
+async def aml_nexus_export(entity_id: str):
+    from fastapi.responses import PlainTextResponse
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/nexus/export.md",
+            params={"entity_id": entity_id},
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
