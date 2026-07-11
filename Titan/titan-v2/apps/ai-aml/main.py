@@ -102,6 +102,16 @@ GET    /aml/triage/candidates            open/review cases eligible as triage qu
 GET    /aml/triage/case/{case_id}        per-case Bayesian suppression report + evidence
 POST   /aml/triage/seed                  seed a FP-rich supplementary corpus for the demo
 GET    /aml/triage/export.md             markdown triage memo (paste into a case note)
+
+Nexus — beneficial ownership + sanctions/PEP reach (round-17, day-80)
+---------------------------------------------------------------------
+GET    /aml/nexus/rules                  thresholds + opacity weights + jurisdiction risk table
+GET    /aml/nexus/sample                 bundled 29-entity / 24-edge portfolio analysis
+POST   /aml/nexus/analyze                caller-supplied graph → per-target UBO reports
+GET    /aml/nexus/entity/{id}            per-entity UBO ladder + sanctions/PEP nexus
+GET    /aml/nexus/reach/{id}             downstream reach of a controller (SDN / PEP)
+GET    /aml/nexus/candidates             controllers eligible for the reach picker
+GET    /aml/nexus/export.md              paste-able ownership memo for a case note
 """
 
 from __future__ import annotations
@@ -118,6 +128,7 @@ import drift as drift_engine
 import lineage as lineage_engine
 import media as media_engine
 import network as network_engine
+import nexus as nexus_engine
 import peer as peer_engine
 import precedent as precedent_engine
 import profile as profile_engine
@@ -128,7 +139,7 @@ import sar as sar_engine
 import triage as triage_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.14.0"
+ENGINE_VERSION = "titan-aml/1.15.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1400,5 +1411,118 @@ def triage_export(case_id: str = Query(..., min_length=1)):
         raise HTTPException(status_code=422, detail=str(exc))
     return PlainTextResponse(
         triage_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Nexus — beneficial ownership discovery + sanctions/PEP reach
+# (round-17, day-80)
+# ---------------------------------------------------------------------------
+
+
+class NexusEntityIn(BaseModel):
+    id: str
+    name: Optional[str] = None
+    kind: Optional[str] = "corporation"
+    jurisdiction: Optional[str] = ""
+    sanctioned: Optional[bool] = False
+    pep: Optional[bool] = False
+    role: Optional[str] = None
+    pep_position: Optional[str] = None
+    sanctions_list: Optional[str] = None
+    listed_on: Optional[str] = None
+    incorporation_year: Optional[int] = None
+    shell_indicators: Optional[List[str]] = None
+
+
+class NexusEdgeIn(BaseModel):
+    parent: str
+    child: str
+    pct: float = Field(gt=0.0, le=1.0)
+    type: Optional[str] = "voting"
+    acquired_on: Optional[str] = None
+
+
+class NexusAnalyzeReq(BaseModel):
+    entities: List[NexusEntityIn]
+    edges: List[NexusEdgeIn]
+    targets: Optional[List[str]] = None
+
+
+@app.get("/aml/nexus/rules")
+def nexus_rules() -> Dict[str, Any]:
+    """Auditor-facing dump — UBO / OFAC / PEP thresholds, the opacity
+    component weights, and the jurisdiction-risk table.  Every constant
+    the engine uses is here; nothing is hidden in code."""
+    return {"ok": True, "engine": ENGINE_VERSION,
+            **nexus_engine.get_rules()}
+
+
+@app.get("/aml/nexus/sample")
+def nexus_sample() -> Dict[str, Any]:
+    """Bundled ownership portfolio — seven distinct topologies chosen
+    to exercise every branch of the engine (diamond just-below-UBO,
+    OFAC cascade, hidden PEP, four-way clean split, deep shell chain,
+    cyclic mutual-holding, substantial-control officer)."""
+    return {"ok": True, **nexus_engine.sample()}
+
+
+@app.post("/aml/nexus/analyze")
+def nexus_analyze(req: NexusAnalyzeReq) -> Dict[str, Any]:
+    """Analyse a caller-supplied ownership graph.  ``targets`` may be
+    omitted — the engine defaults to every entity that has at least
+    one parent (i.e. someone owns it)."""
+    try:
+        report = nexus_engine.analyze(
+            entities=[e.dict() for e in req.entities],
+            edges=[e.dict() for e in req.edges],
+            targets=req.targets,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, **report}
+
+
+@app.get("/aml/nexus/candidates")
+def nexus_candidates() -> Dict[str, Any]:
+    """Every sanctioned / PEP / substantial-control natural person in
+    the bundled corpus — surface picker for the reach view."""
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "candidates": nexus_engine.controller_candidates(),
+    }
+
+
+@app.get("/aml/nexus/entity/{entity_id}")
+def nexus_entity(entity_id: str) -> Dict[str, Any]:
+    try:
+        return {"ok": True, **nexus_engine.entity_report(entity_id)}
+    except KeyError:
+        raise HTTPException(status_code=404,
+                            detail=f"entity not found: {entity_id}")
+
+
+@app.get("/aml/nexus/reach/{root_id}")
+def nexus_reach(root_id: str) -> Dict[str, Any]:
+    try:
+        return {"ok": True, **nexus_engine.reach_report(root_id)}
+    except KeyError:
+        raise HTTPException(status_code=404,
+                            detail=f"entity not found: {root_id}")
+
+
+@app.get("/aml/nexus/export.md", response_class=None)
+def nexus_export(entity_id: str = Query(..., min_length=1)):
+    """Paste-able ownership memo for a case note (markdown)."""
+    from fastapi.responses import PlainTextResponse
+    try:
+        report = nexus_engine.entity_report(entity_id)
+    except KeyError:
+        raise HTTPException(status_code=404,
+                            detail=f"entity not found: {entity_id}")
+    return PlainTextResponse(
+        nexus_engine.to_markdown(report),
         media_type="text/markdown; charset=utf-8",
     )
