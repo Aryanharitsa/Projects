@@ -2,14 +2,17 @@
 
 WaySafe is a **safety-first navigation & incident-response system** for tourists.
 It scores any location 0–100, plans risk-aware routes (with a temporal-forecast
-mode), threads multiple stops into a single safety-aware day with the
-**Multi-Stop Itinerary Planner**, and ships a **Live Trip Companion** that
-walks the user through the journey itself — proactive geofence + risk-corridor
-alerts, a trusted-contacts broadcast loop, and an auto-SOS rule when a
-traveller stalls in dangerous territory. The new **Sentinel** mode goes one
-level higher: it clusters raw incidents into discrete hotspots and grades each
-by **velocity** (recent rate vs its own historical baseline) so the tourist
-sees what's *escalating right now*, not just where activity has accumulated.
+mode), composes multi-day trips through the **Odyssey** composer, and — new
+in Round-18 — **reflows the remaining days of a live trip through the
+`Nomad` engine the moment signals shift**.  A traveller who committed a
+Serene 4-day itinerary at planning time, then wakes up on Day 2 with fresh
+incidents landing on Day-3's corridor, doesn't have to hand-recompose
+anything: Nomad re-scores every upcoming day under current signals,
+enumerates seven concrete reflow strategies (`STAY_COURSE`, `TIME_SHIFT`,
+`STOP_DROP`, `STOP_SUB`, `REST_DAY`, `SHORTEN`, `STAY_MOVE`), simulates each
+end-to-end and hands back the single move that best restores the trip
+verdict.  Same physics as Odyssey — zero new measurements, deterministic
+to the byte.
 
 Built on Streamlit + pure-Python physics (no external maps API, no XGBoost,
 no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
@@ -18,7 +21,92 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
-- **🆕 Odyssey — Multi-Day Trip Composer** *(Day 76)* — the first
+- **🆕 Nomad — Adaptive Live Trip Reflow** *(Day 81)* — Odyssey (Day 76)
+  commits the trip *at plan time*.  What Odyssey does not answer is what
+  every real traveller runs into by Day 2 of a multi-day itinerary:
+  *"the trip I committed at planning time isn't the trip I'm on any
+  more — a Sentinel cluster escalated on tomorrow's corridor, three
+  fresh incidents landed near the Day-3 stay, the forecaster shifted
+  the depart-hour curve on Day-4.  What do I actually **do** with the
+  remaining days?"*  Up to Day 80, the answer was *"open Pulse,
+  cross-check Sentinel, hand-re-compose Odyssey with the new inputs,
+  eyeball the delta."*  Nomad closes that loop.  New `nomad.py`
+  (~900 LOC, pure stdlib, **zero new deps**) is the deterministic
+  reflow engine.  It takes an existing `odyssey.TripReport` (the
+  reference plan), a `NomadState`  (`current_day_idx` +
+  `mode ∈ {at_start · at_stay · at_stop · in_transit}` + current lat/lon),
+  and the **current** incidents / geofences / POIs pool.  Physics:
+  (1) every upcoming day (from `current_day_idx` onward) is
+  re-composed under live signals via the identical `_compose_day`
+  path Odyssey uses — same 12-waypoint corridor sampling, same stay-at-
+  hour-20 evening scoring, same fatigue penalty.  Every past day stays
+  frozen at its Odyssey baseline.  (2) A per-day **live-vs-baseline
+  delta** is computed; any day that lost `≥ DAY_DEGRADE_PTS = 4` pts is
+  flagged as **degraded**.  (3) The trip aggregate is re-composed
+  through the same `0.60·mean + 0.40·min` composite Odyssey uses,
+  yielding a **live trip score** and **projected shortfall** vs the
+  Odyssey baseline.  (4) When the shortfall clears
+  `SHORTFALL_TRIGGER_PTS = 5`, the reflow engine fires and enumerates
+  up to **seven concrete strategies**, each simulated end-to-end and
+  scored against `STAY_COURSE`:
+
+    * **`STAY_COURSE`** — the reference; keeps the original remaining plan.
+    * **`TIME_SHIFT`** — probes `depart_hour ± 3 h` on the worst
+      upcoming day, keeps the best variant (arrival hours move out of
+      the late-night penalty band).
+    * **`STOP_DROP`** — drops the weakest stop on the worst upcoming
+      day; corridor loses its riskiest leg *and* the fatigue penalty
+      falls.
+    * **`STOP_SUB`** — substitutes the weakest stop with the safest
+      candidate POI within `STOP_SUB_MAX_KM = 3.5` km; trip geographic
+      shape stays intact, only one stop shifted.
+    * **`REST_DAY`** — turns the worst upcoming day into a stay-in-place
+      day (no stops); corridor risk → 0, day scores at the stay's
+      evening window.  Only surfaced when the stay itself scores ≥ 55
+      so you don't anchor to a soft point.
+    * **`SHORTEN`** — computes the smallest **`k`** such that keeping
+      the first `k` days maximises the trip composite.  Only fires
+      when the tail is *actively dragging* the mean down.
+    * **`STAY_MOVE`** — swaps the stay on the worst day to the safest
+      nearby candidate stay within `STAY_MOVE_MAX_KM = 4` km.
+
+  (5) Strategies are ranked by projected trip uplift descending; the
+  winner is the highest-uplift strategy that beats `STAY_COURSE` by
+  `≥ STRATEGY_MIN_UPLIFT_PTS = 2` pts.  When nothing clears the bar,
+  `STAY_COURSE` wins by definition.  (6) A **signals digest** rolls up
+  the live pool: `total_live_incidents`, `corridor_incidents_new` (# of
+  live incidents within `CORRIDOR_INCIDENT_KM = 0.75` km of any leg
+  waypoint on an upcoming day), `days_with_new_incidents`,
+  `degraded_days`, `worst_day_index / worst_day_delta` — and a
+  one-line trigger summary the advisory strip quotes.  (7) The
+  advisory strip is mode-aware — the first line depends on where the
+  traveller physically is (`in_transit` → *"can reflow the rest of
+  today and every day after, but not the leg you're on — open
+  Companion"*; `at_stay` → *"good pre-departure checkpoint"*).
+  **Streamlit tab** at `tabs[20]` between Odyssey and the Report
+  Hazard tools: a *baseline → live → reflowed* verdict ribbon showing
+  the trip-band journey in one line (Odyssey score → live re-score →
+  best-strategy projection with signed deltas + emerald/rose arrows),
+  a 4-tile trigger row (shortfall pts, ACTIVE/quiet, degraded days,
+  incidents on corridors), a **prominent recommendation callout**
+  (glowing best-strategy card with kind pill + one-liner + uplift +
+  projected verdict + full detail), **live day cards** (one per
+  upcoming day: baseline → live delta arrow with per-day DEGRADED /
+  IMPROVED badge, new-incidents count, reason line), a **ranked
+  strategies stack** (each with kind pill, projected score, uplift
+  bar rendered proportional to `+8·(uplift + 5)` capped 0–100%, stops
+  kept / risk-km / distance chip), and a mode-aware **advisory strip**
+  with `SHORTFALL_TRIGGER_PTS`-tinted rails.  Ships with a
+  **live-signal simulator** — pick an upcoming day + a count 0–40 +
+  severity 1–5 and Nomad injects synthetic incidents around the day's
+  first stop so you can see the reflow physics fire without waiting
+  for real signals.  Exports as JSON (`waysafe.nomad.v1`) and Markdown
+  reflow brief for the family-share / duty-of-care / travel-insurance
+  loop.  End-to-end verified: baseline 79 (Solid) → live 68 (Solid)
+  under 12 injected incidents on Day-3's corridor → `REST_DAY` on
+  Day 2 reflow → 73 (Solid), +5 pt uplift; determinism confirmed
+  (same input bytes → identical `to_json` output across runs).
+- **Odyssey — Multi-Day Trip Composer** *(Day 76)* — the first
   WaySafe surface that scores an entire *multi-day* trip as one
   deterministic report.  Every prior surface — Pulse, Tempo, Plan
   Route, Companion, Echo, Prism — is *single-day*.  A tourist rarely
