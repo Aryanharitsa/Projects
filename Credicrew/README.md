@@ -50,14 +50,145 @@ angles to test (missing skills, matched deep-dives, seniority stretch,
 location fit, motivation, ownership), the 5 top-ranked questions from
 the interview kit, the dims *already saturated* so the panel doesn't
 double-probe, and the red flags to watch for — same input bytes → same
-brief bytes, deterministic, printable, and Markdown-exportable. All from a
-dark, fast, single-page workspace.
+brief bytes, deterministic, printable, and Markdown-exportable, and now
+**closes the last 25 minutes of the loop with Reference** — the
+structured reference-check composer that turns every candidate claim
+worth corroborating and every rubric flag worth probing into a
+deterministic per-referee question sheet (manager · peer · report ·
+skip-level, tier-aware mix), folds the referees' verdicts
+(*corroborated / concerned / contradicted / no_signal*) back into a
+score-shifted composite (–25..+15 pts, weighted by question priority),
+and issues one of five terminal calls — *proceed / proceed with caveat /
+reopen the loop / block offer / awaiting refs* — before the offer letter
+ever goes out. All from a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Reference (Day 82)
+
+Every prior Credicrew surface answers a hiring question. Discover ranks
+who to talk to. Roles moves them through pipeline. Interview Kit runs
+the loop. Decision Studio aggregates the panel. Offer Studio benchmarks
+comp. Peer Parity audits fairness. Brief hands the interviewer their
+60-second prep sheet. What nothing has ever built is the *reference
+call* — the last 25-minute conversation between "we like this candidate"
+and "we send the offer letter." It is almost universally improvised:
+whoever draws the short straw phones two names on Monday, freestyles
+fifteen questions, and writes back a two-line note. Meanwhile the panel
+already ranked ownership at 2/5 and nobody probes it on the ref call,
+the candidate's headline claims *"Led team of 6 · Migrated production
+Postgres to shard-per-tenant"* and no reference is ever asked to speak
+to that specific claim, and the offer letter goes out anyway.
+
+**Reference** (`/reference`) closes that gap. Given a role's
+`QueryPlan`, a candidate, and (optionally) an `InterviewRecord`, it
+produces a deterministic `ReferenceBundle`:
+
+- **Claim harvest** — every corroboration-worthy assertion in the
+  candidate profile, weighted by kind (`impact` and `leadership` at
+  0.85, `seniority` at 0.80, `skill` and metric-numbers at 0.70,
+  `panel_strength_note` at 0.60). Impact verbs (`led`, `migrated`,
+  `shipped`, `architected`, `owned`, `drove`, ...) get snippet-extracted
+  from headline / role, seniority tier is detected by keyword, numerical
+  claims (`40%`, `3x`, `10M/s`) fire their own probe, and panel strength
+  signals from the interview record become claim-checks the referee can
+  either confirm or deflate.
+- **Red-flag harvest** — every rubric dim the panel scored ≤ 2
+  (severity `block`), ≤ 3 on a ≥ 10% weight dim (`concern`), ≤ 3 on a
+  light-weight dim (`watch`), or never rated at all on a ≥ 10% weight
+  dim (`gap`). Each flag carries the dim label, the panel's latest
+  rating, and the stage it came from.
+- **Reference slots** — tier-aware mix: `junior` → manager + peer,
+  `mid` → manager + peer + peer, `senior` → manager + peer + report,
+  `staff` → manager + peer + report + skip-level.
+- **Per-slot question sheet** — 4–7 questions per referee, mixed
+  deterministically: `delivery` anchor (always first, "describe one
+  shipped project they clearly owned end-to-end"), `flag` probes
+  prioritised by kind-affinity (manager gets ownership / delivery /
+  scope; peer gets collaboration / communication / depth; report gets
+  collaboration / ownership / feedback; skip-level gets scope /
+  delivery / trajectory), `claim` probes tuned per (claim-kind, ref-kind)
+  pair from a 24-cell text bank, then `growth` and `open` closers. Each
+  question carries a priority score, minute allocation, and links back
+  to the claim / flag it probes.
+- **Minutes budget** — 3.5 min × question count, capped at 30 min per
+  slot. Panels get ~24 minutes on 7-question sheets — realistic for a
+  real reference call.
+- **Markdown export** — paste-into-doc reference sheet with the full
+  headline, corpus hash, per-slot question stack, and claim / flag
+  ledgers.
+
+Once the calls happen and the responses come back, `POST
+/reference/score` folds each verdict into a **score-shift** in
+`(–25, +15)` weighted by question priority: `corroborated` adds
++1.0×priority, `no_signal` is a 0, `concerned` is −1.5×priority,
+`contradicted` is −3.0×priority. Score-shift is clamped at both ends
+so five bad refs don't tank a hire that interviewed 80/100, and five
+great refs don't compensate for a *contradicted* leadership claim.
+
+That folds into a **terminal verdict ladder** with five explicit rungs:
+
+- **`proceed`** — shift ≥ +3 pts and nothing contradicted.
+- **`proceed_with_caveat`** — shift in `[–3, +3)`, no confirmed hard
+  flags. The offer goes out, but with the noted watch-item recorded
+  in the offer memo.
+- **`reopen`** — exactly one contradicted claim OR one confirmed
+  hard flag OR shift in `[–12, –3)`. A single confirmed hard flag or
+  contradicted claim *always* reopens the loop regardless of the shift
+  arithmetic — the panel needs to re-check that specific angle before
+  we send an offer.
+- **`block`** — two or more contradicted claims / confirmed hard
+  flags, or shift ≤ –12. Do not send the letter.
+- **`pending`** — coverage < 15%. Not enough answers to decide yet.
+
+Every verdict ships with a **headline sentence** ordered by
+information density — shift first, claim outcomes second, flag
+outcomes third, coverage last — and a **projected composite** =
+`interview_composite + score_shift` clamped to `[0, 100]` so a hiring
+manager sees exactly how much the ref calls moved the number.
+
+The surface (`/reference`) opens on a verdict-tinted hero with a
+projected-composite conic ring, tinted by verdict (`emerald` proceed,
+`sky` caveat, `amber` reopen, `rose` block, `slate` pending) and a
+5-tile metric strip (interview composite · score shift · projected
+composite · slot count · time budget). Below that, one card per
+reference slot — kind icon in a tinted ring (★ manager, ● peer, ↳
+report, ↑ skip-level), intro one-liner, focus-dim chips, coverage
+bar, then the question stack. Each question is a card carrying the
+kind pill (`Delivery` / `Flag probe` / `Claim check` / `Growth` /
+`Open`), a claim / flag chip if it links back to one, the priority
+score, and a 5-button verdict picker that lights up in the picked
+verdict's tone; picking anything but `pending` reveals a note textarea
+that persists to `localStorage` per `roleId::candidateId` and flows
+into the JSON export. A right-side rail carries a live **claim
+status** panel (each claim tinted by `confirmed / contradicted /
+concern / unknown` with per-verdict tick / warn / cross tallies), a
+live **flag status** panel (same shape, plus severity ribbon), and an
+**actions** panel (copy Markdown · copy JSON envelope · reset
+responses).
+
+Same input bytes → same bundle bytes. Corpus hash `sha256[:16]` over
+`(role_id, candidate_id, tier, slot kinds, claim ids, flag dims)` so
+two runs on the same data produce byte-identical output — verifiable
+end-to-end. Mirrored 1:1 in `backend/app/services/reference.py` so
+programmatic / agentic clients get identical bundles.
+
+Four endpoints — `POST /reference/compose`, `POST /reference/score`,
+`POST /reference/markdown`, `GET /reference/defaults` — mirrored
+through the API. Engine: `credicrew-reference/1.0.0`. Envelope:
+`credicrew.reference.v1`. Verification: FastAPI TestClient smoke
+validates all four endpoints (200s + 422 on missing candidate +
+`pending` verdict when coverage < 15%); a 12-question × 3-slot mixed
+response set on the seed data lands `verdict=reopen, shift=+5.96,
+projected_composite=66, coverage=100%, corpus_hash=aeb0445aae65d59c`,
+byte-identical across runs. Frontend `tsc --noEmit` clean, `next
+build` clean (`/reference` at 13.4 kB / 121 kB First Load).
 
 ---
 
