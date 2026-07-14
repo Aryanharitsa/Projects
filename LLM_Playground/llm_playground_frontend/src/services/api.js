@@ -819,6 +819,52 @@ class ApiService {
     });
   }
 
+  // ─── Studio Sentinel — Prompt Injection Defense (Day 83) ───────────────────
+  // Deterministic engine — every response is a pure function of the request.
+  // No persistence, no keys required; the demo lights up on first load.
+  async sentinelDefaults() {
+    return this.request('/sentinel/defaults');
+  }
+  async sentinelAttacks() {
+    return this.request('/sentinel/attacks');
+  }
+  async sentinelDefenses() {
+    return this.request('/sentinel/defenses');
+  }
+  async sentinelScan(input) {
+    return this.request('/sentinel/scan', {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    });
+  }
+  async sentinelMatrix(defenseIds = null) {
+    return this.request('/sentinel/matrix', {
+      method: 'POST',
+      body: JSON.stringify(defenseIds ? { defense_ids: defenseIds } : {}),
+    });
+  }
+  async sentinelSimulate(payload) {
+    return this.request('/sentinel/simulate', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async sentinelSuggest(payload = {}) {
+    return this.request('/sentinel/suggest', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+  async sentinelCompile(payload) {
+    return this.request('/sentinel/compile', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+  async sentinelSeed() {
+    return this.request('/sentinel/seed');
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.
