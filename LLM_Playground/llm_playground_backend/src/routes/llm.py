@@ -25,6 +25,7 @@ from src import drift as drift_lib
 from src import surgeon as surgeon_lib
 from src import frontier as frontier_lib
 from src import relay as relay_lib
+from src import sentinel as sentinel_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -2165,3 +2166,136 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat()
     })
+
+
+# ─── Studio Sentinel — Prompt-Injection Defense (Day 83) ───────────────────
+# Deterministic engine. Every response is a pure function of the request
+# body, no persistence, so the studio lights up on first page load without
+# any API credentials and stays byte-identical across refreshes.
+
+@llm_bp.route('/sentinel/defaults', methods=['GET'])
+def sentinel_defaults():
+    return jsonify({'success': True, 'defaults': sentinel_lib.defaults()})
+
+
+@llm_bp.route('/sentinel/attacks', methods=['GET'])
+def sentinel_attacks():
+    return jsonify({
+        'success': True,
+        'attacks': sentinel_lib.list_attacks(),
+        'families': sentinel_lib.list_families(),
+    })
+
+
+@llm_bp.route('/sentinel/defenses', methods=['GET'])
+def sentinel_defenses():
+    return jsonify({'success': True, 'defenses': sentinel_lib.list_defenses()})
+
+
+@llm_bp.route('/sentinel/scan', methods=['POST'])
+def sentinel_scan():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = str(data.get('input') or data.get('text') or '')
+        if not text.strip():
+            return jsonify({'success': False, 'error': 'input is required'}), 400
+        return jsonify({'success': True, 'scan': sentinel_lib.scan_input(text)})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sentinel/matrix', methods=['POST'])
+def sentinel_matrix():
+    try:
+        data = request.get_json(silent=True) or {}
+        defense_ids = data.get('defense_ids')
+        if defense_ids is not None and not isinstance(defense_ids, list):
+            return jsonify({'success': False, 'error': 'defense_ids must be a list'}), 400
+        matrix = sentinel_lib.build_matrix(defense_ids)
+        return jsonify({'success': True, 'matrix': matrix})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sentinel/simulate', methods=['POST'])
+def sentinel_simulate():
+    try:
+        data = request.get_json(silent=True) or {}
+        defense_ids = data.get('defense_ids') or []
+        if not isinstance(defense_ids, list):
+            return jsonify({'success': False, 'error': 'defense_ids must be a list'}), 400
+        traffic_attack_pct = float(data.get('traffic_attack_pct', sentinel_lib.DEFAULT_TRAFFIC_ATTACK_PCT))
+        monthly_requests = int(data.get('monthly_requests', sentinel_lib.DEFAULT_MONTHLY_REQUESTS))
+        attack_mix = data.get('attack_mix')
+        sim = sentinel_lib.simulate_policy(
+            defense_ids,
+            traffic_attack_pct=max(0.0, min(1.0, traffic_attack_pct)),
+            monthly_requests=max(1, monthly_requests),
+            attack_mix=attack_mix if isinstance(attack_mix, dict) else None,
+        )
+        return jsonify({'success': True, 'simulation': sim})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sentinel/suggest', methods=['POST'])
+def sentinel_suggest():
+    try:
+        data = request.get_json(silent=True) or {}
+        picks = sentinel_lib.suggest_policies(
+            traffic_attack_pct=max(0.0, min(1.0, float(data.get(
+                'traffic_attack_pct', sentinel_lib.DEFAULT_TRAFFIC_ATTACK_PCT
+            )))),
+            monthly_requests=max(1, int(data.get(
+                'monthly_requests', sentinel_lib.DEFAULT_MONTHLY_REQUESTS
+            ))),
+            fpr_ceiling=max(0.0, min(1.0, float(data.get(
+                'fpr_ceiling', sentinel_lib.DEFAULT_FPR_CEILING
+            )))),
+            latency_ceiling_ms=max(0, int(data.get(
+                'latency_ceiling_ms', sentinel_lib.DEFAULT_LATENCY_CEILING_MS
+            ))),
+        )
+        return jsonify({'success': True, 'picks': picks})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sentinel/compile', methods=['POST'])
+def sentinel_compile():
+    try:
+        data = request.get_json(silent=True) or {}
+        defense_ids = data.get('defense_ids') or []
+        if not isinstance(defense_ids, list) or not defense_ids:
+            return jsonify({'success': False, 'error': 'defense_ids must be a non-empty list'}), 400
+        risk_threshold = int(data.get('risk_threshold', sentinel_lib.DEFAULT_RISK_THRESHOLD))
+        action_on_block = str(data.get('action_on_block') or 'refuse')
+        policy = sentinel_lib.compile_policy(
+            defense_ids,
+            risk_threshold=max(0, min(100, risk_threshold)),
+            action_on_block=action_on_block,
+            traffic_attack_pct=max(0.0, min(1.0, float(data.get(
+                'traffic_attack_pct', sentinel_lib.DEFAULT_TRAFFIC_ATTACK_PCT
+            )))),
+            monthly_requests=max(1, int(data.get(
+                'monthly_requests', sentinel_lib.DEFAULT_MONTHLY_REQUESTS
+            ))),
+        )
+        markdown = sentinel_lib.policy_markdown(policy)
+        return jsonify({'success': True, 'policy': policy, 'markdown': markdown})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sentinel/seed', methods=['GET', 'POST'])
+def sentinel_seed():
+    try:
+        return jsonify({'success': True, 'seed': sentinel_lib.seed_demo()})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
