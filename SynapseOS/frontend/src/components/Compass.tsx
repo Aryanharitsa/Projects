@@ -38,7 +38,20 @@ type Props = {
  * is verbatim from one of the user's own notes, every coverage number
  * is reproducible from `(question, reads)`.
  */
-export function Compass({ open, onClose, onSelectNote }: Props) {
+type CompassPropsWithSignal = Props & {
+  /** Compass-selected question id to focus on open (from Signal → open in Compass). */
+  focusQuestionId?: number | null;
+  /** Called after any signal watch mutation so the parent can refresh badges. */
+  onSignalMutated?: () => void;
+};
+
+export function Compass({
+  open,
+  onClose,
+  onSelectNote,
+  focusQuestionId,
+  onSignalMutated,
+}: CompassPropsWithSignal) {
   const [questions, setQuestions] = useState<CompassQuestionSummary[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [lens, setLens] = useState<CompassLens | null>(null);
@@ -49,6 +62,8 @@ export function Compass({ open, onClose, onSelectNote }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
   const [busyNoteId, setBusyNoteId] = useState<number | null>(null);
+  const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set());
+  const [watchBusy, setWatchBusy] = useState(false);
 
   const refreshList = useCallback(async (preferredId?: number | null) => {
     setLoadingList(true);
@@ -84,10 +99,26 @@ export function Compass({ open, onClose, onSelectNote }: Props) {
     }
   }, []);
 
+  const refreshPinnedIds = useCallback(async () => {
+    try {
+      const r = await api.signalPinnedIds();
+      setPinnedIds(new Set(r.question_ids));
+    } catch {
+      /* pin toggle is a nice-to-have — don't error the modal on failure */
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     refreshList();
-  }, [open, refreshList]);
+    refreshPinnedIds();
+  }, [open, refreshList, refreshPinnedIds]);
+
+  // Signal → "open in Compass" hands over a question id to jump to.
+  useEffect(() => {
+    if (!open) return;
+    if (focusQuestionId != null) setActiveId(focusQuestionId);
+  }, [open, focusQuestionId]);
 
   useEffect(() => {
     if (!open || activeId === null) {
@@ -96,6 +127,24 @@ export function Compass({ open, onClose, onSelectNote }: Props) {
     }
     loadLens(activeId);
   }, [open, activeId, loadLens]);
+
+  const handleWatchToggle = useCallback(async () => {
+    if (activeId === null) return;
+    setWatchBusy(true);
+    try {
+      if (pinnedIds.has(activeId)) {
+        await api.signalUnwatch(activeId);
+      } else {
+        await api.signalWatch(activeId);
+      }
+      await refreshPinnedIds();
+      onSignalMutated?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "watch toggle failed");
+    } finally {
+      setWatchBusy(false);
+    }
+  }, [activeId, pinnedIds, refreshPinnedIds, onSignalMutated]);
 
   useEffect(() => {
     if (!open) return;
@@ -278,7 +327,12 @@ export function Compass({ open, onClose, onSelectNote }: Props) {
             )}
             {activeId !== null && lens && !loadingLens && (
               <div className="p-6 space-y-6">
-                <LensHeader lens={lens} />
+                <LensHeader
+                  lens={lens}
+                  watched={pinnedIds.has(lens.question_id)}
+                  watchBusy={watchBusy}
+                  onWatchToggle={handleWatchToggle}
+                />
                 <SubquestionsRow
                   subquestions={lens.subquestions}
                   onSelectNote={(noteId, title) =>
@@ -571,15 +625,45 @@ function CoverageBar({ pct, active }: { pct: number; active: boolean }) {
 
 // ----------------------------------------------------------------- right header
 
-function LensHeader({ lens }: { lens: CompassLens }) {
+function LensHeader({
+  lens,
+  watched,
+  watchBusy,
+  onWatchToggle,
+}: {
+  lens: CompassLens;
+  watched: boolean;
+  watchBusy: boolean;
+  onWatchToggle: () => void;
+}) {
   const inLens = lens.in_lens;
   const read = lens.stats.read_in_lens ?? 0;
   return (
     <div className="rounded-2xl bg-gradient-to-br from-synapse-cyan/10 via-synapse-violet/8 to-transparent ring-1 ring-white/8 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-ink-400 mb-1.5">
-            researching
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-ink-400">
+              researching
+            </span>
+            <button
+              onClick={onWatchToggle}
+              disabled={watchBusy}
+              title={
+                watched
+                  ? "Unpin from Signal — stop tracking this question's delta"
+                  : "Pin as Signal — track how your vault answers this question over time"
+              }
+              className={`inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.14em] rounded-full ring-1 px-2 py-0.5 transition disabled:opacity-50 ${
+                watched
+                  ? "bg-synapse-lime/15 ring-synapse-lime/45 text-synapse-lime hover:ring-synapse-lime/80"
+                  : "bg-white/[0.02] ring-white/10 text-ink-300 hover:ring-synapse-lime/40 hover:text-synapse-lime"
+              }`}
+              aria-pressed={watched}
+            >
+              <span aria-hidden>{watched ? "◉" : "◎"}</span>
+              {watched ? "watching" : "watch"}
+            </button>
           </div>
           <h2 className="text-xl lg:text-2xl font-semibold tracking-tight text-ink-100 leading-tight">
             {lens.question_text}

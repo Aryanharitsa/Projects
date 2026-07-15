@@ -6,9 +6,14 @@
 > **Spark** turns the gaps in your graph into a queue of concrete
 > next-note drafts you click to commit. **Compass** pins a research
 > question, re-ranks the vault against it, and grows a citation-stitched
-> working answer as you mark notes read. **Recall** (new) quizzes your
-> own graph back at you — cloze, prompt and neighbor-choice cards, SM-2
-> spaced repetition, per-cluster mastery.
+> working answer as you mark notes read. **Recall** quizzes your own
+> graph back at you — cloze, prompt and neighbor-choice cards, SM-2
+> spaced repetition, per-cluster mastery. **Signal** turns any
+> Compass question into a persistent watch, showing exactly what your
+> vault has learned about that question since the last time you looked.
+> **Vault** (new) hands your whole second brain back to you as a
+> portable JSON or Markdown ZIP — round-trippable, snapshot-able,
+> Obsidian-readable, no lock-in.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -18,6 +23,106 @@ your second brain on a plate.
 
 No folders. No manual `[[backlinks]]`. No cloud lock-in. Runs on your
 machine in a minute.
+
+---
+
+## What's new — Vault (Day 84)
+
+Every PKM tool spends its first three README screens telling you *"but
+of course your notes belong to you."* SynapseOS earns that claim by
+being able to hand your whole vault back to you in two open formats at
+any moment, and read it back byte-for-byte.
+
+Click **📦 vault** in the header and three tabs open:
+
+- **Export** — download the full store as JSON (lossless, embeddings
+  included) or as a Markdown ZIP (per-note `.md` files with YAML
+  frontmatter + an auto-generated `## Related` section that Obsidian
+  and Logseq will read without any translation). Toggle whether to
+  include embeddings, trails, compass reads, and signal watches.
+- **Import** — drop a `.json` or `.md.zip` back onto the panel and
+  Vault shows a preview *before* the mutation runs: how many notes
+  would be created, how many refreshed by title, per-category warnings
+  (dangling references, unresolved wikilinks, tags that couldn't
+  parse). Two modes: **merge** upserts by title-hash, **replace**
+  wipes + rebuilds (guarded by a hard confirmation).
+- **Snapshots** — the personal Ctrl-Z. Freeze a labelled JSON copy of
+  your vault before a risky operation (bulk atomize, echo merge,
+  cluster delete) and roll back with one click. Same label overwrites
+  in-place so you never accumulate `before-1`, `before-2`, `before-3`.
+
+The whole surface is stdlib-only on the backend (custom ZIP writer,
+minimal YAML emitter/parser, base64-packed embeddings) and reads the
+ZIP client-side via `DecompressionStream("deflate-raw")` — no JSZip
+dep, no first-load bloat.
+
+### Physics
+
+**Notes** carry a stable `title_hash = sha256(lower(title.strip()))[:16]`
+so merge-mode can upsert against existing notes without needing the
+old id to survive across machines (SQLite `AUTOINCREMENT` doesn't
+guarantee id stability). Every incoming note that hashes to a
+pre-existing row updates title, body, tags, and — if the payload
+includes `embedding_b64` — restores the packed 512-float vector so the
+synapse graph rebuilds exactly. Notes with a new hash are inserted;
+the summary carries an `id_remap: {old_id → new_id}` used to rewrite
+trail step references, compass read markers, and signal watches so
+non-note state survives the id shuffle.
+
+**Snapshots** are one row per label in `vault_snapshots` (SQLite,
+lives inside `synapse.db`). Body is the full `export_dict()` payload
+as JSON text. `create_snapshot('same-label')` twice overwrites the
+first — snapshots are named states, not append-only history.
+`restore_snapshot(id)` routes through `import_payload(..., mode=
+'replace')` so the code path is one shared surface, not two.
+
+### Vault API
+
+```
+GET    /vault/stats                          -> {notes, trails, questions, watches, snapshots, engine, schema_version}
+GET    /vault/export.json                    -> full JSON export (streams)
+GET    /vault/export.md.zip                  -> Markdown ZIP of per-note .md files + _manifest.json
+POST   /vault/preview     {mode, payload}    -> ImportSummary (dry_run=true)
+POST   /vault/import      {mode, payload}    -> ImportSummary  (mode ∈ 'merge' | 'replace')
+GET    /vault/snapshots                      -> [VaultSnapshot]
+POST   /vault/snapshots   {label}            -> VaultSnapshot (idempotent per label)
+POST   /vault/snapshots/{id}/restore         -> ImportSummary
+DELETE /vault/snapshots/{id}                 -> 204
+```
+
+`ImportSummary` payload:
+
+```json
+{
+  "mode": "merge",
+  "dry_run": false,
+  "notes_created": 3,
+  "notes_updated": 42,
+  "notes_skipped": 0,
+  "embeddings_restored": 45,
+  "trails_imported": 4,
+  "compass_imported": 2,
+  "signal_imported": 1,
+  "warnings": [
+    "trail 'ai reads': dropped 1 step(s) with no matching note"
+  ],
+  "total_incoming_notes": 45
+}
+```
+
+### UX
+
+The header carries a **`📦 vault`** pill with a live snapshot count
+badge. Inside the modal every state-changing action is preceded by a
+preview or a confirmation — a JSON import shows exactly how many notes
+will be created / updated / warned about, and a "replace" mode
+requires a second click after the preview panel with a warning of how
+much state will be wiped. Restore + delete on snapshots prompt through
+`window.confirm` so a misclick can't erase a whole workflow.
+
+Round-trip is validated: `export → import(replace)` on the same file
+produces an identical vault (bodies, tags, embeddings, timestamps,
+trails, compass reads, signal snapshots) — nothing gets lost.
 
 ---
 
@@ -33,6 +138,142 @@ Every PKM tool falls into one of two camps:
 SynapseOS splits the difference. Links are automatic *and* inspectable.
 You can see every synapse, why it exists (cosine similarity), tune the
 threshold live, and watch your topical clusters discover themselves.
+
+---
+
+## What's new — Signal (Day 79)
+
+Compass answers *"what does my vault say about this question right
+now?"* — pin a question, mark notes read, watch a citation-stitched
+working answer grow. That's the *in-flight* research surface. Real
+research isn't in-flight for a single sitting; it's a thread you drop
+and pick up over days or weeks. The moment you close Compass the
+question falls off your radar, and re-opening it days later gives you
+*no* signal about what the vault has learned in between — you have to
+remember your prior state and diff by eye.
+
+**Signal fixes that.** Click **◎ watch** on any Compass question and the
+current lens is snapshotted verbatim — coverage, in-lens set, read set,
+citation set, per-subquestion progress, working-answer text. Every time
+you open Signal, each pinned question's lens is recomputed *now* and
+diffed against its snapshot. You see, per watch:
+
+- **Coverage delta**, mass-weighted. Coverage moving 38% → 74% since
+  pin is a much more honest signal than "you read 3 more notes."
+- **Notes that joined the lens** since pin — new writes shifted the
+  relevance floor above `RELEVANCE_FLOOR` for these notes. That is,
+  *your own notes are now speaking to this question* in a way they
+  weren't before.
+- **Notes that left the lens** — deleted, or dropped below floor after
+  a subsequent edit.
+- **Citations added / removed** — the working answer's evidence set
+  churned. This is the highest-signal delta because the answer itself
+  changed.
+- **Per-subquestion coverage_pct delta** — which sub-aspect is now
+  better-answered than at pin time.
+- **`working_answer_changed`** — hash comparison of the extractive
+  stitch.
+
+**Status** rolls each watch up into a single word so the rail can
+rank at a glance:
+
+- **`new`** — pinned less than an hour ago; nothing meaningful to diff yet.
+- **`grown`** — coverage moved up ≥ 3 pts **or** at least one new
+  citation entered the working answer **or** at least one new note
+  joined the lens.
+- **`shrunk`** — coverage moved down ≥ 3 pts, or the lens lost more
+  notes than it gained.
+- **`fresh`** — you just re-baselined; shows current state as your
+  new baseline with zero deltas.
+- **`stable`** — nothing above thresholds; a quiet thread.
+
+**Rebaseline** ("↻ mark reviewed") re-snapshots the current lens as
+the new baseline — the *"mark as read"* of the signal rail. The next
+visit shows only what's changed *since your last review of the delta*.
+
+### Physics
+
+The delta is a set-diff on note ids plus a hash on the extractive
+stitch. Every number falls out of the same `build_lens` used by
+Compass, so a watched question and its live Compass view are always in
+sync — no dual state to maintain.
+
+```python
+joined_ids   = now_lens_ids - pinned_lens_ids       # newly relevant notes
+left_ids     = pinned_lens_ids - now_lens_ids       # dropped out
+new_reads    = now_read_ids - pinned_read_ids       # you engaged since pin
+cite_added   = now_citation_ids - pinned_citation_ids
+cite_removed = pinned_citation_ids - now_citation_ids
+subq_delta   = (per_term_coverage_now - per_term_coverage_pinned)
+answer_changed = sha256(now.working_answer)[:16] != snapshot.hash
+```
+
+Ranking (movers first, quiet last):
+
+```
+priority(grown) > priority(shrunk) > priority(stable) > priority(new)
+tiebreaker: |coverage_delta|, then citation churn, then joined_count.
+```
+
+### Signal API
+
+```
+POST   /signal/watch                   {question_id}      -> SignalDelta (fresh)
+POST   /signal/watch/{qid}/refresh                        -> SignalDelta (fresh)
+DELETE /signal/watch/{qid}                                -> 204
+GET    /signal/watch/{qid}                                -> SignalDelta
+GET    /signal                                            -> ranked list
+GET    /signal/export.md                                  -> portable brief
+GET    /signal/pinned_ids                                 -> {question_ids: [...]}
+```
+
+`SignalDelta` payload (abridged):
+
+```json
+{
+  "question_id": 1,
+  "question_text": "how does memory compound in a second brain?",
+  "pinned_at": "2026-07-10T14:00:00+00:00",
+  "last_refreshed_at": null,
+  "coverage_now": 74.0, "coverage_pinned": 38.0, "coverage_delta": 36.0,
+  "in_lens_now": 9, "in_lens_pinned": 7,
+  "joined_since_count": 2, "joined_since": [ /* LensNoteSummary */ ],
+  "left_since_count": 0,
+  "reads_new_count": 3, "reads_new": [ /* LensNoteSummary */ ],
+  "citations_added": [ /* CitationDelta */ ],
+  "citations_removed": [],
+  "subquestion_progress": [
+    { "term": "system", "coverage_pct_pinned": 25, "coverage_pct_now": 60, "coverage_pct_delta": 35 }
+  ],
+  "working_answer_changed": true,
+  "status": "grown",
+  "headline": "coverage +36.0 pts · +2 citations · 2 notes joined lens · you read 3"
+}
+```
+
+### UX
+
+The header carries a **`◉ signal`** pill with a badge that flips amber
+when at least one watch is in `grown` or `shrunk` — that's your nudge
+that a thread is worth reviewing. Inside the modal every watch renders
+as its own card: coverage ring (current in gradient, baseline dashed
+underneath), status pill, one-sentence headline, and a chip row for
+the counts. Click **▼ show detail** for the enumerated deltas — added
+citations render with a lime rail; dropped citations render with a
+pink rail and a strikethrough on the title; each subquestion gets a
+mini progress bar with a tick-mark showing the pinned baseline
+underneath the current bar so the delta reads instantly.
+
+Signal composes with existing surfaces:
+
+- The Compass lens header now carries a **`◎ watch`** / **`◉ watching`**
+  toggle. Pin from Compass, review from Signal.
+- Signal's "🧭 open in compass" jumps back with the question focused —
+  the two surfaces are the same lens with a different question:
+  *right now* (Compass) vs *since I last looked* (Signal).
+- The rail export (`GET /signal/export.md`) is a paste-anywhere
+  snapshot of every pinned thread's current delta — good for a
+  standup update on a long-running research effort.
 
 ---
 
@@ -1086,7 +1327,11 @@ Incremental moves for future rotation days:
       per-note ease + interval, deterministic session salt, auto-graded
       cloze via bigram Sørensen–Dice, per-cluster mastery strip and
       post-session report *(shipped)*
-- [ ] Export to Markdown + JSON (with embeddings) for portability
+- [x] **Vault** — portable JSON + Markdown ZIP export/import, per-note
+      `.md` files with YAML frontmatter + auto-generated Related section
+      that Obsidian reads natively, snapshot-and-restore for one-click
+      rollback, stdlib-only ZIP writer + client-side `DecompressionStream`
+      unzip (no JSZip dep) *(shipped)*
 - [ ] Desktop build via Tauri so the whole thing ships as a single app
 
 ---

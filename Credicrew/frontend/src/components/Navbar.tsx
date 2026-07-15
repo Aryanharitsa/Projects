@@ -22,6 +22,15 @@ export default function Navbar() {
           <Link href="/hindsight" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Hindsight</Link>
           <Link href="/verdict" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Verdict</Link>
           <Link href="/brief" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Brief</Link>
+          <Link
+            href="/reference"
+            className="relative rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white"
+          >
+            Reference
+            <span className="ml-1 inline-block rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-indigo-400 px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-widest text-neutral-950">
+              NEW
+            </span>
+          </Link>
           <Link href="/pipeline" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Pipeline</Link>
           <Link href="/submit" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Submit</Link>
         </nav>

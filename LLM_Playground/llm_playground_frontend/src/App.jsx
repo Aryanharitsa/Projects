@@ -75,6 +75,7 @@ import DriftLab from './components/DriftLab';
 import SurgeonStudio from './components/SurgeonStudio';
 import FrontierStudio from './components/FrontierStudio';
 import RelayStudio from './components/RelayStudio';
+import SentinelStudio from './components/SentinelStudio';
 import './App.css';
 
 const App = () => {
@@ -1130,7 +1131,14 @@ const App = () => {
                       <RadioGroupItem value="relay" id="relay" />
                       <Label htmlFor="relay" className="cursor-pointer flex items-center gap-1">
                         <Radio className="w-3.5 h-3.5 text-emerald-600" />
-                        Relay <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Relay
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="sentinel" id="sentinel" />
+                      <Label htmlFor="sentinel" className="cursor-pointer flex items-center gap-1">
+                        <Shield className="w-3.5 h-3.5 text-rose-600" />
+                        Sentinel <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-rose-500 via-amber-500 to-sky-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1416,6 +1424,10 @@ const App = () => {
           ) : selectedMode === 'relay' ? (
             <div className="lg:col-span-3">
               <RelayStudio />
+            </div>
+          ) : selectedMode === 'sentinel' ? (
+            <div className="lg:col-span-3">
+              <SentinelStudio />
             </div>
           ) : selectedMode === 'adversary' ? (
             <div className="lg:col-span-3">

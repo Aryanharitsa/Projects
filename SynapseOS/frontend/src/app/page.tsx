@@ -17,6 +17,8 @@ import { PathFinder } from "@/components/PathFinder";
 import { Pulse } from "@/components/Pulse";
 import { Recall } from "@/components/Recall";
 import { SearchBar } from "@/components/SearchBar";
+import { Signal } from "@/components/Signal";
+import { Vault } from "@/components/Vault";
 import { Spark } from "@/components/Spark";
 import { Synthesis } from "@/components/Synthesis";
 import { Tensions } from "@/components/Tensions";
@@ -67,6 +69,13 @@ export default function Page() {
   const [compassBadge, setCompassBadge] = useState<number | null>(null);
   const [recallOpen, setRecallOpen] = useState(false);
   const [recallBadge, setRecallBadge] = useState<number | null>(null);
+  const [signalOpen, setSignalOpen] = useState(false);
+  const [signalBadge, setSignalBadge] = useState<number | null>(null);
+  const [signalMoversBadge, setSignalMoversBadge] = useState<number | null>(null);
+  const [compassFocusId, setCompassFocusId] = useState<number | null>(null);
+  const [signalMutationTick, setSignalMutationTick] = useState(0);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultSnapshotCount, setVaultSnapshotCount] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -278,6 +287,47 @@ export default function Page() {
     };
   }, [graph, recallOpen]);
 
+  // Signal badge — total pinned watches (primary) + movers subcount so
+  // the header can nudge the user when a delta is worth reviewing.
+  // Recomputes on graph refresh (new notes might have moved a watched
+  // question), on modal close, and after any watch mutation.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .signalList()
+      .then((r) => {
+        if (cancelled) return;
+        setSignalBadge(r.watch_count);
+        setSignalMoversBadge(r.grown_count + r.shrunk_count);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSignalBadge(null);
+        setSignalMoversBadge(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, signalOpen, signalMutationTick]);
+
+  // Vault badge — how many local snapshots the user has frozen. Cheap
+  // probe (one row per snapshot) so we can render the count next to the
+  // header pill without opening the modal.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .vaultStats()
+      .then((s) => {
+        if (!cancelled) setVaultSnapshotCount(s.snapshots);
+      })
+      .catch(() => {
+        if (!cancelled) setVaultSnapshotCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, vaultOpen]);
+
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
       const n = await api.createNote(payload);
@@ -404,6 +454,11 @@ export default function Page() {
         compassBadge={compassBadge ?? undefined}
         onOpenRecall={() => setRecallOpen(true)}
         recallBadge={recallBadge ?? undefined}
+        onOpenSignal={() => setSignalOpen(true)}
+        signalBadge={signalBadge ?? undefined}
+        signalMoversBadge={signalMoversBadge ?? undefined}
+        onOpenVault={() => setVaultOpen(true)}
+        vaultSnapshotBadge={vaultSnapshotCount ?? undefined}
       />
 
       <DailyBrief
@@ -540,13 +595,36 @@ export default function Page() {
 
       <Compass
         open={compassOpen}
-        onClose={() => setCompassOpen(false)}
+        onClose={() => {
+          setCompassOpen(false);
+          setCompassFocusId(null);
+        }}
+        focusQuestionId={compassFocusId}
+        onSignalMutated={() => setSignalMutationTick((t) => t + 1)}
         onSelectNote={(stub) => {
           const real = nodes.find((n) => n.id === stub.id);
           setSelected(real ?? (stub as GraphNode));
           setIsolated(null);
           setCompassOpen(false);
+          setCompassFocusId(null);
         }}
+      />
+
+      <Signal
+        open={signalOpen}
+        onClose={() => setSignalOpen(false)}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+          setSignalOpen(false);
+        }}
+        onOpenInCompass={(qid) => {
+          setCompassFocusId(qid);
+          setSignalOpen(false);
+          setCompassOpen(true);
+        }}
+        onMutated={() => setSignalMutationTick((t) => t + 1)}
       />
 
       <Recall
@@ -556,6 +634,17 @@ export default function Page() {
           const real = nodes.find((n) => n.id === stub.id);
           setSelected(real ?? (stub as GraphNode));
           setIsolated(null);
+        }}
+      />
+
+      <Vault
+        open={vaultOpen}
+        onClose={() => setVaultOpen(false)}
+        onMutated={() => {
+          // A vault mutation (import / restore) can change every note
+          // in the store; the graph refresh is the cheapest way to
+          // resync every downstream surface (badges, inspector, etc.).
+          refreshGraph();
         }}
       />
 

@@ -25,6 +25,16 @@ type Props = {
   compassBadge?: number;
   onOpenRecall?: () => void;
   recallBadge?: number;
+  onOpenSignal?: () => void;
+  /** Total pinned watches — the base count for the badge. */
+  signalBadge?: number;
+  /** Watches whose delta is currently ``grown`` or ``shrunk`` — the
+   *  actionable subset. When > 0 the badge tints amber to nudge review. */
+  signalMoversBadge?: number;
+  onOpenVault?: () => void;
+  /** Snapshot count — badges the vault pill so a growing snapshot list
+   *  is visible without opening the modal. */
+  vaultSnapshotBadge?: number;
 };
 
 export function Header({
@@ -50,6 +60,11 @@ export function Header({
   compassBadge,
   onOpenRecall,
   recallBadge,
+  onOpenSignal,
+  signalBadge,
+  signalMoversBadge,
+  onOpenVault,
+  vaultSnapshotBadge,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -227,6 +242,35 @@ export function Header({
               )}
             </button>
           )}
+          {onOpenSignal && (
+            <button
+              onClick={onOpenSignal}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-lime/25 via-synapse-cyan/20 to-synapse-violet/20 ring-1 ring-synapse-lime/45 hover:ring-synapse-lime/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(163,230,53,0.65)] hover:shadow-[0_0_28px_-6px_rgba(34,211,238,0.75)]"
+              aria-label="open signal"
+              title="Persistent watches over Compass questions — see what your vault has learned since you pinned each one"
+            >
+              <span aria-hidden className="text-synapse-lime">◉</span>
+              signal
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-lime/35 to-synapse-cyan/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {signalBadge !== undefined && signalBadge > 0 && (
+                <span
+                  className={`ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full text-[10px] px-1 ring-1 ${
+                    signalMoversBadge && signalMoversBadge > 0
+                      ? "bg-synapse-amber/30 ring-synapse-amber/70 text-synapse-amber"
+                      : "bg-synapse-lime/25 ring-synapse-lime/55 text-ink-100"
+                  }`}
+                >
+                  {signalMoversBadge && signalMoversBadge > 0
+                    ? `${signalMoversBadge}↕`
+                    : signalBadge > 99
+                      ? "99+"
+                      : signalBadge}
+                </span>
+              )}
+            </button>
+          )}
           {onOpenRecall && (
             <button
               onClick={onOpenRecall}
@@ -256,6 +300,25 @@ export function Header({
               daily brief
               {briefBadge && (
                 <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-synapse-cyan animate-pulse-slow" />
+              )}
+            </button>
+          )}
+          {onOpenVault && (
+            <button
+              onClick={onOpenVault}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-synapse-lime/20 via-synapse-cyan/15 to-synapse-violet/20 ring-1 ring-synapse-lime/40 hover:ring-synapse-lime/70 px-3 py-1 font-mono text-[11px] text-ink-100 transition"
+              aria-label="open vault"
+              title="Portable export/import + local snapshots — your notes belong to you"
+            >
+              <span aria-hidden>📦</span>
+              vault
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-synapse-lime/35 to-synapse-violet/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {vaultSnapshotBadge !== undefined && vaultSnapshotBadge > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-lime/25 ring-1 ring-synapse-lime/55 text-[10px] text-ink-100 px-1">
+                  {vaultSnapshotBadge > 99 ? "99+" : vaultSnapshotBadge}
+                </span>
               )}
             </button>
           )}
