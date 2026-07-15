@@ -39,6 +39,10 @@ import type {
   TrailOrigin,
   TrailSummary,
   TrailSuggestions,
+  VaultImportMode,
+  VaultImportSummary,
+  VaultSnapshot,
+  VaultStats,
 } from "./types";
 
 const BASE =
@@ -456,4 +460,72 @@ export const api = {
     j<{ question_ids: number[] }>(`/signal/pinned_ids`),
 
   signalExportUrl: () => `${BASE}/signal/export.md`,
+
+  // ---------------------------------------------------------------- vault
+
+  vaultStats: () => j<VaultStats>(`/vault/stats`),
+
+  vaultExportJsonUrl: (opts?: {
+    includeEmbeddings?: boolean;
+    includeCompassReads?: boolean;
+    includeTrails?: boolean;
+    includeSignal?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.includeEmbeddings !== undefined)
+      q.set("include_embeddings", String(opts.includeEmbeddings));
+    if (opts?.includeCompassReads !== undefined)
+      q.set("include_compass_reads", String(opts.includeCompassReads));
+    if (opts?.includeTrails !== undefined)
+      q.set("include_trails", String(opts.includeTrails));
+    if (opts?.includeSignal !== undefined)
+      q.set("include_signal", String(opts.includeSignal));
+    const qs = q.toString();
+    return `${BASE}/vault/export.json${qs ? `?${qs}` : ""}`;
+  },
+
+  vaultExportZipUrl: (opts?: {
+    includeEmbeddings?: boolean;
+    includeCompassReads?: boolean;
+    includeTrails?: boolean;
+    includeSignal?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (opts?.includeEmbeddings !== undefined)
+      q.set("include_embeddings", String(opts.includeEmbeddings));
+    if (opts?.includeCompassReads !== undefined)
+      q.set("include_compass_reads", String(opts.includeCompassReads));
+    if (opts?.includeTrails !== undefined)
+      q.set("include_trails", String(opts.includeTrails));
+    if (opts?.includeSignal !== undefined)
+      q.set("include_signal", String(opts.includeSignal));
+    const qs = q.toString();
+    return `${BASE}/vault/export.md.zip${qs ? `?${qs}` : ""}`;
+  },
+
+  vaultPreview: (payload: unknown) =>
+    j<VaultImportSummary>(`/vault/preview`, {
+      method: "POST",
+      body: JSON.stringify({ mode: "preview", payload }),
+    }),
+
+  vaultImport: (mode: VaultImportMode, payload: unknown) =>
+    j<VaultImportSummary>(`/vault/import`, {
+      method: "POST",
+      body: JSON.stringify({ mode, payload }),
+    }),
+
+  vaultSnapshots: () => j<VaultSnapshot[]>(`/vault/snapshots`),
+
+  vaultCreateSnapshot: (label: string) =>
+    j<VaultSnapshot>(`/vault/snapshots`, {
+      method: "POST",
+      body: JSON.stringify({ label }),
+    }),
+
+  vaultRestoreSnapshot: (id: number) =>
+    j<VaultImportSummary>(`/vault/snapshots/${id}/restore`, { method: "POST" }),
+
+  vaultDeleteSnapshot: (id: number) =>
+    j<void>(`/vault/snapshots/${id}`, { method: "DELETE" }),
 };

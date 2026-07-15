@@ -1005,3 +1005,40 @@ export type SignalReport = {
   new_count: number;
   watches: SignalDelta[];
 };
+
+// ---------------------------------------------------------------- vault
+
+export type VaultStats = {
+  notes: number;
+  trails: number;
+  questions: number;
+  watches: number;
+  snapshots: number;
+  engine: string;
+  schema_version: number;
+};
+
+export type VaultImportSummary = {
+  mode: string;
+  dry_run: boolean;
+  notes_created: number;
+  notes_updated: number;
+  notes_skipped: number;
+  notes_removed: number;
+  trails_imported: number;
+  compass_imported: number;
+  signal_imported: number;
+  embeddings_restored: number;
+  warnings: string[];
+  total_incoming_notes: number;
+};
+
+export type VaultSnapshot = {
+  id: number;
+  label: string;
+  created_at: string;
+  note_count: number;
+  size_bytes: number;
+};
+
+export type VaultImportMode = "merge" | "replace" | "preview";

@@ -18,6 +18,7 @@ import { Pulse } from "@/components/Pulse";
 import { Recall } from "@/components/Recall";
 import { SearchBar } from "@/components/SearchBar";
 import { Signal } from "@/components/Signal";
+import { Vault } from "@/components/Vault";
 import { Spark } from "@/components/Spark";
 import { Synthesis } from "@/components/Synthesis";
 import { Tensions } from "@/components/Tensions";
@@ -73,6 +74,8 @@ export default function Page() {
   const [signalMoversBadge, setSignalMoversBadge] = useState<number | null>(null);
   const [compassFocusId, setCompassFocusId] = useState<number | null>(null);
   const [signalMutationTick, setSignalMutationTick] = useState(0);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultSnapshotCount, setVaultSnapshotCount] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -307,6 +310,24 @@ export default function Page() {
     };
   }, [graph, signalOpen, signalMutationTick]);
 
+  // Vault badge — how many local snapshots the user has frozen. Cheap
+  // probe (one row per snapshot) so we can render the count next to the
+  // header pill without opening the modal.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .vaultStats()
+      .then((s) => {
+        if (!cancelled) setVaultSnapshotCount(s.snapshots);
+      })
+      .catch(() => {
+        if (!cancelled) setVaultSnapshotCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, vaultOpen]);
+
   const handleCreate = useCallback(
     async (payload: { title: string; body: string; tags: string[] }) => {
       const n = await api.createNote(payload);
@@ -436,6 +457,8 @@ export default function Page() {
         onOpenSignal={() => setSignalOpen(true)}
         signalBadge={signalBadge ?? undefined}
         signalMoversBadge={signalMoversBadge ?? undefined}
+        onOpenVault={() => setVaultOpen(true)}
+        vaultSnapshotBadge={vaultSnapshotCount ?? undefined}
       />
 
       <DailyBrief
@@ -611,6 +634,17 @@ export default function Page() {
           const real = nodes.find((n) => n.id === stub.id);
           setSelected(real ?? (stub as GraphNode));
           setIsolated(null);
+        }}
+      />
+
+      <Vault
+        open={vaultOpen}
+        onClose={() => setVaultOpen(false)}
+        onMutated={() => {
+          // A vault mutation (import / restore) can change every note
+          // in the store; the graph refresh is the cheapest way to
+          // resync every downstream surface (badges, inspector, etc.).
+          refreshGraph();
         }}
       />
 

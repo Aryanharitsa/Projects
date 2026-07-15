@@ -994,3 +994,53 @@ class SignalReportOut(BaseModel):
     stable_count: int
     new_count: int
     watches: list[SignalDeltaOut]
+
+
+# ---------------------------------------------------------------- vault
+
+
+class VaultStatsOut(BaseModel):
+    notes: int
+    trails: int
+    questions: int
+    watches: int
+    snapshots: int
+    engine: str
+    schema_version: int
+
+
+class VaultImportSummaryOut(BaseModel):
+    mode: str
+    dry_run: bool
+    notes_created: int
+    notes_updated: int
+    notes_skipped: int
+    notes_removed: int
+    trails_imported: int
+    compass_imported: int
+    signal_imported: int
+    embeddings_restored: int
+    warnings: list[str]
+    total_incoming_notes: int
+
+
+class VaultImportIn(BaseModel):
+    mode: Literal["merge", "replace", "preview"] = "merge"
+    payload: dict
+
+
+class VaultSnapshotOut(BaseModel):
+    id: int
+    label: str
+    created_at: str
+    note_count: int
+    size_bytes: int
+
+
+class VaultSnapshotIn(BaseModel):
+    label: str = Field(..., min_length=1, max_length=64)
+
+
+class VaultRestoreResult(BaseModel):
+    snapshot: VaultSnapshotOut
+    summary: VaultImportSummaryOut

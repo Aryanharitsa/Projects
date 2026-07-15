@@ -36,7 +36,7 @@ from . import pulse as pulse_engine
 from . import recall as recall_engine
 from . import signal as signal_engine
 from . import spark as spark_engine
-from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
+from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails, vault
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
@@ -1720,3 +1720,143 @@ def signal_pinned_ids() -> dict:
     """Cheap probe used by the Compass surface to render the pin/unpin
     toggle without loading the full snapshot for each row."""
     return {"question_ids": sorted(store.signal_watched_question_ids())}
+
+
+# ------------------------------------------------------------------ vault
+
+
+@app.get("/vault/stats", response_model=schemas.VaultStatsOut)
+def vault_stats_endpoint() -> dict:
+    """Cheap summary the Vault modal + header pill can render without
+    forcing a full export round-trip."""
+    return vault.vault_stats()
+
+
+@app.get("/vault/export.json")
+def vault_export_json(
+    include_embeddings: bool = Query(True),
+    include_compass_reads: bool = Query(True),
+    include_trails: bool = Query(True),
+    include_signal: bool = Query(True),
+) -> Response:
+    """Stream the full portable JSON export."""
+    opts = vault.ExportOptions(
+        include_embeddings=include_embeddings,
+        include_compass_reads=include_compass_reads,
+        include_trails=include_trails,
+        include_signal=include_signal,
+    )
+    body = vault.export_json(opts)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="synapseos-vault-{stamp}.json"'
+            )
+        },
+    )
+
+
+@app.get("/vault/export.md.zip")
+def vault_export_markdown_zip(
+    include_embeddings: bool = Query(False),
+    include_compass_reads: bool = Query(True),
+    include_trails: bool = Query(True),
+    include_signal: bool = Query(True),
+) -> Response:
+    """Stream a ZIP of per-note Markdown files + a JSON manifest.
+
+    ``include_embeddings`` defaults to ``False`` here because the ZIP is
+    primarily for humans / other PKM tools; a 512-float b64 blob per
+    note in ``_manifest.json`` is noise for anyone reading in Obsidian.
+    Users who need lossless round-trip should flip the toggle.
+    """
+    opts = vault.ExportOptions(
+        include_embeddings=include_embeddings,
+        include_compass_reads=include_compass_reads,
+        include_trails=include_trails,
+        include_signal=include_signal,
+    )
+    body = vault.export_markdown_zip(opts)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="synapseos-vault-{stamp}.md.zip"'
+            )
+        },
+    )
+
+
+@app.post("/vault/preview", response_model=schemas.VaultImportSummaryOut)
+def vault_preview_import(req: schemas.VaultImportIn) -> dict:
+    """Dry-run the import so the UI can render a confirmation summary
+    (create/update/skip counts + warnings) before the destructive step."""
+    try:
+        summary = vault.preview_import(req.payload)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return vault.summary_to_dict(summary)
+
+
+@app.post(
+    "/vault/import",
+    response_model=schemas.VaultImportSummaryOut,
+    status_code=201,
+)
+def vault_import(req: schemas.VaultImportIn) -> dict:
+    """Apply a JSON export to the store (``merge`` or ``replace``).
+
+    Import via ZIP goes through this endpoint too — the frontend
+    parses the ``_manifest.json`` client-side and hands us the payload.
+    Server-side Markdown import is available via
+    ``vault.import_markdown_zip`` for CLI users but not exposed as a
+    JSON endpoint on purpose (multipart uploads add coupling we don't
+    need for the one-user-one-machine deployment).
+    """
+    if req.mode == "preview":
+        return vault_preview_import(req)  # type: ignore[return-value]
+    try:
+        summary = vault.import_payload(req.payload, mode=req.mode)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return vault.summary_to_dict(summary)
+
+
+@app.get(
+    "/vault/snapshots",
+    response_model=list[schemas.VaultSnapshotOut],
+)
+def vault_list_snapshots() -> list[dict]:
+    return vault.list_snapshots()
+
+
+@app.post(
+    "/vault/snapshots",
+    response_model=schemas.VaultSnapshotOut,
+    status_code=201,
+)
+def vault_create_snapshot(req: schemas.VaultSnapshotIn) -> dict:
+    return vault.create_snapshot(req.label)
+
+
+@app.post(
+    "/vault/snapshots/{snapshot_id}/restore",
+    response_model=schemas.VaultImportSummaryOut,
+)
+def vault_restore_snapshot(snapshot_id: int) -> dict:
+    summary = vault.restore_snapshot(snapshot_id)
+    if summary is None:
+        raise HTTPException(404, "snapshot not found")
+    return vault.summary_to_dict(summary)
+
+
+@app.delete("/vault/snapshots/{snapshot_id}")
+def vault_delete_snapshot(snapshot_id: int) -> Response:
+    if not vault.delete_snapshot(snapshot_id):
+        raise HTTPException(404, "snapshot not found")
+    return Response(status_code=204)
