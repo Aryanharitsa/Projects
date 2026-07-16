@@ -13,6 +13,139 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-85 — Horizon · regulatory-change impact simulator.**
+> Every prior TITAN surface answers "given today's rules, what is this
+> case?". Horizon answers the question every MLRO loses sleep over the
+> night before a policy revision ships: *"Which of the six-hundred cases
+> in the queue would flip band? Which cleared cases would re-fire? Which
+> analyst decisions become inconsistent with the new rules? Which
+> detectors do the damage — and which do nothing?"*. New
+> `apps/ai-aml/horizon.py` (~1,100 LOC, pure stdlib, **zero new deps**)
+> is a fully-deterministic replay engine: `simulate(proposal, cases) →
+> HorizonReport`. The proposal bundles every knob an approver actually
+> touches — per-detector weight overrides, forced-disable list, sanctions
+> similarity gate, new SDN entries (fuzzy-matched against every subject
+> and counterparty captured on the frozen snapshot), FATF jurisdiction
+> uplift / relief, alert-fire threshold, band cutoffs. The engine
+> recovers each detector's underlying **intensity** from the snapshot
+> (`points / weight`), re-projects it under the new weight, folds in the
+> proposal-sourced signals (new SDN hits floor the sanctions_hit intensity
+> at 0.75, uplift geos add `JURISDICTION_UPLIFT` per matching edge, band
+> cutoffs apply after score recomputation), then rolls the four axes into
+> a first-match-wins **verdict ladder** — `material_flip` (alert-fire
+> boolean flipped, or band moved ≥ 2 steps), `band_shift` (one-step move
+> within alert bands), `touched` (score-only movement above the touch
+> epsilon), `stable` (else). Six curated **presets** ship in the box —
+> `OFAC uplift`, `Structuring hardening`, `FATF grey-list refresh`,
+> `Noise reduction`, `New SDN additions`, `Band recalibration` — every
+> one a real MLRO scenario. The aggregate exposes the six numbers a
+> change-management review actually asks for: total cases replayed,
+> per-verdict counts, alert-flip waterfall (`cleared→alert`,
+> `alert→cleared`, `still_alert`, `still_cleared`), the full **band
+> transition matrix** (4×4 counts), a **detector contribution ranking**
+> (sum of |Δpoints| across the backlog), and a `suggested_action`
+> verdict — `defer / pilot / roll_out / investigate` — that rolls
+> everything up to one recommendation.
+>
+> **Surface** — new `/horizon` route between AML Console and KYC.
+> Action-tinted hero (verdict tint on the whole banner), four stat
+> tiles (cases replayed, cleared→alert, alert→cleared, material flips)
+> and a signed "suggested action" pill. Horizontal **preset picker**
+> with six chips, each a real regulatory scenario. **Proposal chip
+> row** — one chip per material config edit (weight delta vs baseline,
+> disabled detectors, sanctions gate change, new SDN count, uplift /
+> relief countries, band cutoffs), so the change is legible without
+> reading JSON. **Backlog waterfall** — hand-rolled stacked bar showing
+> the four alert-flip shares. **4×4 band-transition matrix** with
+> destination-band-tinted cells, off-diagonal cells count as flips.
+> **Detector contribution bars** sorted by |Δ|. **Interactive weight
+> editor** — nine sliders (0..MAX_WEIGHT) plus on/off toggles let the
+> approver layer edits on top of the preset; a Re-simulate button hits
+> the live `/aml/horizon/simulate` endpoint against the fixture case
+> set, so the whole page reflows in one round-trip. **Case impact
+> table** (filterable by verdict) → **per-case drill-down** with a
+> hand-rolled score arc (old-score dashed ring, new-score coloured
+> ring at inner radius, delta stamped in the middle), per-detector Δ
+> rows with the engine's own reason strings, fired-vs-dropped sanctions
+> block (proposal-sourced hits get a rose "new SDN" badge). Rules
+> footer exposes the engine version, verdict ladder chips, default
+> tunables, and a one-click **markdown impact-memo download** — the
+> paste-into-a-change-management-ticket document, deterministic
+> byte-for-byte. Engine: `titan-horizon/1.0.0`. AML: `titan-aml/1.16.0`.
+
+> **Day-80 — Nexus · beneficial ownership discovery + sanctions/PEP reach.**
+> Every prior TITAN surface reasons about a *transaction* or an *alert*.
+> Nexus reasons about the *legal structure* — who really owns and controls
+> this legal entity once you unwind the holding companies, the nominee
+> directors, and the offshore chain. It answers four regulator questions
+> in one deterministic pass: **FinCEN CTA** (who is the ≥25% beneficial
+> owner?), **OFAC 50% Rule** (does aggregate sanctioned control block the
+> target, whether or not it appears on the SDN list?), **FATF Rec. 24**
+> (how layered is the corporate structure?), and **EU 6AMLD** (do nominee
+> or trustee edges obscure the UBO?). New `apps/ai-aml/nexus.py`
+> (~1,000 LOC, pure stdlib, **zero new deps**) models the ownership
+> graph, walks every simple path from any root to any target, and sums
+> the products of edge percentages — the standard beneficial-ownership
+> arithmetic every regulator expects. Cycles are legal in reality
+> (mutual-holding companies) so the engine tolerates them, tags them,
+> and treats a repeated node in a walk as a zero-weight extension.
+>
+> **UBO ladder** — `beneficial_owner` (aggregate ≥ 25%), `screening_
+> required` (10–24%), `corporate_owner` (control chain still passes
+> through a company — traverse upstream), `de_minimis` (below the
+> screening floor). A **substantial-control** edge (edge type `control`)
+> always upgrades to `beneficial_owner` regardless of percentage — a
+> senior officer with 2% shares is still a UBO under the CTA. Only
+> natural persons qualify; corporate controllers get labelled and the
+> traversal continues.
+>
+> **Sanctions reach** — for every sanctioned root `S` and every target
+> `T`, `eff(S, T) ≥ 0.50` → `BLOCKED_REACH` (target inherits SDN status
+> per the OFAC 50% rule); `≥ 0.25` → `REPORTABLE_REACH`; anything else
+> → `EXPOSED_LINK`. Aggregation across multiple blocked persons follows
+> the OFAC "aggregate across all blocked persons" rule so two sanctioned
+> individuals holding 30% and 25% jointly block a target even though
+> neither alone would. **PEP reach** uses the same arithmetic with
+> softer 25%/10% thresholds and flips the risk grade instead of blocking.
+>
+> **Opacity score** — a composite [0, 100] per target computed from
+> seven components (chain depth, shell-node share, offshore share,
+> nominee/trustee share, controller dispersal, cycle penalty,
+> thin-capital share) with weights that sum to 1.0. Verdict ladder
+> collapses everything into five explicit rungs — `blocked_by_
+> sanctions`, `sanctions_exposed`, `pep_edd_required`, `opaque_
+> structure`, `transparent_structure` — each tied to a hard threshold
+> so an examiner can trace every conclusion back to a constant in
+> `get_rules()`.
+>
+> **Surface** — new `/nexus` route between Triage and Drift.
+> Verdict-tone-tinted hero + 148-px opacity conic ring + entity chips
+> (kind / jurisdiction / risk / shell indicators); a 7-tile portfolio
+> strip (entities · edges · offshore nodes · shell-flagged · sanctioned
+> hits · PEP hits · avg opacity) plus a verdict-distribution ribbon;
+> a searchable verdict-tinted **target picker** across the seven
+> bundled topologies; a hand-rolled **radial ownership-chain SVG**
+> — target anchored at bottom-centre, controllers spread across the
+> top, path stroke width scaled to weight, sanctioned paths glow rose
+> and PEP paths glow amber, every intermediate holding node
+> in-lined on its chain, per-path weight labels at midpoint; a
+> **controllers panel** with per-controller aggregate bars marked at
+> the 25% CTA threshold and UBO-class badges; a two-part **sanctions
+> + PEP nexus panel** with tri-band aggregate meters and per-hit
+> reach-code rows; a **7-bar opacity breakdown** with raw values,
+> weights, and contribution; a **top-10 ownership paths table** with
+> the exact percentage sequence for each chain; a **downstream reach
+> viz** — pick any sanctioned or PEP controller and see every
+> downstream target arranged on concentric depth rings, node radius
+> scaled to aggregate reach, coloured by OFAC band; and a verdict-
+> ladder footer with the FinCEN/OFAC/PEP thresholds and the corpus
+> hash for reproducibility. A one-click **memo export** (`export.md`)
+> composes a paste-into-case-note document with the UBO table,
+> sanctions/PEP nexus, top ownership paths, opacity components, and
+> any cycles detected. Deterministic — same `(entities, edges)` →
+> identical bytes, identical path IDs, identical opacity score.
+> Engine: `titan-nexus/1.0.0`. AML: `titan-aml/1.15.0`.
+
 > **Day-75 — Triage · cleared-case suppression + FP mining.**
 > Every prior TITAN surface *judges* one alert — how severe, what
 > typology, what network, what precedent. Real AML operations run at
@@ -590,6 +723,20 @@ here's the freeze-and-investigate paragraph".
 | **Triage for case** | `GET  /aml/triage/case/{case_id}` | Per-case Bayesian suppression report — scored combos, S score, verdict, cleared + SAR precedent chains |
 | **Triage seed** | `POST /aml/triage/seed` | Seed the 12-family FP-rich supplementary corpus (idempotent unless `force=true`) |
 | **Triage export** | `GET  /aml/triage/export.md` | Paste-able triage memo for one case (drops straight into a case note) |
+| **Horizon rules** | `GET  /aml/horizon/rules` | Baseline weights + band cutoffs + every tunable + verdict ladder + preset library |
+| **Horizon presets** | `GET  /aml/horizon/presets` | Six curated MLRO scenarios (OFAC uplift · Structuring hardening · FATF grey-list refresh · Noise reduction · New SDN additions · Band recalibration) with every knob resolved |
+| **Horizon sample** | `GET  /aml/horizon/sample` | Bundled six-case demo — replays a preset (default: first) against six fixture accounts spanning the band spectrum. Everything the frontend needs to render the hero + waterfall + case grid is in the response. |
+| **Horizon simulate** | `POST /aml/horizon/simulate` | Replay any proposal — over `fixture`, `store`, or caller-supplied `cases` — returns per-case delta + aggregate summary + waterfall + verdict. Deterministic: same input → same report. |
+| **Horizon case** | `GET  /aml/horizon/case/{case_id}` | Per-case drill-down for a preset (`?preset=`). Returns impact + frozen snapshot + resolved proposal so the drill-down page renders an audit-quality explainer without extra round-trips. |
+| **Horizon explain** | `POST /aml/horizon/explain` | Per-case drill-down for a caller-built proposal (weight-slider workflow). Same shape as `/case/{id}`. |
+| **Horizon export** | `GET  /aml/horizon/export.md` | Paste-able impact memo — deterministic markdown for a change-management ticket. |
+| **Nexus rules** | `GET  /aml/nexus/rules` | FinCEN CTA / OFAC / PEP thresholds + opacity component weights + jurisdiction-risk table + verdict ladder |
+| **Nexus sample** | `GET  /aml/nexus/sample` | Bundled 29-entity / 24-edge portfolio: seven topologies exercising every branch (diamond just-below-UBO, OFAC cascade, hidden PEP, four-way clean split, five-layer shell chain, mutual-holding cycle, substantial-control officer) |
+| **Nexus analyze** | `POST /aml/nexus/analyze` | Analyse a caller-supplied ownership graph — every target's UBO ladder, sanctions/PEP nexus, opacity, and verdict in one deterministic pass |
+| **Nexus candidates** | `GET  /aml/nexus/candidates` | Every sanctioned / PEP / substantial-control natural person in the bundled corpus (picker for the reach view) |
+| **Nexus entity** | `GET  /aml/nexus/entity/{id}` | Per-target UBO report, controllers with aggregate control, sanctions/PEP hits, opacity components, and cycles touching |
+| **Nexus reach** | `GET  /aml/nexus/reach/{root_id}` | Downstream reach of a controller — every target with cumulative control + OFAC/PEP reach code |
+| **Nexus export** | `GET  /aml/nexus/export.md` | Paste-able ownership memo — UBO table + sanctions/PEP nexus + top paths + opacity components + cycles |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and

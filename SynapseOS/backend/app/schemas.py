@@ -921,3 +921,126 @@ class RecallClozeCheckIn(BaseModel):
 class RecallClozeCheckOut(BaseModel):
     is_correct: bool
     similarity: float
+
+
+# ---------------------------------------------------------------- signal
+
+
+class SignalWatchIn(BaseModel):
+    question_id: int = Field(..., ge=1)
+
+
+class SignalLensNoteSummary(BaseModel):
+    note_id: int
+    title: str
+    snippet: str
+    relevance: float
+    cluster_id: int | None = None
+    cluster_name: str | None = None
+    cluster_color: str | None = None
+
+
+class SignalCitationDelta(BaseModel):
+    note_id: int
+    title: str
+    excerpt: str
+    relevance: float
+
+
+class SignalSubqDelta(BaseModel):
+    term: str
+    note_count_now: int
+    note_count_pinned: int
+    covered_now: int
+    covered_pinned: int
+    coverage_pct_now: float
+    coverage_pct_pinned: float
+    coverage_pct_delta: float
+    sample_note_id: int
+
+
+class SignalDeltaOut(BaseModel):
+    question_id: int
+    question_text: str
+    pinned_at: str
+    last_refreshed_at: str | None = None
+    generated_at: str
+    coverage_now: float
+    coverage_pinned: float
+    coverage_delta: float
+    in_lens_now: int
+    in_lens_pinned: int
+    reads_new_count: int
+    reads_new: list[SignalLensNoteSummary]
+    joined_since_count: int
+    joined_since: list[SignalLensNoteSummary]
+    left_since_count: int
+    left_since: list[SignalLensNoteSummary]
+    citations_added: list[SignalCitationDelta]
+    citations_removed: list[SignalCitationDelta]
+    subquestion_progress: list[SignalSubqDelta]
+    working_answer_changed: bool
+    working_answer: str
+    status: Literal["new", "grown", "shrunk", "stable", "fresh"]
+    headline: str
+    stats: dict
+
+
+class SignalReportOut(BaseModel):
+    generated_at: str
+    watch_count: int
+    grown_count: int
+    shrunk_count: int
+    stable_count: int
+    new_count: int
+    watches: list[SignalDeltaOut]
+
+
+# ---------------------------------------------------------------- vault
+
+
+class VaultStatsOut(BaseModel):
+    notes: int
+    trails: int
+    questions: int
+    watches: int
+    snapshots: int
+    engine: str
+    schema_version: int
+
+
+class VaultImportSummaryOut(BaseModel):
+    mode: str
+    dry_run: bool
+    notes_created: int
+    notes_updated: int
+    notes_skipped: int
+    notes_removed: int
+    trails_imported: int
+    compass_imported: int
+    signal_imported: int
+    embeddings_restored: int
+    warnings: list[str]
+    total_incoming_notes: int
+
+
+class VaultImportIn(BaseModel):
+    mode: Literal["merge", "replace", "preview"] = "merge"
+    payload: dict
+
+
+class VaultSnapshotOut(BaseModel):
+    id: int
+    label: str
+    created_at: str
+    note_count: int
+    size_bytes: int
+
+
+class VaultSnapshotIn(BaseModel):
+    label: str = Field(..., min_length=1, max_length=64)
+
+
+class VaultRestoreResult(BaseModel):
+    snapshot: VaultSnapshotOut
+    summary: VaultImportSummaryOut

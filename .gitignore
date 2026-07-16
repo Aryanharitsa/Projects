@@ -27,3 +27,7 @@ yarn-error.log*
 
 # Local run-history database (per-machine)
 LLM_Playground/llm_playground_backend/src/database/history.db
+
+# SynapseOS: local vault store (per-machine — export.json is the portable form)
+SynapseOS/backend/data/synapse.db
+SynapseOS/backend/data/

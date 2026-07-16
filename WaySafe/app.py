@@ -47,6 +47,7 @@ import tempo as tmp
 import echo as ech
 import prism as pr
 import odyssey as ody
+import nomad as nmd
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -340,6 +341,7 @@ if role == "Tourist App":
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
         "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism", "Odyssey",
+        "Nomad",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -3010,6 +3012,381 @@ if role == "Tourist App":
                 st.markdown(ody.to_markdown(trip))
             with t_json:
                 st.code(ody.to_json(trip, indent=2), language="json")
+
+    # ---------------- Nomad — Adaptive Live Trip Reflow (Day 81)
+    # Odyssey commits a multi-day trip at plan time. Nomad reflows what's
+    # left of that trip after live signals have moved: fresh incidents on
+    # tomorrow's corridor, a Sentinel cluster escalation, a widened
+    # geofence. Zero new physics — the same day-composition engine
+    # Odyssey uses is run against current signals for every upcoming day,
+    # then seven concrete reflow strategies (TIME_SHIFT, STOP_DROP,
+    # STOP_SUB, REST_DAY, SHORTEN, STAY_MOVE + STAY_COURSE baseline) are
+    # simulated end-to-end and ranked by projected trip uplift.
+    with tabs[20]:
+        st.subheader("Nomad — Adaptive Live Trip Reflow")
+        st.caption(
+            "Odyssey commits the trip.  Nomad reflows what's *left* of it "
+            "once live signals have moved.  Every upcoming day is "
+            "re-composed under current incidents / geofences / POIs and "
+            "seven concrete reflow strategies are simulated end-to-end, "
+            "each ranked by projected trip-score uplift over "
+            "**STAY_COURSE**.  Same physics as Odyssey — zero new "
+            "measurements, deterministic to the byte."
+        )
+
+        # Nomad needs an existing Odyssey TripReport to reflow. If the
+        # user hasn't composed one yet, seed silently from the same
+        # default trip Odyssey ships with.
+        base_trip = st.session_state.get("ody_last_trip")
+        if base_trip is None or getattr(base_trip, "n_days", 0) == 0:
+            seed_pois_nm = poi_df.to_dict("records") if not poi_df.empty else []
+            _seed_days = ody.default_seed_trip(
+                home_lat=float(my["lat"]), home_lon=float(my["lon"]),
+                pois=seed_pois_nm, n_days=4,
+            )
+            try:
+                base_trip = ody.compose_odyssey(
+                    days=_seed_days,
+                    incidents=inc_df.to_dict("records") if not inc_df.empty else [],
+                    geofences=GEOFENCES,
+                    pois=seed_pois_nm,
+                )
+            except Exception:
+                base_trip = None
+
+        if base_trip is None or getattr(base_trip, "n_days", 0) == 0:
+            st.info(
+                "Nomad needs an Odyssey trip to reflow.  Compose one in the "
+                "**Odyssey** tab first, then come back here."
+            )
+        else:
+            # ---- Live-state controls -------------------------------
+            st.markdown(
+                "**Where are you right now?**  Nomad reflows the "
+                "*upcoming* days — every day at `current_day_idx` and "
+                "beyond is re-scored under live signals; days before "
+                "that stay frozen at their Odyssey baseline."
+            )
+            c_st1, c_st2, c_st3, c_st4 = st.columns([1, 1, 1, 1])
+            with c_st1:
+                nm_day_idx = int(st.number_input(
+                    "Current day (1-based)",
+                    min_value=1, max_value=base_trip.n_days,
+                    value=int(st.session_state.get("nm_day_idx", 1)),
+                    step=1, key="nm_day_idx",
+                ))
+            with c_st2:
+                nm_mode = st.selectbox(
+                    "Situational mode",
+                    options=["at_start", "at_stay", "at_stop", "in_transit"],
+                    index=["at_start", "at_stay", "at_stop", "in_transit"].index(
+                        st.session_state.get("nm_mode", "at_stay")
+                    ),
+                    key="nm_mode",
+                    help="Where the traveller physically is — shapes the advisory strip.",
+                )
+            with c_st3:
+                nm_lat = float(st.number_input(
+                    "Current lat", value=float(
+                        st.session_state.get("nm_lat",
+                            base_trip.days[min(nm_day_idx - 1, base_trip.n_days - 1)].day.stay_lat)
+                    ),
+                    format="%.5f", key="nm_lat",
+                ))
+            with c_st4:
+                nm_lon = float(st.number_input(
+                    "Current lon", value=float(
+                        st.session_state.get("nm_lon",
+                            base_trip.days[min(nm_day_idx - 1, base_trip.n_days - 1)].day.stay_lon)
+                    ),
+                    format="%.5f", key="nm_lon",
+                ))
+
+            # ---- Live-signal simulator -----------------------------
+            with st.expander(
+                "Live-signal simulator — inject fresh incidents on an upcoming corridor",
+                expanded=False,
+            ):
+                st.caption(
+                    "In a production deployment, live signals arrive from a "
+                    "stream.  Here you can inject synthetic incidents to see "
+                    "how Nomad reflows.  The injected incidents are added to "
+                    "the current pool for this run only."
+                )
+                cs1, cs2, cs3 = st.columns([1, 1, 1])
+                inj_day = cs1.number_input(
+                    "Inject on day (1-based)", min_value=1,
+                    max_value=base_trip.n_days,
+                    value=int(st.session_state.get("nm_inj_day", min(base_trip.n_days, nm_day_idx + 1))),
+                    step=1, key="nm_inj_day",
+                )
+                inj_count = cs2.number_input(
+                    "How many incidents?", min_value=0, max_value=40,
+                    value=int(st.session_state.get("nm_inj_count", 8)),
+                    step=1, key="nm_inj_count",
+                )
+                inj_severity = cs3.selectbox(
+                    "Severity",
+                    options=[1, 2, 3, 4, 5],
+                    index=int(st.session_state.get("nm_inj_severity", 3)) - 1,
+                    key="nm_inj_severity",
+                )
+
+            # Build the live incidents pool: base + injected (if any)
+            base_incidents = inc_df.to_dict("records") if not inc_df.empty else []
+            live_incidents_list = list(base_incidents)
+            inj_count_val = int(st.session_state.get("nm_inj_count", 0) or 0)
+            inj_day_val = int(st.session_state.get("nm_inj_day", 1) or 1)
+            inj_sev_val = int(st.session_state.get("nm_inj_severity", 3) or 3)
+            if inj_count_val > 0 and 1 <= inj_day_val <= base_trip.n_days:
+                inj_day_report = base_trip.days[inj_day_val - 1]
+                inj_day_obj = inj_day_report.day
+                if inj_day_obj.stops:
+                    inj_center_lat = inj_day_obj.stops[0].lat
+                    inj_center_lon = inj_day_obj.stops[0].lon
+                else:
+                    inj_center_lat = inj_day_obj.stay_lat
+                    inj_center_lon = inj_day_obj.stay_lon
+                for k in range(inj_count_val):
+                    live_incidents_list.append({
+                        "id": f"nomad-inj-day{inj_day_val}-{k}",
+                        "lat": inj_center_lat + 0.0005 * k,
+                        "lon": inj_center_lon + 0.0005 * k,
+                        "category": "theft",
+                        "severity": inj_sev_val,
+                        "time": datetime.utcnow().isoformat(),
+                        "title": f"Synthetic incident on {inj_day_obj.label}",
+                        "created_at": datetime.utcnow().isoformat(),
+                        "status": "verified",
+                    })
+
+            # ---- Compose reflow ------------------------------------
+            state = nmd.NomadState(
+                current_day_idx=nm_day_idx - 1,
+                mode=nm_mode,
+                current_lat=nm_lat,
+                current_lon=nm_lon,
+                elapsed_hours=24.0 * (nm_day_idx - 1),
+            )
+            # Candidate POIs for STOP_SUB — sourced from the full POI pool
+            # near the *worst* upcoming day's centroid.
+            center_lat = base_trip.days[min(nm_day_idx - 1, base_trip.n_days - 1)].day.stay_lat
+            center_lon = base_trip.days[min(nm_day_idx - 1, base_trip.n_days - 1)].day.stay_lon
+            nm_pois_list = poi_df.to_dict("records") if not poi_df.empty else []
+            candidate_pois = nmd.candidate_pois_from_pois(
+                nm_pois_list, center_lat, center_lon,
+            )
+            candidate_stays = []
+            try:
+                stays_df_local = load_csv("stays.csv")
+                if stays_df_local is not None and not stays_df_local.empty:
+                    candidate_stays = stays_df_local.to_dict("records")
+            except Exception:
+                candidate_stays = []
+
+            reflow = nmd.compose_nomad_reflow(
+                trip=base_trip,
+                state=state,
+                incidents=live_incidents_list,
+                geofences=GEOFENCES,
+                pois=nm_pois_list,
+                candidate_pois=candidate_pois,
+                candidate_stays=candidate_stays,
+            )
+            st.session_state.nm_last_reflow = reflow
+
+            # ---- Verdict ribbon: baseline → live → reflowed --------
+            _band_to_color = {
+                "Serene":  "#53E3A6", "Solid":   "#7BC5F1",
+                "Bumpy":   "#F9C440", "Fragile": "#FF9F43",
+                "Critical":"#FF3D60", "empty":   "#6b7280",
+            }
+            base_hue = _band_to_color.get(reflow.baseline_verdict, "#7BC5F1")
+            live_hue = _band_to_color.get(reflow.live_verdict, "#7BC5F1")
+            refl_hue = _band_to_color.get(reflow.reflowed_verdict, "#7BC5F1")
+            live_delta = reflow.live_trip_score - reflow.baseline_trip_score
+            refl_delta = reflow.reflowed_trip_score - reflow.live_trip_score
+            arrow_live = "→" if abs(live_delta) < 1 else ("↗" if live_delta > 0 else "↘")
+            arrow_refl = "→" if abs(refl_delta) < 1 else ("↗" if refl_delta > 0 else "↘")
+            st.markdown(
+                f"""
+                <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:center;margin:16px 0;padding:16px;border-radius:14px;background:rgba(15,23,42,0.35);border:1px solid rgba(148,163,184,0.15);">
+                  <div style="text-align:center;">
+                    <div style="font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;">Baseline · Odyssey</div>
+                    <div style="font-size:38px;font-weight:800;color:{base_hue};line-height:1;margin-top:6px;">{reflow.baseline_trip_score}</div>
+                    <div style="font-size:13px;color:{base_hue};font-weight:600;">{reflow.baseline_verdict}</div>
+                  </div>
+                  <div style="font-size:24px;color:#94a3b8;font-weight:600;">{arrow_live}</div>
+                  <div style="text-align:center;">
+                    <div style="font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;">Live · under current signals</div>
+                    <div style="font-size:38px;font-weight:800;color:{live_hue};line-height:1;margin-top:6px;">{reflow.live_trip_score}</div>
+                    <div style="font-size:13px;color:{live_hue};font-weight:600;">{reflow.live_verdict}  <span style="font-weight:400;color:#94a3b8;">({live_delta:+d})</span></div>
+                  </div>
+                  <div style="font-size:24px;color:#94a3b8;font-weight:600;">{arrow_refl}</div>
+                  <div style="text-align:center;">
+                    <div style="font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;">Reflowed · best strategy</div>
+                    <div style="font-size:38px;font-weight:800;color:{refl_hue};line-height:1;margin-top:6px;">{reflow.reflowed_trip_score}</div>
+                    <div style="font-size:13px;color:{refl_hue};font-weight:600;">{reflow.reflowed_verdict}  <span style="font-weight:400;color:#94a3b8;">({refl_delta:+d})</span></div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ---- Trigger + shortfall tile row ----------------------
+            trg_c1, trg_c2, trg_c3, trg_c4 = st.columns(4)
+            trg_c1.metric(
+                "Shortfall vs baseline",
+                f"{reflow.projected_shortfall:+.1f} pts",
+                help="Baseline trip score minus live trip score. Positive means the trip has degraded.",
+            )
+            trg_c2.metric(
+                "Reflow trigger",
+                "ACTIVE" if reflow.reflow_triggered else "quiet",
+                delta=f"threshold {nmd.SHORTFALL_TRIGGER_PTS:.0f} pts",
+                delta_color="off",
+            )
+            trg_c3.metric(
+                "Degraded upcoming days",
+                f"{reflow.signals.degraded_days}",
+                delta=f"≥ {nmd.DAY_DEGRADE_PTS:.0f} pt loss",
+                delta_color="off",
+            )
+            trg_c4.metric(
+                "Incidents on corridors",
+                f"{reflow.signals.corridor_incidents_new}",
+                delta=f"across {reflow.signals.days_with_new_incidents} days",
+                delta_color="off",
+            )
+
+            st.markdown(
+                f"<div style='padding:10px 14px;border-radius:10px;background:rgba(15,23,42,0.35);"
+                f"border-left:3px solid {live_hue};margin:6px 0 12px 0;font-size:14px;'>"
+                f"<b>Signals trigger:</b> {reflow.signals.trigger_summary}</div>",
+                unsafe_allow_html=True,
+            )
+
+            # ---- Recommendation callout ----------------------------
+            best = reflow.best_strategy
+            best_verdict_hue = _band_to_color.get(best.projected_verdict, "#7BC5F1")
+            st.markdown('<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:14px 0 8px 0;">Recommendation</div>', unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="padding:18px 20px;border-radius:14px;background:linear-gradient(135deg,rgba(15,23,42,0.55),rgba(30,41,59,0.55));border:1px solid {best_verdict_hue}55;box-shadow:0 0 28px {best_verdict_hue}22;">
+                  <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">
+                    <span style="font-size:11px;letter-spacing:1.5px;padding:3px 10px;border-radius:999px;background:{best_verdict_hue}22;color:{best_verdict_hue};font-weight:700;text-transform:uppercase;">{best.kind}</span>
+                    <span style="font-size:18px;font-weight:700;color:#f8fafc;">{best.label}</span>
+                    <span style="margin-left:auto;font-size:26px;font-weight:800;color:{best_verdict_hue};">
+                      {best.projected_trip_score}<span style="color:#94a3b8;font-size:14px;font-weight:600;">/100</span>
+                    </span>
+                    <span style="font-size:13px;font-weight:700;color:{'#53E3A6' if best.uplift_pts > 0 else '#94a3b8'};">
+                      uplift {best.uplift_pts:+.1f} pts → {best.projected_verdict}
+                    </span>
+                  </div>
+                  <div style="margin-top:10px;color:#cbd5e1;font-size:13.5px;line-height:1.5;">{best.detail}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ---- Live day cards -----------------------------------
+            if reflow.live_days:
+                st.markdown('<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Upcoming days — live re-score</div>', unsafe_allow_html=True)
+                day_cols = st.columns(max(1, len(reflow.live_days)))
+                for j, ld in enumerate(reflow.live_days):
+                    with day_cols[j]:
+                        d_hue = _band_to_color.get(ld.live_band, "#7BC5F1")
+                        deg_badge = ""
+                        if ld.degrade_flag:
+                            deg_badge = "<span style='display:inline-block;padding:1px 7px;font-size:10px;font-weight:700;border-radius:999px;background:#FF3D6033;color:#FF3D60;margin-left:6px;'>DEGRADED</span>"
+                        elif ld.delta_score >= nmd.DAY_DEGRADE_PTS:
+                            deg_badge = "<span style='display:inline-block;padding:1px 7px;font-size:10px;font-weight:700;border-radius:999px;background:#53E3A633;color:#53E3A6;margin-left:6px;'>IMPROVED</span>"
+                        delta_arrow = "→" if abs(ld.delta_score) < 0.5 else ("↗" if ld.delta_score > 0 else "↘")
+                        delta_color = "#53E3A6" if ld.delta_score > 0 else ("#FF9F43" if ld.delta_score < 0 else "#94a3b8")
+                        st.markdown(
+                            f"""
+                            <div style="padding:14px;border-radius:12px;background:rgba(15,23,42,0.5);border:1px solid {d_hue}44;">
+                              <div style="font-size:11px;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;">Day {ld.day_index+1} {deg_badge}</div>
+                              <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-top:4px;line-height:1.3;">{ld.day_label}</div>
+                              <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px;">
+                                <span style="font-size:11px;color:#94a3b8;">baseline</span>
+                                <span style="font-size:15px;color:#cbd5e1;font-weight:600;">{ld.baseline_score}</span>
+                                <span style="margin:0 4px;color:#64748b;">{delta_arrow}</span>
+                                <span style="font-size:24px;font-weight:800;color:{d_hue};">{ld.live_score}</span>
+                              </div>
+                              <div style="font-size:12px;color:{delta_color};font-weight:600;margin-top:2px;">Δ {ld.delta_score:+.0f} pts · {ld.corridor_incidents_new} incident{'s' if ld.corridor_incidents_new != 1 else ''}</div>
+                              <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.35;">{ld.reason}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+            # ---- Strategies table --------------------------------
+            st.markdown('<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Ranked reflow strategies</div>', unsafe_allow_html=True)
+            for k_i, sr in enumerate(reflow.strategies):
+                sr_hue = _band_to_color.get(sr.projected_verdict, "#7BC5F1")
+                is_best = (sr.kind == best.kind and sr.day_index == best.day_index and sr.uplift_pts == best.uplift_pts)
+                ring = f"box-shadow:0 0 22px {sr_hue}55;border:2px solid {sr_hue};" if is_best else "border:1px solid rgba(148,163,184,0.15);"
+                uplift_color = "#53E3A6" if sr.uplift_pts > 0 else ("#94a3b8" if sr.uplift_pts == 0 else "#FF9F43")
+                # Compute a horizontal uplift bar (px width up to ~140 for a 20pt uplift)
+                bar_pct = min(100, max(0, int(round((sr.uplift_pts + 5) * 8))))
+                st.markdown(
+                    f"""
+                    <div style="padding:12px 16px;margin:6px 0;border-radius:10px;background:rgba(15,23,42,0.4);{ring}">
+                      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                        <span style="font-size:10px;letter-spacing:1.4px;padding:2px 8px;border-radius:999px;background:{sr_hue}22;color:{sr_hue};font-weight:800;text-transform:uppercase;">{sr.kind}</span>
+                        <span style="font-size:14px;font-weight:600;color:#e2e8f0;">{sr.label}</span>
+                        <span style="margin-left:auto;font-size:20px;font-weight:800;color:{sr_hue};">
+                          {sr.projected_trip_score}
+                          <span style="color:#94a3b8;font-size:11px;font-weight:600;">/100 · {sr.projected_verdict}</span>
+                        </span>
+                        <span style="font-size:12px;color:{uplift_color};font-weight:700;min-width:80px;text-align:right;">{sr.uplift_pts:+.1f} pts</span>
+                      </div>
+                      <div style="margin-top:6px;height:3px;background:rgba(148,163,184,0.12);border-radius:2px;overflow:hidden;">
+                        <div style="height:100%;width:{bar_pct}%;background:linear-gradient(90deg,{sr_hue}88,{sr_hue});"></div>
+                      </div>
+                      <div style="margin-top:6px;font-size:12.5px;color:#cbd5e1;line-height:1.45;">{sr.detail}</div>
+                      <div style="margin-top:4px;font-size:11px;color:#94a3b8;">
+                        kept stops <b>{sr.total_stops_kept}</b> · risk-km <b>{sr.total_risk_km:.2f}</b> · distance <b>{sr.total_distance_km:.1f} km</b>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ---- Advisory strip -----------------------------------
+            st.markdown('<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Advisory</div>', unsafe_allow_html=True)
+            for a_line in reflow.advisory:
+                st.markdown(
+                    f"<div style='padding:8px 12px;margin:4px 0;border-radius:8px;background:rgba(15,23,42,0.35);border-left:2px solid {live_hue};font-size:13px;color:#e2e8f0;'>{a_line}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ---- Export ------------------------------------------
+            st.markdown("---")
+            ex_c1, ex_c2 = st.columns(2)
+            with ex_c1:
+                st.download_button(
+                    "Download JSON (waysafe.nomad.v1)",
+                    data=nmd.to_json(reflow),
+                    file_name="waysafe_nomad.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with ex_c2:
+                st.download_button(
+                    "Download Markdown reflow brief",
+                    data=nmd.to_markdown(reflow),
+                    file_name="waysafe_nomad.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+
+            t_nmd_md, t_nmd_json = st.tabs(["Markdown preview", "JSON preview"])
+            with t_nmd_md:
+                st.markdown(nmd.to_markdown(reflow))
+            with t_nmd_json:
+                st.code(nmd.to_json(reflow, indent=2), language="json")
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")

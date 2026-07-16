@@ -34,8 +34,9 @@ from . import chronicle as chronicle_engine
 from . import compass as compass_engine
 from . import pulse as pulse_engine
 from . import recall as recall_engine
+from . import signal as signal_engine
 from . import spark as spark_engine
-from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails
+from . import community, echo, revisit, schemas, store, synapse, synthesis, tensions, trails, vault
 from .embed import cosine
 from .llm import llm_available, llm_provider_label
 
@@ -1466,3 +1467,396 @@ def recall_check_cloze(payload: schemas.RecallClozeCheckIn) -> dict:
     ``similarity >= 0.72``."""
     ok, sim = recall_engine.check_cloze_answer(payload.user_answer, payload.canonical)
     return {"is_correct": ok, "similarity": round(sim, 4)}
+
+
+# ------------------------------------------------------------ signal
+
+
+def _delta_for_watch(
+    watch_row: dict,
+    *,
+    threshold: float,
+    top_k: int,
+    fresh: bool = False,
+    reuse: dict | None = None,
+) -> signal_engine.SignalDelta | None:
+    """Build the current lens for a watched question and diff it against
+    the persisted snapshot.
+
+    ``reuse`` optionally passes in pre-computed (notes, embeddings, cmap,
+    community_lookup) so a list-all call doesn't refetch the graph per
+    question — the cost model mirrors ``compass_list``."""
+    qid = int(watch_row["question_id"])
+    qrow = store.get_question(qid)
+    if not qrow:
+        return None
+
+    if reuse is not None:
+        notes = reuse["notes"]
+        embeddings = reuse["embeddings"]
+        cmap = reuse["cmap"]
+        community_lookup = reuse["community_lookup"]
+    else:
+        notes = store.all_notes()
+        embeddings = dict(store.all_embeddings())
+        if notes:
+            g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+            cmap = {n["id"]: n.get("community", 0) for n in g.nodes}
+            notes_for_community = {n["id"]: n for n in g.nodes}
+            built = community.build_communities(cmap, notes_for_community)
+            community_lookup = {
+                c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+                for c in built
+            }
+        else:
+            cmap = {}
+            community_lookup = {}
+
+    reads = store.reads_for(qid)
+    current_lens = compass_engine.build_lens(
+        question_id=qid,
+        question_text=qrow["text"],
+        question_created_at=qrow["created_at"],
+        question_archived_at=qrow.get("archived_at"),
+        notes=notes,
+        embeddings=embeddings,
+        cmap=cmap,
+        community_lookup=community_lookup,
+        reads=reads,
+    )
+
+    snapshot = signal_engine.SignalSnapshot.from_json(watch_row["snapshot"])
+    delta = signal_engine.compute_delta(
+        question_id=qid,
+        question_text=qrow["text"],
+        pinned_at=watch_row["pinned_at"],
+        last_refreshed_at=watch_row["last_refreshed_at"],
+        snapshot=snapshot,
+        current=current_lens,
+    )
+    if fresh:
+        # A just-refreshed watch shows the current state as the new
+        # baseline. Override the classifier so the rail doesn't yell
+        # "stable — no movement" the instant after a user refreshes.
+        delta.status = "fresh"
+        delta.headline = "Baseline reset — you're up to date on this thread."
+    return delta
+
+
+@app.post(
+    "/signal/watch",
+    response_model=schemas.SignalDeltaOut,
+    status_code=201,
+)
+def signal_watch(
+    req: schemas.SignalWatchIn,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Pin a Compass question as a Signal. Snapshots the current lens as
+    the delta baseline; re-pinning an already-watched question refreshes
+    that baseline (idempotent). Returns the resulting delta so the FE can
+    render the row without a follow-up round-trip."""
+    qid = req.question_id
+    qrow = store.get_question(qid)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    snapshot = signal_engine.snapshot_from_lens(lens)
+    watch_row = store.upsert_signal_watch(qid, snapshot.to_json())
+
+    delta = _delta_for_watch(
+        watch_row, threshold=threshold, top_k=top_k, fresh=True
+    )
+    assert delta is not None
+    return signal_engine.delta_to_dict(delta)
+
+
+@app.post(
+    "/signal/watch/{question_id}/refresh",
+    response_model=schemas.SignalDeltaOut,
+)
+def signal_refresh(
+    question_id: int,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Re-baseline this watch to the current lens. The next visit's
+    delta will be relative to *now* — the "mark as reviewed" of the
+    signal rail."""
+    watch = store.get_signal_watch(question_id)
+    if not watch:
+        raise HTTPException(404, "watch not found")
+    qrow = store.get_question(question_id)
+    if not qrow:
+        raise HTTPException(404, "question not found")
+
+    lens = _build_lens_for_question(qrow, threshold=threshold, top_k=top_k)
+    snapshot = signal_engine.snapshot_from_lens(lens)
+    watch_row = store.upsert_signal_watch(question_id, snapshot.to_json())
+
+    delta = _delta_for_watch(
+        watch_row, threshold=threshold, top_k=top_k, fresh=True
+    )
+    assert delta is not None
+    return signal_engine.delta_to_dict(delta)
+
+
+@app.delete("/signal/watch/{question_id}")
+def signal_unwatch(question_id: int) -> Response:
+    if not store.delete_signal_watch(question_id):
+        raise HTTPException(404, "watch not found")
+    return Response(status_code=204)
+
+
+@app.get(
+    "/signal/watch/{question_id}",
+    response_model=schemas.SignalDeltaOut,
+)
+def signal_get(
+    question_id: int,
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    watch = store.get_signal_watch(question_id)
+    if not watch:
+        raise HTTPException(404, "watch not found")
+    delta = _delta_for_watch(watch, threshold=threshold, top_k=top_k)
+    if delta is None:
+        raise HTTPException(404, "question not found")
+    return signal_engine.delta_to_dict(delta)
+
+
+@app.get("/signal", response_model=schemas.SignalReportOut)
+def signal_list(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> dict:
+    """Every pinned question, each rendered with its current-vs-baseline
+    delta. Sorted movers-first — grown/shrunk to the top, stable/new to
+    the bottom — so the highest-signal rows are always at eye level."""
+    rows = store.list_signal_watches()
+    if not rows:
+        return {
+            "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "watch_count": 0,
+            "grown_count": 0,
+            "shrunk_count": 0,
+            "stable_count": 0,
+            "new_count": 0,
+            "watches": [],
+        }
+
+    # Compute the graph once and reuse across every watched question —
+    # the compass_list pattern. For O(10) watched questions and O(10^3)
+    # notes this is comfortably fast.
+    notes = store.all_notes()
+    embeddings = dict(store.all_embeddings())
+    if notes:
+        g = synapse.compute_graph(threshold=threshold, top_k=top_k)
+        cmap = {n["id"]: n.get("community", 0) for n in g.nodes}
+        notes_for_community = {n["id"]: n for n in g.nodes}
+        built = community.build_communities(cmap, notes_for_community)
+        community_lookup = {
+            c.id: {"name": c.name, "color": c.color, "terms": list(c.terms)}
+            for c in built
+        }
+    else:
+        cmap = {}
+        community_lookup = {}
+    reuse = {
+        "notes": notes,
+        "embeddings": embeddings,
+        "cmap": cmap,
+        "community_lookup": community_lookup,
+    }
+
+    deltas: list[signal_engine.SignalDelta] = []
+    for r in rows:
+        d = _delta_for_watch(r, threshold=threshold, top_k=top_k, reuse=reuse)
+        if d is not None:
+            deltas.append(d)
+
+    ranked = signal_engine.rank_deltas(deltas)
+
+    counts = {"grown": 0, "shrunk": 0, "stable": 0, "new": 0, "fresh": 0}
+    for d in ranked:
+        counts[d.status] = counts.get(d.status, 0) + 1
+
+    return {
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "watch_count": len(ranked),
+        "grown_count": counts["grown"],
+        "shrunk_count": counts["shrunk"],
+        "stable_count": counts["stable"] + counts["fresh"],
+        "new_count": counts["new"],
+        "watches": [signal_engine.delta_to_dict(d) for d in ranked],
+    }
+
+
+@app.get("/signal/export.md")
+def signal_export(
+    threshold: float = Query(synapse.DEFAULT_THRESHOLD, ge=0.0, le=1.0),
+    top_k: int = Query(synapse.DEFAULT_TOP_K, ge=1, le=20),
+) -> Response:
+    rows = store.list_signal_watches()
+    deltas: list[signal_engine.SignalDelta] = []
+    for r in rows:
+        d = _delta_for_watch(r, threshold=threshold, top_k=top_k)
+        if d is not None:
+            deltas.append(d)
+    ranked = signal_engine.rank_deltas(deltas)
+    md = signal_engine.to_markdown(ranked)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="signal.md"'},
+    )
+
+
+@app.get("/signal/pinned_ids")
+def signal_pinned_ids() -> dict:
+    """Cheap probe used by the Compass surface to render the pin/unpin
+    toggle without loading the full snapshot for each row."""
+    return {"question_ids": sorted(store.signal_watched_question_ids())}
+
+
+# ------------------------------------------------------------------ vault
+
+
+@app.get("/vault/stats", response_model=schemas.VaultStatsOut)
+def vault_stats_endpoint() -> dict:
+    """Cheap summary the Vault modal + header pill can render without
+    forcing a full export round-trip."""
+    return vault.vault_stats()
+
+
+@app.get("/vault/export.json")
+def vault_export_json(
+    include_embeddings: bool = Query(True),
+    include_compass_reads: bool = Query(True),
+    include_trails: bool = Query(True),
+    include_signal: bool = Query(True),
+) -> Response:
+    """Stream the full portable JSON export."""
+    opts = vault.ExportOptions(
+        include_embeddings=include_embeddings,
+        include_compass_reads=include_compass_reads,
+        include_trails=include_trails,
+        include_signal=include_signal,
+    )
+    body = vault.export_json(opts)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="synapseos-vault-{stamp}.json"'
+            )
+        },
+    )
+
+
+@app.get("/vault/export.md.zip")
+def vault_export_markdown_zip(
+    include_embeddings: bool = Query(False),
+    include_compass_reads: bool = Query(True),
+    include_trails: bool = Query(True),
+    include_signal: bool = Query(True),
+) -> Response:
+    """Stream a ZIP of per-note Markdown files + a JSON manifest.
+
+    ``include_embeddings`` defaults to ``False`` here because the ZIP is
+    primarily for humans / other PKM tools; a 512-float b64 blob per
+    note in ``_manifest.json`` is noise for anyone reading in Obsidian.
+    Users who need lossless round-trip should flip the toggle.
+    """
+    opts = vault.ExportOptions(
+        include_embeddings=include_embeddings,
+        include_compass_reads=include_compass_reads,
+        include_trails=include_trails,
+        include_signal=include_signal,
+    )
+    body = vault.export_markdown_zip(opts)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=body,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="synapseos-vault-{stamp}.md.zip"'
+            )
+        },
+    )
+
+
+@app.post("/vault/preview", response_model=schemas.VaultImportSummaryOut)
+def vault_preview_import(req: schemas.VaultImportIn) -> dict:
+    """Dry-run the import so the UI can render a confirmation summary
+    (create/update/skip counts + warnings) before the destructive step."""
+    try:
+        summary = vault.preview_import(req.payload)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return vault.summary_to_dict(summary)
+
+
+@app.post(
+    "/vault/import",
+    response_model=schemas.VaultImportSummaryOut,
+    status_code=201,
+)
+def vault_import(req: schemas.VaultImportIn) -> dict:
+    """Apply a JSON export to the store (``merge`` or ``replace``).
+
+    Import via ZIP goes through this endpoint too — the frontend
+    parses the ``_manifest.json`` client-side and hands us the payload.
+    Server-side Markdown import is available via
+    ``vault.import_markdown_zip`` for CLI users but not exposed as a
+    JSON endpoint on purpose (multipart uploads add coupling we don't
+    need for the one-user-one-machine deployment).
+    """
+    if req.mode == "preview":
+        return vault_preview_import(req)  # type: ignore[return-value]
+    try:
+        summary = vault.import_payload(req.payload, mode=req.mode)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return vault.summary_to_dict(summary)
+
+
+@app.get(
+    "/vault/snapshots",
+    response_model=list[schemas.VaultSnapshotOut],
+)
+def vault_list_snapshots() -> list[dict]:
+    return vault.list_snapshots()
+
+
+@app.post(
+    "/vault/snapshots",
+    response_model=schemas.VaultSnapshotOut,
+    status_code=201,
+)
+def vault_create_snapshot(req: schemas.VaultSnapshotIn) -> dict:
+    return vault.create_snapshot(req.label)
+
+
+@app.post(
+    "/vault/snapshots/{snapshot_id}/restore",
+    response_model=schemas.VaultImportSummaryOut,
+)
+def vault_restore_snapshot(snapshot_id: int) -> dict:
+    summary = vault.restore_snapshot(snapshot_id)
+    if summary is None:
+        raise HTTPException(404, "snapshot not found")
+    return vault.summary_to_dict(summary)
+
+
+@app.delete("/vault/snapshots/{snapshot_id}")
+def vault_delete_snapshot(snapshot_id: int) -> Response:
+    if not vault.delete_snapshot(snapshot_id):
+        raise HTTPException(404, "snapshot not found")
+    return Response(status_code=204)

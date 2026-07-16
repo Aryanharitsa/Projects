@@ -2475,3 +2475,524 @@ export function triageExportUrl(case_id: string): string {
   qs.set("case_id", case_id);
   return `${API_BASE}/aml/triage/export.md?${qs.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// Nexus — beneficial ownership + sanctions/PEP reach (round-17, day-80)
+// ---------------------------------------------------------------------------
+
+export type NexusVerdictCode =
+  | "blocked_by_sanctions"
+  | "sanctions_exposed"
+  | "pep_edd_required"
+  | "opaque_structure"
+  | "transparent_structure";
+
+export type NexusPathEdge = {
+  parent: string;
+  child: string;
+  pct: number;
+  type: string;
+};
+
+export type NexusPath = {
+  root: string;
+  target: string;
+  chain: string[];
+  weight: number;
+  depth: number;
+  edges: NexusPathEdge[];
+};
+
+export type NexusUboCode =
+  | "beneficial_owner"
+  | "screening_required"
+  | "corporate_owner"
+  | "de_minimis";
+
+export type NexusController = {
+  root: string;
+  aggregate: number;
+  path_count: number;
+  max_path_weight: number;
+  shortest_depth: number;
+  paths: NexusPath[];
+  name?: string;
+  kind?: string;
+  jurisdiction?: string;
+  sanctioned?: boolean;
+  pep?: boolean;
+  role?: string | null;
+  pep_position?: string | null;
+  sanctions_list?: string | null;
+  substantial_control?: boolean;
+  ubo?: { code: NexusUboCode; reason: string; threshold: number | null };
+};
+
+export type NexusSanctionsHit = NexusController & {
+  reach_code: "BLOCKED_REACH" | "REPORTABLE_REACH" | "EXPOSED_LINK";
+};
+
+export type NexusPepHit = NexusController & {
+  reach_code: "EDD_REQUIRED" | "PEP_LINKED" | "PEP_NEXUS";
+};
+
+export type NexusOpacity = {
+  score: number;
+  band: "clean" | "moderate" | "layered" | "opaque";
+  components: Record<
+    "depth" | "shell" | "offshore" | "nominee" | "dispersal" | "cycle" | "thinness",
+    number
+  >;
+  max_depth?: number;
+};
+
+export type NexusTargetReport = {
+  target: {
+    id: string;
+    name: string;
+    kind: string;
+    jurisdiction: string;
+    jurisdiction_risk: number;
+    incorporation_year?: number | null;
+    shell_indicators: string[];
+  };
+  controllers: NexusController[];
+  ubos: {
+    id: string;
+    name: string;
+    aggregate: number;
+    kind: string;
+    jurisdiction: string;
+    sanctioned: boolean;
+    pep: boolean;
+    substantial_control: boolean;
+  }[];
+  sanctions: {
+    aggregate: number;
+    verdict: "BLOCKED" | "REPORTABLE" | "EXPOSED" | "CLEAN";
+    hits: NexusSanctionsHit[];
+  };
+  pep: {
+    count: number;
+    max_aggregate: number;
+    hits: NexusPepHit[];
+  };
+  opacity: NexusOpacity;
+  path_count: number;
+  verdict: {
+    code: NexusVerdictCode;
+    label: string;
+    tone: string;
+    reason: string;
+  };
+  cycles_touching: string[][];
+};
+
+export type NexusRules = {
+  ok?: boolean;
+  engine: string;
+  thresholds: {
+    ubo: number;
+    ubo_screen: number;
+    ofac_block: number;
+    ofac_report: number;
+    pep_edd: number;
+    pep_link: number;
+    opacity_opaque_band: number;
+  };
+  traversal: { max_depth: number; max_paths_per_target: number };
+  opacity_weights: Record<string, number>;
+  jurisdiction_risk: Record<string, number>;
+  default_jurisdiction_risk: number;
+  verdict_ladder: { code: NexusVerdictCode; label: string; tone: string }[];
+  entity_kinds: string[];
+  edge_types: string[];
+  shell_indicators: string[];
+};
+
+export type NexusPortfolio = {
+  entities: number;
+  edges: number;
+  individuals: number;
+  offshore: number;
+  shell_flagged: number;
+  targets: number;
+  verdict_hist: Record<NexusVerdictCode, number>;
+  opacity_avg: number;
+  sanctioned_hits: number;
+  pep_hits: number;
+};
+
+export type NexusSampleReport = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  portfolio: NexusPortfolio;
+  reports: NexusTargetReport[];
+  highlight_target_id: string | null;
+  cycles: string[][];
+  rules: NexusRules;
+};
+
+export type NexusEntityResponse = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  report: NexusTargetReport;
+  rules: NexusRules;
+};
+
+export type NexusCandidate = {
+  id: string;
+  name: string;
+  kind: string;
+  jurisdiction: string;
+  sanctioned: boolean;
+  pep: boolean;
+  role?: string | null;
+  sanctions_list?: string | null;
+  pep_position?: string | null;
+  child_count: number;
+};
+
+export type NexusReachRow = {
+  target: string;
+  name?: string;
+  kind?: string;
+  jurisdiction?: string;
+  sanctioned?: boolean;
+  pep?: boolean;
+  aggregate: number;
+  shortest_depth: number;
+  path_count: number;
+  paths: NexusPath[];
+};
+
+export type NexusReachReport = {
+  ok?: boolean;
+  engine: string;
+  corpus_hash: string;
+  root: {
+    id: string;
+    name: string;
+    kind: string;
+    jurisdiction: string;
+    sanctioned: boolean;
+    pep: boolean;
+    role?: string | null;
+    pep_position?: string | null;
+    sanctions_list?: string | null;
+    listed_on?: string | null;
+  };
+  root_kind: "sanctioned" | "pep" | "controller";
+  thresholds: { block: number | null; report: number };
+  reach: NexusReachRow[];
+  counts: { blocked: number; reportable: number; exposed: number };
+};
+
+export async function getNexusRules(): Promise<NexusRules> {
+  const r = await fetch(`${API_BASE}/aml/nexus/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function getNexusSample(): Promise<NexusSampleReport> {
+  const r = await fetch(`${API_BASE}/aml/nexus/sample`);
+  return jsonOrThrow(r);
+}
+
+export async function getNexusEntity(
+  entity_id: string,
+): Promise<NexusEntityResponse> {
+  const r = await fetch(
+    `${API_BASE}/aml/nexus/entity/${encodeURIComponent(entity_id)}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function getNexusReach(
+  root_id: string,
+): Promise<NexusReachReport> {
+  const r = await fetch(
+    `${API_BASE}/aml/nexus/reach/${encodeURIComponent(root_id)}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function listNexusCandidates(): Promise<{
+  ok: boolean;
+  engine: string;
+  candidates: NexusCandidate[];
+}> {
+  const r = await fetch(`${API_BASE}/aml/nexus/candidates`);
+  return jsonOrThrow(r);
+}
+
+export function nexusExportUrl(entity_id: string): string {
+  const qs = new URLSearchParams();
+  qs.set("entity_id", entity_id);
+  return `${API_BASE}/aml/nexus/export.md?${qs.toString()}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Horizon — regulatory-change impact simulator (round-18, day-85)
+// ---------------------------------------------------------------------------
+
+export type HorizonVerdictCode =
+  | "material_flip"
+  | "band_shift"
+  | "touched"
+  | "stable";
+
+export type HorizonBand = "low" | "medium" | "high" | "critical";
+
+export type HorizonAlertFlip =
+  | "cleared_to_alert"
+  | "alert_to_cleared"
+  | "still_alert"
+  | "still_cleared";
+
+export type HorizonActionCode = "defer" | "pilot" | "roll_out" | "investigate";
+
+export type HorizonSanctionSeed = {
+  name: string;
+  aliases: string[];
+  list?: string;
+  list_name?: string;
+  jurisdiction?: string;
+  reason?: string;
+};
+
+export type HorizonProposal = {
+  name: string;
+  summary: string;
+  author: string;
+  weights: Record<string, number>;
+  disabled_detectors: string[];
+  sanctions_threshold: number | null;
+  additional_sanctions: HorizonSanctionSeed[];
+  jurisdiction_uplift: string[];
+  jurisdiction_relief: string[];
+  band_cutoffs: number[] | null;
+  alert_threshold: number | null;
+  effective_weights: Record<string, number>;
+  effective_cutoffs: number[];
+  effective_alert_threshold: number;
+  effective_sanctions_threshold: number;
+};
+
+export type HorizonDetectorDelta = {
+  name: string;
+  old_points: number;
+  new_points: number;
+  delta: number;
+  old_weight: number;
+  new_weight: number;
+  intensity: number;
+  reason: string;
+};
+
+export type HorizonFiredSanction = {
+  name?: string;
+  list?: string;
+  jurisdiction?: string;
+  matched_alias?: string;
+  subject_name?: string;
+  similarity?: number;
+  reason?: string;
+  source?: "proposal" | "snapshot";
+};
+
+export type HorizonImpact = {
+  case_id: string;
+  account_id: string;
+  display_name: string;
+  status: string;
+  priority: string;
+  assignee: string | null;
+  old_score: number;
+  new_score: number;
+  score_delta: number;
+  old_band: HorizonBand;
+  new_band: HorizonBand;
+  band_step: number;
+  old_alerted: boolean;
+  new_alerted: boolean;
+  alert_flip: HorizonAlertFlip;
+  verdict: HorizonVerdictCode;
+  verdict_label: string;
+  verdict_accent: string;
+  detectors: HorizonDetectorDelta[];
+  fired_sanctions: HorizonFiredSanction[];
+  dropped_sanctions: HorizonFiredSanction[];
+  driver_note: string;
+};
+
+export type HorizonSummary = {
+  total_cases: number;
+  by_verdict: Record<HorizonVerdictCode, number>;
+  alert_flip: Record<HorizonAlertFlip, number>;
+  band_matrix: Record<HorizonBand, Record<HorizonBand, number>>;
+  detector_contribution: Array<{ name: string; abs_delta: number }>;
+  avg_abs_score_delta: number;
+  max_score_up: number;
+  max_score_down: number;
+  action_code: HorizonActionCode;
+  action_label: string;
+};
+
+export type HorizonReport = {
+  ok: boolean;
+  engine: string;
+  proposal: HorizonProposal;
+  generated_at: string;
+  rules_version: string;
+  engine_version: string;
+  summary: HorizonSummary;
+  cases: HorizonImpact[];
+  source?: "fixture" | "store" | "cases";
+  cases_source?: "fixture" | "store" | "cases";
+  available_presets?: Array<{ name: string; summary: string }>;
+};
+
+export type HorizonVerdictLadderEntry = {
+  code: HorizonVerdictCode;
+  label: string;
+  accent: string;
+};
+
+export type HorizonRules = {
+  ok: boolean;
+  engine: string;
+  engine_version: string;
+  baseline_weights: Record<string, number>;
+  max_weight: number;
+  detector_order: string[];
+  default_band_cutoffs: number[];
+  default_alert_threshold: number;
+  default_sanctions_threshold: number;
+  new_sanctions_intensity_floor: number;
+  jurisdiction_uplift_per_hit: number;
+  score_touch_epsilon: number;
+  band_order: HorizonBand[];
+  verdict_ladder: HorizonVerdictLadderEntry[];
+  presets: HorizonProposal[];
+};
+
+export type HorizonCaseDetail = {
+  ok: boolean;
+  engine: string;
+  source: "fixture" | "store";
+  impact: HorizonImpact;
+  snapshot: {
+    account_id?: string;
+    display_name?: string;
+    risk_score?: number;
+    band?: HorizonBand;
+    factors?: Array<{
+      name: string;
+      points: number;
+      weight: number;
+      detail?: string;
+      evidence?: any[];
+    }>;
+    sanctions_hits?: HorizonFiredSanction[];
+    edges?: Array<Record<string, any>>;
+  };
+  proposal: HorizonProposal;
+};
+
+// Simulate source selector — matches the FastAPI union.
+export type HorizonSource = "fixture" | "store" | "cases";
+
+export async function getHorizonRules(): Promise<HorizonRules> {
+  const r = await fetch(`${API_BASE}/aml/horizon/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function getHorizonSample(preset?: string): Promise<HorizonReport> {
+  const qs = new URLSearchParams();
+  if (preset) qs.set("preset", preset);
+  const q = qs.toString();
+  const r = await fetch(`${API_BASE}/aml/horizon/sample${q ? `?${q}` : ""}`);
+  return jsonOrThrow(r);
+}
+
+export async function simulateHorizon(
+  proposal: Partial<HorizonProposal> & { name?: string },
+  opts: { source?: HorizonSource; include_closed?: boolean; limit?: number; cases?: any[] } = {},
+): Promise<HorizonReport> {
+  const body = {
+    proposal: {
+      name: proposal.name || "Custom proposal",
+      summary: proposal.summary || "",
+      author: proposal.author || "compliance",
+      weights: proposal.weights || {},
+      disabled_detectors: proposal.disabled_detectors || [],
+      sanctions_threshold: proposal.sanctions_threshold ?? null,
+      additional_sanctions: proposal.additional_sanctions || [],
+      jurisdiction_uplift: proposal.jurisdiction_uplift || [],
+      jurisdiction_relief: proposal.jurisdiction_relief || [],
+      band_cutoffs: proposal.band_cutoffs ?? null,
+      alert_threshold: proposal.alert_threshold ?? null,
+    },
+    source: opts.source || "fixture",
+    include_closed: opts.include_closed ?? true,
+    limit: opts.limit ?? 400,
+    cases: opts.cases,
+  };
+  const r = await fetch(`${API_BASE}/aml/horizon/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function getHorizonCase(
+  case_id: string,
+  preset?: string,
+): Promise<HorizonCaseDetail> {
+  const qs = new URLSearchParams();
+  if (preset) qs.set("preset", preset);
+  const q = qs.toString();
+  const r = await fetch(
+    `${API_BASE}/aml/horizon/case/${encodeURIComponent(case_id)}${q ? `?${q}` : ""}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export async function explainHorizonCase(
+  case_id: string,
+  proposal: Partial<HorizonProposal> & { name?: string },
+): Promise<HorizonCaseDetail> {
+  const body = {
+    case_id,
+    proposal: {
+      name: proposal.name || "Custom proposal",
+      summary: proposal.summary || "",
+      author: proposal.author || "compliance",
+      weights: proposal.weights || {},
+      disabled_detectors: proposal.disabled_detectors || [],
+      sanctions_threshold: proposal.sanctions_threshold ?? null,
+      additional_sanctions: proposal.additional_sanctions || [],
+      jurisdiction_uplift: proposal.jurisdiction_uplift || [],
+      jurisdiction_relief: proposal.jurisdiction_relief || [],
+      band_cutoffs: proposal.band_cutoffs ?? null,
+      alert_threshold: proposal.alert_threshold ?? null,
+    },
+  };
+  const r = await fetch(`${API_BASE}/aml/horizon/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(r);
+}
+
+export function horizonExportUrl(preset?: string): string {
+  const qs = new URLSearchParams();
+  if (preset) qs.set("preset", preset);
+  const q = qs.toString();
+  return `${API_BASE}/aml/horizon/export.md${q ? `?${q}` : ""}`;
+}
