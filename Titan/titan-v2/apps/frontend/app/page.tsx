@@ -58,6 +58,14 @@ const FEATURES = [
     cta: "Screen entities",
   },
   {
+    href: "/horizon",
+    title: "Horizon",
+    eyebrow: "Impact simulator",
+    body: "The night-before-a-policy-change lens. Replay any proposed rule edit — weight bumps, new SDN entries, jurisdiction shifts, band recalibration — against the current backlog and see which cases would flip, which cleared cases would re-fire, and which detectors do the damage. Deterministic, per-case explainable.",
+    accent: "from-violet-500/30 via-rose-400/15 to-transparent",
+    cta: "Simulate a change",
+  },
+  {
     href: "/kyc",
     title: "KYC Pipeline",
     eyebrow: "Identity",

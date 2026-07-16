@@ -112,6 +112,18 @@ GET    /aml/nexus/entity/{id}            per-entity UBO ladder + sanctions/PEP n
 GET    /aml/nexus/reach/{id}             downstream reach of a controller (SDN / PEP)
 GET    /aml/nexus/candidates             controllers eligible for the reach picker
 GET    /aml/nexus/export.md              paste-able ownership memo for a case note
+
+Horizon — regulatory-change impact simulator (round-18, day-85)
+---------------------------------------------------------------
+GET    /aml/horizon/rules                baseline weights + presets + every tunable
+GET    /aml/horizon/presets              curated proposal library (list, summary only)
+GET    /aml/horizon/sample               bundled six-case demo (first preset applied)
+POST   /aml/horizon/simulate             replay any proposal — over fixture, store, or
+                                         caller-supplied cases — returns per-case delta
+                                         + aggregate summary + waterfall + verdict
+GET    /aml/horizon/case/{case_id}       per-case drill-down for a preset (?preset=)
+POST   /aml/horizon/explain              per-case drill-down for a caller-built proposal
+GET    /aml/horizon/export.md            paste-able impact memo (Slack / change ticket)
 """
 
 from __future__ import annotations
@@ -125,6 +137,7 @@ from pydantic import BaseModel, Field
 import backtest as backtest_engine
 import cases as case_store
 import drift as drift_engine
+import horizon as horizon_engine
 import lineage as lineage_engine
 import media as media_engine
 import network as network_engine
@@ -139,7 +152,7 @@ import sar as sar_engine
 import triage as triage_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.15.0"
+ENGINE_VERSION = "titan-aml/1.16.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1524,5 +1537,213 @@ def nexus_export(entity_id: str = Query(..., min_length=1)):
                             detail=f"entity not found: {entity_id}")
     return PlainTextResponse(
         nexus_engine.to_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Horizon — regulatory-change impact simulator (round-18, day-85)
+#
+# Every prior surface answers "given today's rules, what is this case?".
+# Horizon answers "given a *proposed* rule change, which cases would
+# flip, which cleared cases would re-fire, and which detectors do the
+# damage?".  Purely deterministic — same input always produces the same
+# report.
+# ---------------------------------------------------------------------------
+
+
+class HorizonSanctionSeedIn(BaseModel):
+    name: str
+    aliases: List[str] = Field(default_factory=list)
+    list_name: Optional[str] = "PROPOSED"
+    jurisdiction: Optional[str] = ""
+    reason: Optional[str] = ""
+
+
+class HorizonProposalIn(BaseModel):
+    name: Optional[str] = "Untitled proposal"
+    summary: Optional[str] = ""
+    author: Optional[str] = "compliance"
+    weights: Optional[Dict[str, float]] = Field(default_factory=dict)
+    disabled_detectors: Optional[List[str]] = Field(default_factory=list)
+    sanctions_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    additional_sanctions: Optional[List[HorizonSanctionSeedIn]] = Field(
+        default_factory=list
+    )
+    jurisdiction_uplift: Optional[List[str]] = Field(default_factory=list)
+    jurisdiction_relief: Optional[List[str]] = Field(default_factory=list)
+    band_cutoffs: Optional[List[float]] = None
+    alert_threshold: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+
+
+class HorizonSimulateReq(BaseModel):
+    proposal: HorizonProposalIn
+    # Data source selector:
+    #   "fixture" → bundled six-case demo (always available)
+    #   "store"   → live case-store rows (open+review by default)
+    #   "cases"   → caller-supplied cases (each must include a snapshot)
+    source: str = Field(default="fixture", pattern="^(fixture|store|cases)$")
+    include_closed: bool = True
+    limit: int = Field(default=400, ge=1, le=2000)
+    cases: Optional[List[Dict[str, Any]]] = None
+
+
+def _horizon_proposal_from_model(model: HorizonProposalIn) -> horizon_engine.HorizonProposal:
+    """Convert the Pydantic input model into a HorizonProposal.
+
+    Keeps the /aml/horizon/simulate surface strict (typed input, good
+    422 errors) while letting the engine keep its dataclass shape.
+    """
+    payload: Dict[str, Any] = model.dict()
+    # Pydantic v1 renames `list_name` back — normalise the sanction rows.
+    seeds = payload.get("additional_sanctions") or []
+    normalised: List[Dict[str, Any]] = []
+    for row in seeds:
+        if not isinstance(row, dict):
+            continue
+        normalised.append({
+            "name": row.get("name"),
+            "aliases": row.get("aliases") or [],
+            "list": row.get("list_name") or row.get("list") or "PROPOSED",
+            "jurisdiction": row.get("jurisdiction") or "",
+            "reason": row.get("reason") or "",
+        })
+    payload["additional_sanctions"] = normalised
+    return horizon_engine.proposal_from_payload(payload)
+
+
+def _horizon_resolve_preset(name: Optional[str]) -> horizon_engine.HorizonProposal:
+    if not name:
+        return horizon_engine.PRESETS[0]
+    for p in horizon_engine.PRESETS:
+        if p.name == name:
+            return p
+    raise HTTPException(status_code=404, detail=f"preset not found: {name}")
+
+
+@app.get("/aml/horizon/rules")
+def horizon_rules() -> Dict[str, Any]:
+    """Auditor-facing dump — baseline weights, band cutoffs, every
+    tunable constant, and the curated preset library.  Everything the
+    engine uses is here; nothing is hidden in code."""
+    return {"ok": True, "engine": ENGINE_VERSION, **horizon_engine.get_rules()}
+
+
+@app.get("/aml/horizon/presets")
+def horizon_presets() -> Dict[str, Any]:
+    """Curated proposal library — name, author, summary, and every
+    resolved knob for the picker.  Cheaper than /rules when the frontend
+    just wants to render the sidebar."""
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "presets": [p.to_dict() for p in horizon_engine.PRESETS],
+    }
+
+
+@app.get("/aml/horizon/sample")
+def horizon_sample(preset: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    """First-load demo — the bundled six-case portfolio replayed against
+    the requested preset (defaults to the first preset).  Everything the
+    frontend needs to render the hero + waterfall + case grid is here."""
+    preset_name = preset or horizon_engine.PRESETS[0].name
+    return {"ok": True, "engine": ENGINE_VERSION,
+            **horizon_engine.sample_report(preset_name)}
+
+
+@app.post("/aml/horizon/simulate")
+def horizon_simulate(req: HorizonSimulateReq) -> Dict[str, Any]:
+    """Run a proposal against the selected data source.
+
+    `source=fixture` returns a report over the bundled demo cases (works
+    offline, before any case has been opened).  `source=store` walks the
+    live case store.  `source=cases` uses the caller-supplied rows —
+    each row must include a ``snapshot`` dict shaped like an account
+    report.  All three paths return the same report shape.
+    """
+    proposal = _horizon_proposal_from_model(req.proposal)
+    if req.source == "fixture":
+        report = horizon_engine.simulate(proposal, horizon_engine.demo_cases())
+    elif req.source == "store":
+        report = horizon_engine.simulate_from_store(
+            proposal,
+            include_closed=req.include_closed,
+            limit=req.limit,
+        )
+    else:  # cases
+        rows = req.cases or []
+        report = horizon_engine.simulate(proposal, rows)
+    payload = report.to_dict()
+    payload["source"] = req.source
+    return {"ok": True, "engine": ENGINE_VERSION, **payload}
+
+
+@app.get("/aml/horizon/case/{case_id}")
+def horizon_case(
+    case_id: str,
+    preset: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """Per-case drill-down for a preset.  Returns the impact + the frozen
+    snapshot + the resolved proposal so the drill-down page can render
+    an audit-quality explainer without extra round-trips."""
+    proposal = _horizon_resolve_preset(preset)
+    # Try the live store first — that's the real workflow.
+    detail = horizon_engine.explain_case(case_id, proposal)
+    if detail is not None:
+        return {"ok": True, "engine": ENGINE_VERSION,
+                "source": "store", **detail}
+    # Fall back to fixture rows so the demo works offline.
+    for row in horizon_engine.demo_cases():
+        if row.get("id") == case_id:
+            impact = horizon_engine._replay_case(row, row["snapshot"], proposal)
+            return {
+                "ok": True,
+                "engine": ENGINE_VERSION,
+                "source": "fixture",
+                "impact": impact.to_dict(),
+                "snapshot": row["snapshot"],
+                "proposal": proposal.to_dict(),
+            }
+    raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+
+
+class HorizonExplainReq(BaseModel):
+    case_id: str
+    proposal: HorizonProposalIn
+
+
+@app.post("/aml/horizon/explain")
+def horizon_explain(req: HorizonExplainReq) -> Dict[str, Any]:
+    """Per-case drill-down for a caller-built proposal (the /horizon page
+    uses this after the user tunes the sliders)."""
+    proposal = _horizon_proposal_from_model(req.proposal)
+    detail = horizon_engine.explain_case(req.case_id, proposal)
+    if detail is not None:
+        return {"ok": True, "engine": ENGINE_VERSION,
+                "source": "store", **detail}
+    for row in horizon_engine.demo_cases():
+        if row.get("id") == req.case_id:
+            impact = horizon_engine._replay_case(row, row["snapshot"], proposal)
+            return {
+                "ok": True,
+                "engine": ENGINE_VERSION,
+                "source": "fixture",
+                "impact": impact.to_dict(),
+                "snapshot": row["snapshot"],
+                "proposal": proposal.to_dict(),
+            }
+    raise HTTPException(status_code=404, detail=f"case not found: {req.case_id}")
+
+
+@app.get("/aml/horizon/export.md", response_class=None)
+def horizon_export(preset: Optional[str] = Query(default=None)):
+    """Paste-able impact memo — every number in the aggregate summary
+    plus the notable case list.  Deterministic — a re-run at any time
+    yields the same numbers."""
+    from fastapi.responses import PlainTextResponse
+    proposal = _horizon_resolve_preset(preset)
+    report = horizon_engine.simulate(proposal, horizon_engine.demo_cases())
+    return PlainTextResponse(
+        horizon_engine.export_markdown(report),
         media_type="text/markdown; charset=utf-8",
     )

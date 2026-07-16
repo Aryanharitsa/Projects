@@ -13,6 +13,66 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-85 — Horizon · regulatory-change impact simulator.**
+> Every prior TITAN surface answers "given today's rules, what is this
+> case?". Horizon answers the question every MLRO loses sleep over the
+> night before a policy revision ships: *"Which of the six-hundred cases
+> in the queue would flip band? Which cleared cases would re-fire? Which
+> analyst decisions become inconsistent with the new rules? Which
+> detectors do the damage — and which do nothing?"*. New
+> `apps/ai-aml/horizon.py` (~1,100 LOC, pure stdlib, **zero new deps**)
+> is a fully-deterministic replay engine: `simulate(proposal, cases) →
+> HorizonReport`. The proposal bundles every knob an approver actually
+> touches — per-detector weight overrides, forced-disable list, sanctions
+> similarity gate, new SDN entries (fuzzy-matched against every subject
+> and counterparty captured on the frozen snapshot), FATF jurisdiction
+> uplift / relief, alert-fire threshold, band cutoffs. The engine
+> recovers each detector's underlying **intensity** from the snapshot
+> (`points / weight`), re-projects it under the new weight, folds in the
+> proposal-sourced signals (new SDN hits floor the sanctions_hit intensity
+> at 0.75, uplift geos add `JURISDICTION_UPLIFT` per matching edge, band
+> cutoffs apply after score recomputation), then rolls the four axes into
+> a first-match-wins **verdict ladder** — `material_flip` (alert-fire
+> boolean flipped, or band moved ≥ 2 steps), `band_shift` (one-step move
+> within alert bands), `touched` (score-only movement above the touch
+> epsilon), `stable` (else). Six curated **presets** ship in the box —
+> `OFAC uplift`, `Structuring hardening`, `FATF grey-list refresh`,
+> `Noise reduction`, `New SDN additions`, `Band recalibration` — every
+> one a real MLRO scenario. The aggregate exposes the six numbers a
+> change-management review actually asks for: total cases replayed,
+> per-verdict counts, alert-flip waterfall (`cleared→alert`,
+> `alert→cleared`, `still_alert`, `still_cleared`), the full **band
+> transition matrix** (4×4 counts), a **detector contribution ranking**
+> (sum of |Δpoints| across the backlog), and a `suggested_action`
+> verdict — `defer / pilot / roll_out / investigate` — that rolls
+> everything up to one recommendation.
+>
+> **Surface** — new `/horizon` route between AML Console and KYC.
+> Action-tinted hero (verdict tint on the whole banner), four stat
+> tiles (cases replayed, cleared→alert, alert→cleared, material flips)
+> and a signed "suggested action" pill. Horizontal **preset picker**
+> with six chips, each a real regulatory scenario. **Proposal chip
+> row** — one chip per material config edit (weight delta vs baseline,
+> disabled detectors, sanctions gate change, new SDN count, uplift /
+> relief countries, band cutoffs), so the change is legible without
+> reading JSON. **Backlog waterfall** — hand-rolled stacked bar showing
+> the four alert-flip shares. **4×4 band-transition matrix** with
+> destination-band-tinted cells, off-diagonal cells count as flips.
+> **Detector contribution bars** sorted by |Δ|. **Interactive weight
+> editor** — nine sliders (0..MAX_WEIGHT) plus on/off toggles let the
+> approver layer edits on top of the preset; a Re-simulate button hits
+> the live `/aml/horizon/simulate` endpoint against the fixture case
+> set, so the whole page reflows in one round-trip. **Case impact
+> table** (filterable by verdict) → **per-case drill-down** with a
+> hand-rolled score arc (old-score dashed ring, new-score coloured
+> ring at inner radius, delta stamped in the middle), per-detector Δ
+> rows with the engine's own reason strings, fired-vs-dropped sanctions
+> block (proposal-sourced hits get a rose "new SDN" badge). Rules
+> footer exposes the engine version, verdict ladder chips, default
+> tunables, and a one-click **markdown impact-memo download** — the
+> paste-into-a-change-management-ticket document, deterministic
+> byte-for-byte. Engine: `titan-horizon/1.0.0`. AML: `titan-aml/1.16.0`.
+
 > **Day-80 — Nexus · beneficial ownership discovery + sanctions/PEP reach.**
 > Every prior TITAN surface reasons about a *transaction* or an *alert*.
 > Nexus reasons about the *legal structure* — who really owns and controls
@@ -663,6 +723,13 @@ here's the freeze-and-investigate paragraph".
 | **Triage for case** | `GET  /aml/triage/case/{case_id}` | Per-case Bayesian suppression report — scored combos, S score, verdict, cleared + SAR precedent chains |
 | **Triage seed** | `POST /aml/triage/seed` | Seed the 12-family FP-rich supplementary corpus (idempotent unless `force=true`) |
 | **Triage export** | `GET  /aml/triage/export.md` | Paste-able triage memo for one case (drops straight into a case note) |
+| **Horizon rules** | `GET  /aml/horizon/rules` | Baseline weights + band cutoffs + every tunable + verdict ladder + preset library |
+| **Horizon presets** | `GET  /aml/horizon/presets` | Six curated MLRO scenarios (OFAC uplift · Structuring hardening · FATF grey-list refresh · Noise reduction · New SDN additions · Band recalibration) with every knob resolved |
+| **Horizon sample** | `GET  /aml/horizon/sample` | Bundled six-case demo — replays a preset (default: first) against six fixture accounts spanning the band spectrum. Everything the frontend needs to render the hero + waterfall + case grid is in the response. |
+| **Horizon simulate** | `POST /aml/horizon/simulate` | Replay any proposal — over `fixture`, `store`, or caller-supplied `cases` — returns per-case delta + aggregate summary + waterfall + verdict. Deterministic: same input → same report. |
+| **Horizon case** | `GET  /aml/horizon/case/{case_id}` | Per-case drill-down for a preset (`?preset=`). Returns impact + frozen snapshot + resolved proposal so the drill-down page renders an audit-quality explainer without extra round-trips. |
+| **Horizon explain** | `POST /aml/horizon/explain` | Per-case drill-down for a caller-built proposal (weight-slider workflow). Same shape as `/case/{id}`. |
+| **Horizon export** | `GET  /aml/horizon/export.md` | Paste-able impact memo — deterministic markdown for a change-management ticket. |
 | **Nexus rules** | `GET  /aml/nexus/rules` | FinCEN CTA / OFAC / PEP thresholds + opacity component weights + jurisdiction-risk table + verdict ladder |
 | **Nexus sample** | `GET  /aml/nexus/sample` | Bundled 29-entity / 24-edge portfolio: seven topologies exercising every branch (diamond just-below-UBO, OFAC cascade, hidden PEP, four-way clean split, five-layer shell chain, mutual-holding cycle, substantial-control officer) |
 | **Nexus analyze** | `POST /aml/nexus/analyze` | Analyse a caller-supplied ownership graph — every target's UBO ladder, sanctions/PEP nexus, opacity, and verdict in one deterministic pass |

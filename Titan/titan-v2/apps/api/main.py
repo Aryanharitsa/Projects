@@ -1044,3 +1044,87 @@ async def aml_nexus_export(entity_id: str):
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Horizon proxies — regulatory-change impact simulator (round-18, day-85)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/horizon/rules")
+async def aml_horizon_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/horizon/rules")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/horizon/presets")
+async def aml_horizon_presets() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/horizon/presets")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.get("/aml/horizon/sample")
+async def aml_horizon_sample(preset: Optional[str] = None) -> Dict[str, Any]:
+    params = {"preset": preset} if preset else {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/horizon/sample", params=params)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.post("/aml/horizon/simulate")
+async def aml_horizon_simulate(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/horizon/simulate", json=payload)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/horizon/case/{case_id}")
+async def aml_horizon_case(case_id: str, preset: Optional[str] = None) -> Dict[str, Any]:
+    params = {"preset": preset} if preset else {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/horizon/case/{case_id}", params=params)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.post("/aml/horizon/explain")
+async def aml_horizon_explain(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{AML_SVC}/aml/horizon/explain", json=payload)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/horizon/export.md")
+async def aml_horizon_export(preset: Optional[str] = None):
+    from fastapi.responses import PlainTextResponse
+    params = {"preset": preset} if preset else {}
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/horizon/export.md", params=params)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
