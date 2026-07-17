@@ -2,16 +2,17 @@
 
 WaySafe is a **safety-first navigation & incident-response system** for tourists.
 It scores any location 0–100, plans risk-aware routes (with a temporal-forecast
-mode), composes multi-day trips through the **Odyssey** composer, and — new
-in Round-18 — **reflows the remaining days of a live trip through the
-`Nomad` engine the moment signals shift**.  A traveller who committed a
-Serene 4-day itinerary at planning time, then wakes up on Day 2 with fresh
-incidents landing on Day-3's corridor, doesn't have to hand-recompose
-anything: Nomad re-scores every upcoming day under current signals,
-enumerates seven concrete reflow strategies (`STAY_COURSE`, `TIME_SHIFT`,
-`STOP_DROP`, `STOP_SUB`, `REST_DAY`, `SHORTEN`, `STAY_MOVE`), simulates each
-end-to-end and hands back the single move that best restores the trip
-verdict.  Same physics as Odyssey — zero new measurements, deterministic
+mode), composes multi-day trips through the **Odyssey** composer, reflows the
+remaining days of a live trip through the **Nomad** engine the moment signals
+shift, and — new in Round-19 — **lifts the entire stack from single-actor
+to group-consensus through the `Convoy` engine**.  A four-member family loop
+that Nomad recommends `TIME_SHIFT` on is a *fine* move for the two adults,
+a *bad* move for the nine-year-old whose bedtime crosses 22:30, and a
+*worse* move for the 68-year-old on 21:00 heart medication.  Convoy
+re-scores every Nomad strategy as a ballot across the members, honours
+vulnerable-member vetoes and per-member day locks, and picks the
+admissible strategy that maximises **0.60·mean_uplift + 0.40·worst_uplift**
+across the convoy.  Same physics, zero new measurements, deterministic
 to the byte.
 
 Built on Streamlit + pure-Python physics (no external maps API, no XGBoost,
@@ -21,7 +22,73 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
-- **🆕 Nomad — Adaptive Live Trip Reflow** *(Day 81)* — Odyssey (Day 76)
+- **🆕 Convoy — Group Consensus Reflow** *(Day 86)* — Odyssey (Day 76)
+  composes a trip.  Nomad (Day 81) reflows what remains of that trip
+  live.  Both assume the trip is being lived by **one** person with
+  **one** risk profile.  Every real trip has a **convoy**: 2+ people
+  each with their own risk tolerance, curfew, mobility, medical stack.
+  A +4.2 pt convoy-mean uplift can be a −6 pt personal shortfall for
+  its most vulnerable member — and Nomad, being single-actor by
+  construction, cannot see it.  New `convoy.py` (~800 LOC, pure stdlib,
+  **zero new deps**) is the deterministic consensus engine.  It takes
+  the Odyssey `TripReport`, the Nomad `NomadReflow`, and a `Convoy`
+  (ordered list of `Member`s carrying `MemberProfile(age_band, mobility,
+  risk_tolerance ∈ [0,1], curfew_hour, medical_flags,
+  locked_day_indices)`).  Physics:  (1) every day's Odyssey/Nomad
+  score is deflected downward by a **four-channel personal penalty**
+  — risk-pressure (weighted `W_RISK = 0.35` × `(1 − risk_tolerance)`
+  × `100 − day_score`), curfew (`W_CURFEW = 0.20` × hours past
+  member's curfew × 4 pt/h), mobility (`W_MOBILITY = 0.20` × factor
+  × excess stops × 3.5 pt), medical (`W_MEDICAL = 0.25` × 5 pt/flag,
+  with a 1.4× amplifier on `cardiac`/`respiratory` and 1.3× on
+  `pregnancy`) — capped at `MAX_PERSONAL_PENALTY_PTS = 40` so a Bumpy
+  day never collapses below the Critical floor purely from
+  personalization.  Each member gets an Odyssey-shape trip composite
+  (`0.60·mean + 0.40·min`) computed against their *own* day vector —
+  the tour lead reads *"Aunt Mira sits at personal Bumpy 61 even
+  though the convoy mean is Solid 74"* in a single line.  (2) A
+  **vulnerability scalar** `V(m) ∈ [0, 0.85]` is derived from the
+  profile (`+0.20` per medical flag, `+0.15` senior / `+0.10` child,
+  `+0.10` low mobility, `+0.10` low risk tolerance) and drives the
+  veto rule.  (3) Every Nomad `ReflowStrategy` — including
+  `STAY_COURSE` — is **re-scored end-to-end as a ballot** across the
+  convoy: each member's personal trip score under the strategy's
+  `modified_days` overlay is computed and voted on.  Ballot metrics:
+  `mean_uplift`, `worst_uplift`, `n_dissent` (members whose personal
+  score drops ≥ `DISSENT_DROP_PTS = 1`), `n_veto` (vulnerable
+  members with `V ≥ VETO_VULN_FLOOR = 0.35` whose personal score
+  drops by `≥ VETO_DROP_PTS = 5`, or any member whose locked day was
+  touched), `dissent_tolerance = ⌈N / DISSENT_DIV = 3⌉`,
+  `is_admissible = (n_veto == 0) ∧ (n_dissent ≤ dissent_tolerance)`.
+  (4) **Consensus winner**: among admissible non-`STAY_COURSE`
+  ballots whose `consensus_uplift = 0.60·mean_uplift + 0.40·worst_uplift`
+  clears `CONSENSUS_FLOOR_PTS = 1.5`, the one with the highest
+  consensus uplift.  When nothing clears the floor or every non-baseline
+  candidate has ≥1 veto, `STAY_COURSE` wins by definition and the
+  report says exactly why.  (5) A **dissent matrix** (member × strategy)
+  of personal uplifts is emitted so the tour lead can *see* who each
+  move helps and who it hurts.  (6) **Per-member advisories** — one
+  card per member, tailored to the dominant penalty channel on that
+  member's worst upcoming day: a curfew-dominated day for the senior
+  gets a `🕘` line naming the arrival estimate; a medical-dominated day
+  gets a `🩺` line naming the flag stack; a mobility day gets `🦽`;
+  a risk-tolerance day gets `🎯` recommending a MODE_UPGRADE.  Vetoed
+  or dissenting members get a top-priority explanation of what
+  personally landed worse and how to resolve.  (7) Full **JSON /
+  Markdown round-trip** under `waysafe.convoy.v1` — same input bytes
+  → same output bytes.  Lives at `tabs[21]`, the tab immediately after
+  Nomad, because Convoy is what a tour lead or family trip planner
+  opens the moment Nomad's single-actor recommendation lands and they
+  realise they have to socialise it across a group before they can act
+  on it.  Ships with a **4-member family seed** (2 adults + 9-year-old
+  + 68-year-old aunt with cardiac / medication flags) so the tab
+  works before the roster is edited.  Frontend: convoy verdict
+  transition band (mean → mean · worst → worst under consensus,
+  colour-coded by band), member cards with vulnerability bar and
+  personal trip score ring, ballot rows with per-member vote chips
+  (green support, blue hold, amber dissent, red veto), personalised
+  advisory strip, JSON+Markdown export.
+- **Nomad — Adaptive Live Trip Reflow** *(Day 81)* — Odyssey (Day 76)
   commits the trip *at plan time*.  What Odyssey does not answer is what
   every real traveller runs into by Day 2 of a multi-day itinerary:
   *"the trip I committed at planning time isn't the trip I'm on any
