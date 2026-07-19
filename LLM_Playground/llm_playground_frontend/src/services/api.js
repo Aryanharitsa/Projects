@@ -865,6 +865,53 @@ class ApiService {
     return this.request('/sentinel/seed');
   }
 
+  // ─── Studio Cache — Semantic Response Cache (Day 88) ──────────────────────
+  // Deterministic engine — every response is a pure function of the workload
+  // and config. No persistence, no keys required; the demo lights up on first
+  // load and stays byte-identical across refreshes.
+  async cacheDefaults() {
+    return this.request('/cache/defaults');
+  }
+  async cachePolicies() {
+    return this.request('/cache/policies');
+  }
+  async cacheWorkloads() {
+    return this.request('/cache/workloads');
+  }
+  async cacheSimulate(payload) {
+    return this.request('/cache/simulate', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async cacheSweep(payload) {
+    return this.request('/cache/sweep', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async cacheRecommend(payload) {
+    return this.request('/cache/recommend', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async cacheCluster(payload) {
+    return this.request('/cache/cluster', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async cacheCompile(payload) {
+    return this.request('/cache/compile', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async cacheSeed() {
+    return this.request('/cache/seed');
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

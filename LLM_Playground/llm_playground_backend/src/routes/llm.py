@@ -26,6 +26,7 @@ from src import surgeon as surgeon_lib
 from src import frontier as frontier_lib
 from src import relay as relay_lib
 from src import sentinel as sentinel_lib
+from src import cache as cache_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -2296,6 +2297,192 @@ def sentinel_compile():
 def sentinel_seed():
     try:
         return jsonify({'success': True, 'seed': sentinel_lib.seed_demo()})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ─── Studio Cache — Semantic Response Cache (Day 88) ───────────────────────
+# Deterministic engine. No persistence, no keys required — every response is a
+# pure function of the workload and config, so the studio lights up on first
+# page load and stays byte-identical across refreshes.
+
+
+def _cache_resolve_workload(data):
+    """Load workload by ``workload_id`` or take an inline ``workload`` list.
+
+    If the caller passes ``workload`` explicitly, we honour their intent even
+    if it's empty (raise) — that beats silently substituting a demo workload
+    when the caller thought they were exercising their own.
+    """
+    if 'workload' in data:
+        inline = data.get('workload')
+        if not isinstance(inline, list):
+            raise ValueError('workload must be a list of prompts')
+        cleaned = []
+        for item in inline:
+            if isinstance(item, str):
+                cleaned.append({'prompt': item})
+            elif isinstance(item, dict) and item.get('prompt'):
+                cleaned.append({
+                    'prompt': str(item.get('prompt')),
+                    'intent': str(item.get('intent') or ''),
+                    'timestamp': int(item.get('timestamp', len(cleaned))),
+                })
+        if not cleaned:
+            raise ValueError('workload is empty')
+        return cleaned
+    workload_id = str(data.get('workload_id') or 'customer_support')
+    return cache_lib.load_workload(workload_id)
+
+
+@llm_bp.route('/cache/defaults', methods=['GET'])
+def cache_defaults():
+    return jsonify({'success': True, 'defaults': cache_lib.defaults()})
+
+
+@llm_bp.route('/cache/policies', methods=['GET'])
+def cache_policies():
+    return jsonify({'success': True, 'policies': cache_lib.list_policies()})
+
+
+@llm_bp.route('/cache/workloads', methods=['GET'])
+def cache_workloads():
+    return jsonify({'success': True, 'workloads': cache_lib.list_workloads()})
+
+
+@llm_bp.route('/cache/simulate', methods=['POST'])
+def cache_simulate():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _cache_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        sim = cache_lib.simulate_cache(
+            workload,
+            threshold=float(data.get('threshold', cache_lib.DEFAULT_THRESHOLD)),
+            capacity=int(data.get('capacity', cache_lib.DEFAULT_CAPACITY)),
+            ttl_seconds=int(data.get('ttl_seconds', cache_lib.DEFAULT_TTL_SECONDS)),
+            policy=str(data.get('policy', cache_lib.DEFAULT_POLICY)),
+            miss_cost_usd=float(data.get('miss_cost_usd', cache_lib.DEFAULT_MISS_COST_USD)),
+            hit_cost_usd=float(data.get('hit_cost_usd', cache_lib.DEFAULT_HIT_COST_USD)),
+            miss_latency_ms=float(data.get('miss_latency_ms', cache_lib.DEFAULT_MISS_LATENCY_MS)),
+            hit_latency_ms=float(data.get('hit_latency_ms', cache_lib.DEFAULT_HIT_LATENCY_MS)),
+        )
+        return jsonify({'success': True, 'simulation': sim, 'workload_size': len(workload)})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/cache/sweep', methods=['POST'])
+def cache_sweep():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _cache_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        thresholds = data.get('thresholds')
+        if not (isinstance(thresholds, list) and thresholds):
+            thresholds = list(cache_lib.THRESHOLD_SWEEP)
+        curve = cache_lib.sweep_thresholds(
+            workload,
+            policy=str(data.get('policy', cache_lib.DEFAULT_POLICY)),
+            capacity=int(data.get('capacity', cache_lib.DEFAULT_CAPACITY)),
+            ttl_seconds=int(data.get('ttl_seconds', cache_lib.DEFAULT_TTL_SECONDS)),
+            thresholds=[float(t) for t in thresholds],
+        )
+        grid = cache_lib.sweep_policies(
+            workload,
+            capacity=int(data.get('capacity', cache_lib.DEFAULT_CAPACITY)),
+            ttl_seconds=int(data.get('ttl_seconds', cache_lib.DEFAULT_TTL_SECONDS)),
+            thresholds=[float(t) for t in thresholds],
+        )
+        return jsonify({'success': True, 'curve': curve, 'grid': grid})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/cache/recommend', methods=['POST'])
+def cache_recommend():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _cache_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        picks = cache_lib.recommend_configs(
+            workload,
+            capacity=int(data.get('capacity', cache_lib.DEFAULT_CAPACITY)),
+            ttl_seconds=int(data.get('ttl_seconds', cache_lib.DEFAULT_TTL_SECONDS)),
+            monthly_requests=int(data.get('monthly_requests', cache_lib.DEFAULT_MONTHLY_REQUESTS)),
+            quality_risk_ceiling=float(data.get('quality_risk_ceiling', 0.08)),
+            miss_cost_usd=float(data.get('miss_cost_usd', cache_lib.DEFAULT_MISS_COST_USD)),
+            hit_cost_usd=float(data.get('hit_cost_usd', cache_lib.DEFAULT_HIT_COST_USD)),
+        )
+        return jsonify({'success': True, 'recommendations': picks})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/cache/cluster', methods=['POST'])
+def cache_cluster():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _cache_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        clusters = cache_lib.cluster_workload(
+            workload,
+            threshold=float(data.get('threshold', cache_lib.DEFAULT_THRESHOLD)),
+        )
+        return jsonify({'success': True, 'clusters': clusters})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/cache/compile', methods=['POST'])
+def cache_compile():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = None
+        if 'workload' in data or 'workload_id' in data:
+            workload = _cache_resolve_workload(data)
+        config = cache_lib.compile_cache(
+            policy=str(data.get('policy', cache_lib.DEFAULT_POLICY)),
+            threshold=float(data.get('threshold', cache_lib.DEFAULT_THRESHOLD)),
+            capacity=int(data.get('capacity', cache_lib.DEFAULT_CAPACITY)),
+            ttl_seconds=int(data.get('ttl_seconds', cache_lib.DEFAULT_TTL_SECONDS)),
+            monthly_requests=int(data.get('monthly_requests', cache_lib.DEFAULT_MONTHLY_REQUESTS)),
+            quality_risk_ceiling=float(data.get('quality_risk_ceiling', 0.08)),
+            workload=workload,
+        )
+        return jsonify({
+            'success': True,
+            'config': config,
+            'markdown': cache_lib.cache_markdown(config),
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/cache/seed', methods=['GET', 'POST'])
+def cache_seed():
+    try:
+        return jsonify({'success': True, 'seed': cache_lib.seed_demo()})
     except Exception as e:  # pragma: no cover - defensive
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
