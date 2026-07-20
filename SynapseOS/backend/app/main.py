@@ -32,6 +32,7 @@ from . import atomize as atomize_engine
 from . import chat as chat_engine
 from . import chronicle as chronicle_engine
 from . import compass as compass_engine
+from . import prism as prism_engine
 from . import pulse as pulse_engine
 from . import recall as recall_engine
 from . import signal as signal_engine
@@ -1860,3 +1861,59 @@ def vault_delete_snapshot(snapshot_id: int) -> Response:
     if not vault.delete_snapshot(snapshot_id):
         raise HTTPException(404, "snapshot not found")
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- prism
+
+
+@app.get("/prism/lenses", response_model=list[schemas.PrismLensSpecOut])
+def prism_lenses() -> list[dict]:
+    """Static catalog of the eight canonical perspective lenses — id,
+    label, color, icon, tagline, family, and vocabulary size. Frontend
+    reads this once to render the lens picker + composite legend."""
+    return prism_engine.list_lens_specs()
+
+
+@app.post("/prism/compute", response_model=schemas.PrismReportOut)
+def prism_compute(req: schemas.PrismComputeIn) -> dict:
+    """Compute the Prism report — top-K supporting notes per lens for a
+    given target (note, cluster centroid, or ad-hoc query). Returns
+    coverage-scored lens results, composite stance distribution, dominant
+    lens family, weakest/strongest lens, and a spark suggestion for the
+    weakest lens. Deterministic — same target + same knobs → same report."""
+    try:
+        report = prism_engine.compute_prism(
+            target_kind=req.target_kind,
+            target_id=req.target_id,
+            query=req.query,
+            top_k_per_lens=req.top_k_per_lens,
+            floor_sim=req.floor_sim,
+            lens_ids=req.lens_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return prism_engine.serialize(report)
+
+
+@app.post("/prism/export.md")
+def prism_export(req: schemas.PrismComputeIn) -> Response:
+    """Portable Markdown export of a Prism report — target, composite
+    stance strip, per-lens picks with the sharpest supporting quote.
+    Paste-anywhere reading brief."""
+    try:
+        report = prism_engine.compute_prism(
+            target_kind=req.target_kind,
+            target_id=req.target_id,
+            query=req.query,
+            top_k_per_lens=req.top_k_per_lens,
+            floor_sim=req.floor_sim,
+            lens_ids=req.lens_ids,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    md = prism_engine.to_markdown(report)
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="prism.md"'},
+    )

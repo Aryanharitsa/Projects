@@ -35,6 +35,11 @@ type Props = {
   /** Snapshot count — badges the vault pill so a growing snapshot list
    *  is visible without opening the modal. */
   vaultSnapshotBadge?: number;
+  onOpenPrism?: () => void;
+  /** Lens count (usually a constant 8) rendered as an at-a-glance chip
+   *  on the Prism pill so the surface reads as multi-lens even when the
+   *  user hasn't opened the modal yet. */
+  prismLensCount?: number;
 };
 
 export function Header({
@@ -65,6 +70,8 @@ export function Header({
   signalMoversBadge,
   onOpenVault,
   vaultSnapshotBadge,
+  onOpenPrism,
+  prismLensCount,
 }: Props) {
   return (
     <header className="relative border-b border-white/5">
@@ -286,6 +293,25 @@ export function Header({
               {recallBadge !== undefined && recallBadge > 0 && (
                 <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-synapse-amber/30 ring-1 ring-synapse-amber/60 text-[10px] text-synapse-amber px-1">
                   {recallBadge > 99 ? "99+" : recallBadge}
+                </span>
+              )}
+            </button>
+          )}
+          {onOpenPrism && (
+            <button
+              onClick={onOpenPrism}
+              className="relative inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-rose-500/25 via-violet-500/20 to-cyan-500/25 ring-1 ring-rose-400/45 hover:ring-rose-400/80 px-3 py-1 font-mono text-[11px] text-ink-100 transition shadow-[0_0_20px_-8px_rgba(244,114,182,0.65)] hover:shadow-[0_0_28px_-6px_rgba(34,211,238,0.75)]"
+              aria-label="open prism"
+              title="Interrogate any note, cluster, or query through eight canonical perspectives — see where your thinking has depth and where it has a hole"
+            >
+              <span aria-hidden className="text-rose-300">🔷</span>
+              prism
+              <span className="-ml-0.5 px-1 py-px rounded bg-gradient-to-r from-rose-500/35 via-violet-500/30 to-cyan-500/30 ring-1 ring-white/10 text-[9px] uppercase tracking-widest text-ink-100">
+                new
+              </span>
+              {prismLensCount !== undefined && prismLensCount > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] rounded-full bg-white/10 ring-1 ring-white/20 text-[10px] text-ink-100 px-1">
+                  {prismLensCount}
                 </span>
               )}
             </button>

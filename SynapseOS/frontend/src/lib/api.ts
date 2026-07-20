@@ -22,6 +22,9 @@ import type {
   Note,
   OrphanSuggestion,
   PathResult,
+  PrismComputeInput,
+  PrismLensSpec,
+  PrismReport,
   PulseReport,
   RecallClozeCheck,
   RecallGrade,
@@ -528,4 +531,42 @@ export const api = {
 
   vaultDeleteSnapshot: (id: number) =>
     j<void>(`/vault/snapshots/${id}`, { method: "DELETE" }),
+
+  // ---------------------------------------------------------------- prism
+
+  prismLenses: () => j<PrismLensSpec[]>(`/prism/lenses`),
+
+  prismCompute: (payload: PrismComputeInput) =>
+    j<PrismReport>(`/prism/compute`, {
+      method: "POST",
+      body: JSON.stringify({
+        target_kind: payload.target_kind,
+        target_id: payload.target_id ?? null,
+        query: payload.query ?? null,
+        top_k_per_lens: payload.top_k_per_lens ?? 3,
+        floor_sim: payload.floor_sim ?? 0.16,
+        lens_ids: payload.lens_ids ?? null,
+      }),
+    }),
+
+  prismExportMd: async (payload: PrismComputeInput): Promise<string> => {
+    const res = await fetch(`${BASE}/prism/export.md`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        target_kind: payload.target_kind,
+        target_id: payload.target_id ?? null,
+        query: payload.query ?? null,
+        top_k_per_lens: payload.top_k_per_lens ?? 3,
+        floor_sim: payload.floor_sim ?? 0.16,
+        lens_ids: payload.lens_ids ?? null,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    }
+    return res.text();
+  },
 };

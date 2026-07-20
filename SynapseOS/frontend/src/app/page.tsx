@@ -14,6 +14,7 @@ import { Inspector } from "@/components/Inspector";
 import { NoteComposer } from "@/components/NoteComposer";
 import { OrphanRescue } from "@/components/OrphanRescue";
 import { PathFinder } from "@/components/PathFinder";
+import { Prism } from "@/components/Prism";
 import { Pulse } from "@/components/Pulse";
 import { Recall } from "@/components/Recall";
 import { SearchBar } from "@/components/SearchBar";
@@ -76,6 +77,8 @@ export default function Page() {
   const [signalMutationTick, setSignalMutationTick] = useState(0);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultSnapshotCount, setVaultSnapshotCount] = useState<number | null>(null);
+  const [prismOpen, setPrismOpen] = useState(false);
+  const [prismLensCount, setPrismLensCount] = useState<number | null>(null);
   const [composerDraft, setComposerDraft] = useState<NoteDraft | null>(null);
 
   // Trails — the active trail (when the player is open) flows up here
@@ -310,6 +313,25 @@ export default function Page() {
     };
   }, [graph, signalOpen, signalMutationTick]);
 
+  // Prism badge — the lens catalog is a stable-8 static and the pill
+  // just wants the number to render as an at-a-glance chip. Fetched once
+  // and cached; not tied to graph freshness because the lens list itself
+  // doesn't change with note mutations.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .prismLenses()
+      .then((rows) => {
+        if (!cancelled) setPrismLensCount(rows.length);
+      })
+      .catch(() => {
+        if (!cancelled) setPrismLensCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Vault badge — how many local snapshots the user has frozen. Cheap
   // probe (one row per snapshot) so we can render the count next to the
   // header pill without opening the modal.
@@ -459,6 +481,8 @@ export default function Page() {
         signalMoversBadge={signalMoversBadge ?? undefined}
         onOpenVault={() => setVaultOpen(true)}
         vaultSnapshotBadge={vaultSnapshotCount ?? undefined}
+        onOpenPrism={() => setPrismOpen(true)}
+        prismLensCount={prismLensCount ?? undefined}
       />
 
       <DailyBrief
@@ -648,6 +672,25 @@ export default function Page() {
         }}
       />
 
+      <Prism
+        open={prismOpen}
+        onClose={() => setPrismOpen(false)}
+        seedNote={selected}
+        communities={communities}
+        onSelectNote={(stub) => {
+          const real = nodes.find((n) => n.id === stub.id);
+          setSelected(real ?? (stub as GraphNode));
+          setIsolated(null);
+        }}
+        onDraftFromSpark={(draft) =>
+          setComposerDraft({
+            title: draft.title,
+            body: draft.body,
+            tags: draft.tags,
+          })
+        }
+      />
+
       <div className="mx-auto w-full max-w-[1600px] px-6 py-6 grid grid-cols-12 gap-6 flex-1">
         <aside className="col-span-12 lg:col-span-3 space-y-5">
           <NoteComposer
@@ -735,6 +778,11 @@ export default function Page() {
             onStartTrailHere={(id) =>
               openNewTrail([{ note_id: id, caption: "" }])
             }
+            onInterrogateInPrism={(id) => {
+              const real = nodes.find((n) => n.id === id);
+              if (real) setSelected(real);
+              setPrismOpen(true);
+            }}
           />
         </aside>
       </div>

@@ -1044,3 +1044,73 @@ class VaultSnapshotIn(BaseModel):
 class VaultRestoreResult(BaseModel):
     snapshot: VaultSnapshotOut
     summary: VaultImportSummaryOut
+
+
+# ---------------------------------------------------------------- prism
+
+
+class PrismLensSpecOut(BaseModel):
+    id: str
+    label: str
+    color: str
+    icon: str
+    tagline: str
+    family: str
+    vocab_size: int
+
+
+class PrismPickOut(BaseModel):
+    note_id: int
+    title: str
+    cluster_id: int | None = None
+    cluster_color: str | None = None
+    similarity: float
+    lexicon_score: float
+    score: float
+    quote: str
+    tags: list[str] = Field(default_factory=list)
+    is_top: bool = False
+
+
+class PrismLensOut(BaseModel):
+    id: str
+    label: str
+    color: str
+    icon: str
+    tagline: str
+    family: str
+    coverage: float
+    stance: Literal["reinforce", "challenge", "neutral", "thin"]
+    weakness: str | None = None
+    picks: list[PrismPickOut] = Field(default_factory=list)
+
+
+class PrismTargetOut(BaseModel):
+    kind: Literal["note", "cluster", "query"]
+    id: int | None = None
+    label: str
+    excerpt: str
+    cluster_id: int | None = None
+    cluster_color: str | None = None
+
+
+class PrismReportOut(BaseModel):
+    target: PrismTargetOut
+    lenses: list[PrismLensOut]
+    weakest_lens: str | None = None
+    strongest_lens: str | None = None
+    stance_distribution: dict[str, float]
+    dominant_family: str | None = None
+    spark_suggestion: str | None = None
+    prism_id: str
+    config: dict = Field(default_factory=dict)
+    stats: dict = Field(default_factory=dict)
+
+
+class PrismComputeIn(BaseModel):
+    target_kind: Literal["note", "cluster", "query"]
+    target_id: int | None = None
+    query: str | None = None
+    top_k_per_lens: int = Field(3, ge=1, le=8)
+    floor_sim: float = Field(0.16, ge=0.0, le=0.9)
+    lens_ids: list[str] | None = None
