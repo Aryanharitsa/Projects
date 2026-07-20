@@ -16,6 +16,8 @@ type Props = {
   trailCanStart?: boolean;
   onAddToTrail?: (id: number) => void;
   onStartTrailHere?: (id: number) => void;
+  /** Opens the Prism modal pre-targeted at this note. */
+  onInterrogateInPrism?: (id: number) => void;
 };
 
 export function Inspector({
@@ -26,6 +28,7 @@ export function Inspector({
   trailCanStart,
   onAddToTrail,
   onStartTrailHere,
+  onInterrogateInPrism,
 }: Props) {
   const [neighbors, setNeighbors] = useState<Neighbor[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,6 +86,15 @@ export function Inspector({
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {onInterrogateInPrism && (
+            <button
+              onClick={() => onInterrogateInPrism(selected.id)}
+              title="interrogate this note through 8 perspective lenses"
+              className="text-[10px] font-mono uppercase tracking-[0.12em] rounded-full px-2.5 py-1 ring-1 ring-rose-400/45 text-rose-200 hover:text-ink-100 hover:ring-rose-400/80 bg-gradient-to-r from-rose-500/10 via-violet-500/10 to-cyan-500/10 transition"
+            >
+              🔷 prism
+            </button>
+          )}
           {trailCanAppend && onAddToTrail && (
             <button
               onClick={() => onAddToTrail(selected.id)}

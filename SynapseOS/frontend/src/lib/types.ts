@@ -1042,3 +1042,88 @@ export type VaultSnapshot = {
 };
 
 export type VaultImportMode = "merge" | "replace" | "preview";
+
+// ---------------------------------------------------------------- prism
+
+export type PrismLensId =
+  | "skeptic"
+  | "empiricist"
+  | "historian"
+  | "futurist"
+  | "practitioner"
+  | "contrarian"
+  | "systems"
+  | "first_principles";
+
+export type PrismLensFamily = "critical" | "empirical" | "narrative" | "generative";
+
+export type PrismStance = "reinforce" | "challenge" | "neutral" | "thin";
+
+export type PrismLensSpec = {
+  id: PrismLensId;
+  label: string;
+  color: string; // css color name (rose, sky, amber, violet, emerald, fuchsia, cyan, lime)
+  icon: string;
+  tagline: string;
+  family: PrismLensFamily;
+  vocab_size: number;
+};
+
+export type PrismPick = {
+  note_id: number;
+  title: string;
+  cluster_id?: number | null;
+  cluster_color?: string | null;
+  similarity: number;
+  lexicon_score: number;
+  score: number;
+  quote: string;
+  tags: string[];
+  is_top: boolean;
+};
+
+export type PrismLensResult = {
+  id: PrismLensId;
+  label: string;
+  color: string;
+  icon: string;
+  tagline: string;
+  family: PrismLensFamily;
+  coverage: number;
+  stance: PrismStance;
+  weakness: string | null;
+  picks: PrismPick[];
+};
+
+export type PrismTargetKind = "note" | "cluster" | "query";
+
+export type PrismTarget = {
+  kind: PrismTargetKind;
+  id: number | null;
+  label: string;
+  excerpt: string;
+  cluster_id?: number | null;
+  cluster_color?: string | null;
+};
+
+export type PrismReport = {
+  target: PrismTarget;
+  lenses: PrismLensResult[];
+  weakest_lens: PrismLensId | null;
+  strongest_lens: PrismLensId | null;
+  stance_distribution: Record<PrismStance, number>;
+  dominant_family: PrismLensFamily | null;
+  spark_suggestion: string | null;
+  prism_id: string;
+  config: Record<string, unknown>;
+  stats: Record<string, number>;
+};
+
+export type PrismComputeInput = {
+  target_kind: PrismTargetKind;
+  target_id?: number | null;
+  query?: string | null;
+  top_k_per_lens?: number;
+  floor_sim?: number;
+  lens_ids?: PrismLensId[] | null;
+};
