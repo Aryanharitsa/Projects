@@ -21,6 +21,7 @@ const NAV: { href: string; label: string; pill?: "cases" }[] = [
   { href: "/precedent", label: "Precedent" },
   { href: "/triage", label: "Triage" },
   { href: "/nexus", label: "Nexus" },
+  { href: "/codex", label: "Codex" },
   { href: "/drift", label: "Drift" },
   { href: "/validation", label: "Validation" },
   { href: "/cases", label: "Cases", pill: "cases" },

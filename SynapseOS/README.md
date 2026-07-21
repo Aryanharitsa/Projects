@@ -11,9 +11,12 @@
 > spaced repetition, per-cluster mastery. **Signal** turns any
 > Compass question into a persistent watch, showing exactly what your
 > vault has learned about that question since the last time you looked.
-> **Vault** (new) hands your whole second brain back to you as a
-> portable JSON or Markdown ZIP — round-trippable, snapshot-able,
-> Obsidian-readable, no lock-in.
+> **Vault** hands your whole second brain back to you as a portable JSON
+> or Markdown ZIP — round-trippable, snapshot-able, Obsidian-readable,
+> no lock-in. **Prism** (new) picks a target — a note, a cluster
+> centroid, or an ad-hoc question — and interrogates the entire vault
+> through eight canonical perspectives at once, showing you where your
+> thinking has depth and where it has a hole.
 
 SynapseOS is a personal knowledge system with one opinionated idea:
 **the graph is the product**. You write atomic thoughts; embeddings form
@@ -23,6 +26,96 @@ your second brain on a plate.
 
 No folders. No manual `[[backlinks]]`. No cloud lock-in. Runs on your
 machine in a minute.
+
+---
+
+## What's new — Prism · perspective explorer (Day 89)
+
+Every SynapseOS surface so far reads one axis through the vault.
+Compass pins a *question* and grows a citation-stitched answer.
+Synthesis *paraphrases the consensus* inside a cluster. Tensions finds
+*contradictory pairs* of notes. Chronicle tells the *biography* of a
+single cluster. Pulse says *what changed this week*.
+
+None of them asked the interrogative question a serious reader asks
+about a specific idea: **"Turn this over — what does my whole vault
+look like if I read it through the skeptic's eyes? The empiricist's?
+The historian's? The systems-thinker's? Where is my thinking on this
+deep, and where does it have a hole?"**
+
+Click **🔷 prism** in the header (or the `🔷 prism` button in the
+Inspector on any selected note) and eight lenses light up:
+
+| lens | family | fingerprint |
+|---|---|---|
+| **Skeptic** | critical | *however · unless · overrated · caveat · risk · brittle · trap* |
+| **Empiricist** | empirical | *measured · benchmark · dataset · unit-test · integration · number* |
+| **Historian** | narrative | *previously · originally · Luhmann · decades · legacy · tradition* |
+| **Futurist** | generative | *will · compounding · growth · tomorrow · trend · long-term* |
+| **Practitioner** | empirical | *shipped · production · runbook · workflow · at-scale · day-to-day* |
+| **Contrarian** | critical | *against · opposite · unpopular · myth · orthodoxy · not-the-way* |
+| **Systems** | empirical | *feedback · loop · cascade · substrate · compound · flywheel* |
+| **First-Principles** | generative | *fundamentally · from-scratch · axiom · atomic · underlying · foundational* |
+
+For every lens Prism scores every note in the vault by a lens-weighted
+relevance:
+
+```
+score(n | lens, target) =
+    cosine(embed(n), embed(target))
+    × (1 + λ · lexicon_density(n, lens))
+    × recency_bonus(n)
+    − novelty_penalty_across_lenses(n)
+```
+
+The lens-lexicon multiplier is the interesting part — each perspective
+carries a small hand-curated bag of stance words (50-75 tokens per
+lens). A note that talks *about* the target AND uses that lens's
+vocabulary rises to the top of that lens; a semantically-close but
+neutral note gets outranked. The cross-lens novelty penalty keeps the
+same note from top-out'ing every lens so the eight cards actually give
+you eight different views.
+
+Every lens returns a **coverage** number in [0, 1]:
+
+```
+coverage(lens) = mean( score of top-K picks ) · gate
+gate = 0 if top pick's cosine < FLOOR_SIM or lexicon density == 0
+     = 1 otherwise
+```
+
+The strongest lens tells you where your thinking on this target lives.
+The **weakest** lens is a hole — Prism emits a lens-shaped Spark
+suggestion for it ("Write the strongest objection to X — the caveat
+you keep sidestepping."), one click away from a pre-filled composer
+draft that fills the gap. A four-band **composite stance strip**
+(reinforce · challenge · neutral · thin) shows the aggregate at a
+glance, and the **dominant family** roll-up says whether the vault
+covers this target *empirically*, *critically*, *narratively*, or
+*generatively*.
+
+Three target kinds, one engine:
+
+- **note** — the Inspector's `🔷 prism` button opens the modal with
+  the current note pre-selected. Great for stress-testing a claim.
+- **cluster** — pick any cluster chip from the target picker and
+  Prism runs the centroid. Great for interrogating a topic.
+- **query** — type any question into the "ad-hoc query" box.
+  Great for hypothesis-testing your vault against a claim it never
+  literally wrote.
+
+Everything below is pure stdlib, zero LLM calls, byte-deterministic:
+same vault + same knobs → byte-identical PrismReport (verified via a
+stable `prism_id = sha256(target · lens_ids · top_k · floor)[:12]`).
+Export the full brief to Markdown from the `copy .md` button.
+
+### Prism API
+
+| method | route | what |
+|---|---|---|
+| `GET`  | `/prism/lenses` | Static catalog: id · label · color · icon · tagline · family · vocab_size |
+| `POST` | `/prism/compute` | Body: `{target_kind, target_id?, query?, top_k_per_lens?, floor_sim?, lens_ids?}` → PrismReport |
+| `POST` | `/prism/export.md` | Same body → paste-anywhere Markdown reading brief |
 
 ---
 

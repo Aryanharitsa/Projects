@@ -48,6 +48,7 @@ import echo as ech
 import prism as pr
 import odyssey as ody
 import nomad as nmd
+import convoy as cvy
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -341,7 +342,7 @@ if role == "Tourist App":
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
         "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism", "Odyssey",
-        "Nomad",
+        "Nomad", "Convoy",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -3387,6 +3388,361 @@ if role == "Tourist App":
                 st.markdown(nmd.to_markdown(reflow))
             with t_nmd_json:
                 st.code(nmd.to_json(reflow, indent=2), language="json")
+
+    # ---------------- Convoy — Group Consensus Reflow (Day 86)
+    # Odyssey composes for a single implied traveller.  Nomad reflows
+    # what remains of that trip live.  Neither answers the question a
+    # tour lead or family planner asks the moment they have two or more
+    # people on the same itinerary: *"is Nomad's recommendation the
+    # right move for **every member** of my group, or only for the
+    # abstract mean?"*  Convoy composes per-member day scores,
+    # re-scores every Nomad strategy as a ballot across the members,
+    # and picks the one that best balances mean uplift with worst-case
+    # uplift while honouring vulnerable-member vetoes and per-member
+    # day locks.  Same physics, zero new measurements.
+    with tabs[21]:
+        st.subheader("Convoy — Group Consensus Reflow")
+        st.caption(
+            "Odyssey and Nomad both assume the trip is being lived by *one* person. "
+            "Convoy lifts that assumption. Every convoy member carries a personal "
+            "risk-tolerance, curfew, mobility and medical stack; every Nomad "
+            "strategy is re-scored as a ballot across the members; the winner is "
+            "the admissible strategy that maximises "
+            "**0.60·mean_uplift + 0.40·worst_uplift** without triggering a "
+            "vulnerable-member veto."
+        )
+
+        base_trip = st.session_state.get("ody_last_trip")
+        base_reflow = st.session_state.get("nm_last_reflow")
+
+        if base_trip is None or getattr(base_trip, "n_days", 0) == 0:
+            st.info(
+                "Convoy needs an Odyssey trip and a Nomad reflow to work with. "
+                "Compose one in **Odyssey**, then step through **Nomad** to "
+                "produce a reflow — come back here."
+            )
+        elif base_reflow is None:
+            st.info(
+                "Compose a Nomad reflow in the **Nomad** tab first — Convoy "
+                "runs on top of the strategy shortlist Nomad has already "
+                "simulated."
+            )
+        else:
+            # ---- Roster editor -------------------------------------
+            if "convoy_roster" not in st.session_state:
+                seed = cvy.default_seed_convoy()
+                st.session_state.convoy_roster = [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "age_band": m.profile.age_band,
+                        "mobility": m.profile.mobility,
+                        "risk_tolerance": m.profile.risk_tolerance,
+                        "curfew_hour": m.profile.curfew_hour,
+                        "medical_flags": ", ".join(m.profile.medical_flags),
+                        "locked_day_indices": ", ".join(
+                            str(i + 1) for i in m.profile.locked_day_indices
+                        ),
+                    }
+                    for m in seed.members
+                ]
+
+            with st.expander(
+                "Convoy roster — edit member profiles",
+                expanded=False,
+            ):
+                st.caption(
+                    "One row per member. `risk_tolerance` ∈ [0, 1] · "
+                    "`curfew_hour` ∈ [17, 26] (26 = no curfew) · "
+                    "`medical_flags` comma-separated (cardiac, respiratory, "
+                    "pregnancy, diabetes, medication, mobility_aid, "
+                    "cold_sensitivity, allergy) · `locked_day_indices` "
+                    "1-based, comma-separated — days this member can't afford "
+                    "to have altered."
+                )
+                _roster_df = pd.DataFrame(st.session_state.convoy_roster)
+                edited = st.data_editor(
+                    _roster_df,
+                    key="convoy_roster_editor",
+                    use_container_width=True, num_rows="dynamic",
+                    column_config={
+                        "id": st.column_config.TextColumn("id", width="small"),
+                        "name": st.column_config.TextColumn("name", width="medium"),
+                        "age_band": st.column_config.SelectboxColumn(
+                            "age_band",
+                            options=["child", "teen", "adult", "senior"],
+                            width="small",
+                        ),
+                        "mobility": st.column_config.SelectboxColumn(
+                            "mobility",
+                            options=["low", "moderate", "high"],
+                            width="small",
+                        ),
+                        "risk_tolerance": st.column_config.NumberColumn(
+                            "risk_tolerance", min_value=0.0, max_value=1.0,
+                            step=0.05, format="%.2f",
+                        ),
+                        "curfew_hour": st.column_config.NumberColumn(
+                            "curfew_hour", min_value=17, max_value=26,
+                            step=1, format="%d",
+                        ),
+                        "medical_flags": st.column_config.TextColumn(
+                            "medical_flags", width="medium",
+                        ),
+                        "locked_day_indices": st.column_config.TextColumn(
+                            "locked_day_indices", width="small",
+                        ),
+                    },
+                )
+                st.session_state.convoy_roster = edited.to_dict("records")
+
+            convoy_id = st.session_state.get(
+                "convoy_id",
+                "convoy-" + str(int(pd.Timestamp.utcnow().timestamp())),
+            )
+            st.session_state.convoy_id = convoy_id
+            convoy_name = st.text_input(
+                "Convoy name",
+                value=st.session_state.get(
+                    "convoy_name",
+                    "Family loop — 2 adults + child + senior",
+                ),
+                key="convoy_name",
+            )
+
+            members = cvy.members_from_editor_rows(st.session_state.convoy_roster)
+            if not members:
+                st.warning(
+                    "Add at least one member with a name to see a consensus."
+                )
+            else:
+                convoy_obj = cvy.Convoy(
+                    id=convoy_id, name=convoy_name, members=members,
+                )
+
+                # ---- Compose -------------------------------------
+                convoy_incidents = st.session_state.get(
+                    "nm_live_incidents",
+                    inc_df.to_dict("records") if not inc_df.empty else [],
+                )
+                convoy_report = cvy.compose_convoy_report(
+                    convoy=convoy_obj,
+                    trip=base_trip,
+                    reflow=base_reflow,
+                    incidents=convoy_incidents,
+                    geofences=GEOFENCES,
+                    pois=poi_df.to_dict("records") if not poi_df.empty else [],
+                )
+
+                _band_to_color = {
+                    "Serene": "#53E3A6", "Solid": "#7BC5F1",
+                    "Bumpy": "#F9C440", "Fragile": "#FF9F43",
+                    "Critical": "#FF3D60", "empty": "#6b7280",
+                }
+
+                # ---- Convoy verdict transition -------------------
+                cb_hue = _band_to_color.get(
+                    convoy_report.convoy_baseline_band, "#7BC5F1"
+                )
+                cf_hue = _band_to_color.get(
+                    convoy_report.consensus_final_band, "#7BC5F1"
+                )
+                base_mean = convoy_report.convoy_mean_personal_baseline
+                base_worst = convoy_report.convoy_worst_personal_baseline
+                final_mean = convoy_report.consensus_final_mean
+                final_worst = convoy_report.consensus_final_worst
+                dm = convoy_report.consensus_delta_mean
+                dw = convoy_report.consensus_delta_worst
+                arrow = "→" if abs(dm) < 0.5 else ("↗" if dm > 0 else "↘")
+                st.markdown(
+                    f"""
+                    <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin:16px 0;padding:18px;border-radius:14px;background:rgba(15,23,42,0.35);border:1px solid rgba(148,163,184,0.15);">
+                      <div style="text-align:center;">
+                        <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Convoy · STAY_COURSE</div>
+                        <div style="display:flex;gap:14px;justify-content:center;align-items:baseline;margin-top:8px;">
+                          <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:1px;">MEAN</div>
+                            <div style="font-size:34px;font-weight:800;color:{cb_hue};line-height:1;">{base_mean:.0f}</div>
+                          </div>
+                          <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:1px;">WORST</div>
+                            <div style="font-size:34px;font-weight:800;color:{cb_hue};line-height:1;">{base_worst}</div>
+                          </div>
+                        </div>
+                        <div style="font-size:12px;color:{cb_hue};font-weight:600;margin-top:6px;">{convoy_report.convoy_baseline_band}</div>
+                      </div>
+                      <div style="font-size:26px;color:#94a3b8;font-weight:600;">{arrow}</div>
+                      <div style="text-align:center;">
+                        <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Convoy · under consensus <b style='color:#e2e8f0;'>{convoy_report.consensus_ballot.strategy_kind}</b></div>
+                        <div style="display:flex;gap:14px;justify-content:center;align-items:baseline;margin-top:8px;">
+                          <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:1px;">MEAN</div>
+                            <div style="font-size:34px;font-weight:800;color:{cf_hue};line-height:1;">{final_mean:.0f} <span style='font-size:12px;color:#94a3b8;font-weight:600;'>({dm:+.1f})</span></div>
+                          </div>
+                          <div>
+                            <div style="font-size:10px;color:#94a3b8;letter-spacing:1px;">WORST</div>
+                            <div style="font-size:34px;font-weight:800;color:{cf_hue};line-height:1;">{final_worst} <span style='font-size:12px;color:#94a3b8;font-weight:600;'>({dw:+.0f})</span></div>
+                          </div>
+                        </div>
+                        <div style="font-size:12px;color:{cf_hue};font-weight:600;margin-top:6px;">{convoy_report.consensus_final_band}</div>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # ---- Rollup lines --------------------------------
+                for L in convoy_report.convoy_summary_lines:
+                    st.markdown(
+                        f"<div style='padding:8px 14px;margin:4px 0;border-radius:8px;background:rgba(15,23,42,0.35);border-left:3px solid {cf_hue};font-size:13.5px;color:#e2e8f0;line-height:1.5;'>{L}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                # ---- Member cards --------------------------------
+                st.markdown(
+                    '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:18px 0 8px 0;">Members — personal trip under STAY_COURSE</div>',
+                    unsafe_allow_html=True,
+                )
+                m_cols = st.columns(min(4, max(1, len(members))))
+                for j, (m, p) in enumerate(zip(convoy_obj.members, convoy_report.member_personal_baselines)):
+                    with m_cols[j % len(m_cols)]:
+                        p_hue = _band_to_color.get(p.trip_band, "#7BC5F1")
+                        v = cvy._vulnerability(m.profile)
+                        vuln_pct = int(v * 100)
+                        flags_str = (
+                            ", ".join(m.profile.medical_flags)
+                            if m.profile.medical_flags else "no medical flags"
+                        )
+                        st.markdown(
+                            f"""
+                            <div style="padding:14px;border-radius:12px;background:rgba(15,23,42,0.5);border:1px solid {p_hue}44;">
+                              <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                                <div style="font-size:14px;font-weight:700;color:#f8fafc;">{m.name}</div>
+                                <span style="font-size:10px;letter-spacing:1px;padding:2px 8px;border-radius:999px;background:{p_hue}22;color:{p_hue};font-weight:700;">{p.trip_band}</span>
+                              </div>
+                              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">{m.profile.age_band} · mobility {m.profile.mobility} · rt {m.profile.risk_tolerance:.2f} · curfew {m.profile.curfew_hour}:00</div>
+                              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">{flags_str}</div>
+                              <div style="font-size:36px;font-weight:800;color:{p_hue};line-height:1;margin-top:10px;">{p.trip_score}<span style='font-size:12px;color:#94a3b8;font-weight:600;'>/100</span></div>
+                              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">mean {p.mean_day:.0f} · min {p.min_day}</div>
+                              <div style="height:4px;margin-top:8px;background:rgba(148,163,184,0.15);border-radius:2px;overflow:hidden;">
+                                <div style="height:100%;width:{vuln_pct}%;background:linear-gradient(90deg,#F9C44088,#FF9F43);"></div>
+                              </div>
+                              <div style="font-size:10px;color:#94a3b8;margin-top:2px;letter-spacing:0.5px;">vulnerability {v:.2f}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                # ---- Ballots panel -------------------------------
+                st.markdown(
+                    '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Strategy ballots — consensus uplift ranked</div>',
+                    unsafe_allow_html=True,
+                )
+                for b in convoy_report.ballots:
+                    hint_color = {
+                        "consensus": "#53E3A6",
+                        "baseline": "#7BC5F1",
+                        "dissent": "#F9C440",
+                        "veto": "#FF3D60",
+                    }.get(b.rank_hint, "#94a3b8")
+                    is_winner = (
+                        b.strategy_kind == convoy_report.consensus_ballot.strategy_kind
+                        and b.strategy_day_index
+                        == convoy_report.consensus_ballot.strategy_day_index
+                    )
+                    ring = (
+                        f"box-shadow:0 0 22px {hint_color}55;border:2px solid {hint_color};"
+                        if is_winner
+                        else "border:1px solid rgba(148,163,184,0.15);"
+                    )
+                    id_to_name = {m.id: m.name for m in convoy_obj.members}
+                    chip_html = ""
+                    for v in b.votes:
+                        chip_bg = "#FF3D60" if v.is_veto else (
+                            "#F9C440" if v.is_dissent else (
+                                "#53E3A6" if v.uplift >= 1 else "#7BC5F1"
+                            )
+                        )
+                        chip_html += (
+                            f"<span style='display:inline-block;padding:3px 8px;"
+                            f"margin:2px 3px 2px 0;border-radius:999px;"
+                            f"font-size:11px;font-weight:700;background:{chip_bg}22;"
+                            f"color:{chip_bg};border:1px solid {chip_bg}55;'>"
+                            f"{id_to_name.get(v.member_id, v.member_id)} "
+                            f"{v.uplift:+.0f}</span>"
+                        )
+                    st.markdown(
+                        f"""
+                        <div style="padding:12px 16px;margin:8px 0;border-radius:10px;background:rgba(15,23,42,0.4);{ring}">
+                          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                            <span style="font-size:10px;letter-spacing:1.4px;padding:2px 8px;border-radius:999px;background:{hint_color}22;color:{hint_color};font-weight:800;text-transform:uppercase;">{b.strategy_kind}</span>
+                            <span style="font-size:14px;font-weight:600;color:#e2e8f0;">{b.strategy_label}</span>
+                            <span style="margin-left:auto;font-size:20px;font-weight:800;color:{hint_color};">
+                              {b.consensus_uplift:+.1f}<span style='font-size:11px;color:#94a3b8;font-weight:600;'> pts</span>
+                            </span>
+                          </div>
+                          <div style="margin-top:6px;font-size:12.5px;color:#cbd5e1;line-height:1.45;">{b.strategy_detail}</div>
+                          <div style="margin-top:8px;">{chip_html}</div>
+                          <div style="margin-top:4px;font-size:11px;color:#94a3b8;">
+                            mean {b.mean_uplift:+.1f} · worst {b.worst_uplift:+.1f} · dissenters {b.n_dissent}/{b.dissent_tolerance} · vetoes {b.n_veto} · {'admissible' if b.is_admissible else 'inadmissible — falls back to STAY_COURSE'}
+                          </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                # ---- Personalised advisories ---------------------
+                st.markdown(
+                    '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Personalised advisories</div>',
+                    unsafe_allow_html=True,
+                )
+                id_to_name = {m.id: m.name for m in convoy_obj.members}
+                id_to_band = {
+                    p.member_id: p.trip_band
+                    for p in convoy_report.member_personal_baselines
+                }
+                for mid, adv_lines in convoy_report.per_member_advisories:
+                    band = id_to_band.get(mid, "Solid")
+                    a_hue = _band_to_color.get(band, "#7BC5F1")
+                    body = "".join(
+                        f"<div style='padding:6px 0;font-size:13px;color:#e2e8f0;line-height:1.5;'>{L}</div>"
+                        for L in adv_lines
+                    )
+                    st.markdown(
+                        f"""
+                        <div style="padding:12px 16px;margin:6px 0;border-radius:10px;background:rgba(15,23,42,0.35);border-left:3px solid {a_hue};">
+                          <div style="font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;">{id_to_name.get(mid, mid)}</div>
+                          {body}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                # ---- Export --------------------------------------
+                st.markdown("---")
+                ex_c1, ex_c2 = st.columns(2)
+                with ex_c1:
+                    st.download_button(
+                        "Download JSON (waysafe.convoy.v1)",
+                        data=cvy.to_json(convoy_report),
+                        file_name="waysafe_convoy.json",
+                        mime="application/json",
+                        use_container_width=True,
+                    )
+                with ex_c2:
+                    st.download_button(
+                        "Download Markdown consensus brief",
+                        data=cvy.to_markdown(convoy_report),
+                        file_name="waysafe_convoy.md",
+                        mime="text/markdown",
+                        use_container_width=True,
+                    )
+
+                t_cvy_md, t_cvy_json = st.tabs(["Markdown preview", "JSON preview"])
+                with t_cvy_md:
+                    st.markdown(cvy.to_markdown(convoy_report))
+                with t_cvy_json:
+                    st.code(cvy.to_json(convoy_report, indent=2), language="json")
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")

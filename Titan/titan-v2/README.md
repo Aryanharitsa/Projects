@@ -13,6 +13,47 @@ narrative — turning a wall of factor bars into "this looks like
 smurfing — here's the 86% confidence, here's the contributing evidence,
 here's the freeze-and-investigate paragraph".
 
+> **Day-90 — Codex · evidence-cited SAR narrative composer.**
+> Every prior TITAN surface answers *"what is the risk here?"*. Codex
+> answers the question a compliance officer actually has to file:
+> *"what does the paragraph you're about to submit to FinCEN / FIU-IND
+> / AUSTRAC look like, and does it pass the filing-quality checklist?"*.
+> The existing `apps/ai-aml/sar.py` renders a one-shot template — Codex
+> assembles the full FinCEN **5W + How + Action** narrative
+> (Who / What / When / Where / Why / How / Action), threads every claim
+> through a **typed citation** back to the underlying evidence
+> (`subject`, `counterparty`, `transaction`, `factor`, `typology`,
+> `sanctions`, `period`, `geo`, `channel`, `totals`, `band`,
+> `adverse-media`), scores the draft against a **twelve-item
+> filing-quality checklist** with weights that sum to 100 (subject
+> named, period bounded, ≥3 representative transactions cited, primary
+> typology cited, counterparty named, sanctions screening declared, no
+> placeholder tokens, action stated, redaction rules applied, …), and
+> emits a `publish_ready / acceptable / needs_work / unfilable` verdict.
+> Deterministic — same account report always yields the same paragraph
+> and the same checklist result. New `apps/ai-aml/codex.py` (~1,050 LOC,
+> pure stdlib, **zero new deps**). Surfaces at `/aml/codex/{rules,
+> sample, compose, case/{id}, export.md}` behind the gateway.
+>
+> **Surface** — new `/codex` route between Nexus and Drift. Grade-tinted
+> radial hero, subject / band / CDX-id chip strip, quality-grade meter
+> (score arc + pass/fail count). Toolbar with **analyst input**, **load
+> from case** (composes off the frozen snapshot the case store owns),
+> **redact toggle** (masks account and counterparty identifiers to their
+> last four chars; citations retain raw refs so the audit trail is
+> intact), and a paste-ready **copy / download markdown**. Three-column
+> composition grid: **evidence library** (left) groups every citation
+> by kind and cross-highlights the narrative on hover; seven **section
+> cards** (center) — one per FinCEN heading, each with the FinCEN prompt
+> as inline coaching text and citation chips inline at the end of every
+> paragraph, list, and table; the **quality panel** (right) shows the
+> score arc, per-section pass/fail with hints for the failing checks,
+> and a missing-evidence-kinds strip. Section jump-chips scroll the
+> narrative. Every constant the engine touches is dumped in the
+> `/aml/codex/rules` endpoint and the on-page footer — section prompts,
+> evidence-kind vocabulary, weighted checklist, grade ladder. AML:
+> `titan-aml/1.17.0` · Codex: `titan-codex/1.0.0`.
+
 > **Day-85 — Horizon · regulatory-change impact simulator.**
 > Every prior TITAN surface answers "given today's rules, what is this
 > case?". Horizon answers the question every MLRO loses sleep over the
@@ -737,6 +778,11 @@ here's the freeze-and-investigate paragraph".
 | **Nexus entity** | `GET  /aml/nexus/entity/{id}` | Per-target UBO report, controllers with aggregate control, sanctions/PEP hits, opacity components, and cycles touching |
 | **Nexus reach** | `GET  /aml/nexus/reach/{root_id}` | Downstream reach of a controller — every target with cumulative control + OFAC/PEP reach code |
 | **Nexus export** | `GET  /aml/nexus/export.md` | Paste-able ownership memo — UBO table + sanctions/PEP nexus + top paths + opacity components + cycles |
+| **Codex rules** | `GET  /aml/codex/rules` | FinCEN 5W section prompts + evidence-kind vocabulary + weighted checklist (12 items, weights sum to 100) + grade ladder |
+| **Codex sample** | `GET  /aml/codex/sample` | Bundled demo account report + composed narrative + redacted twin — exercises every section, evidence kind, and checklist item |
+| **Codex compose** | `POST /aml/codex/compose` | Caller-supplied `account_report` → fully cited narrative. `redact` toggles subject / counterparty masking; `include_zero_factors` shows every detector under §5 |
+| **Codex case** | `GET  /aml/codex/case/{case_id}` | Composes off the case store's frozen snapshot — the same shape the analyst saw at triage time, not any post-hoc mutation |
+| **Codex export** | `GET  /aml/codex/export.md` | Paste-into-your-case-note markdown SAR draft with the quality checklist rendered inline (works over the sample or a specific `case_id`) |
 
 The Next.js frontend at `:3000` is the human surface. It only talks to the
 gateway at `:8000`, which fans out to `ai-ocr` (8001), `ai-aml` (8002), and

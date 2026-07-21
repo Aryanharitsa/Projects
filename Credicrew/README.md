@@ -60,13 +60,67 @@ skip-level, tier-aware mix), folds the referees' verdicts
 score-shifted composite (–25..+15 pts, weighted by question priority),
 and issues one of five terminal calls — *proceed / proceed with caveat /
 reopen the loop / block offer / awaiting refs* — before the offer letter
-ever goes out. All from a dark, fast, single-page workspace.
+ever goes out, and now **puts the whole hiring machine on one dial** with
+**Compass** — a Loop Health Radar that scores the six upstream engines
+(funnel, calibration, predictiveness, pay parity, rejection signal,
+channel ROI) on a 0–100 axis each, composites them into a single number
+your Head of Talent can glance at on a Monday morning, calls out the
+weakest axis with a specific move to make, and links every tile back to
+the surface that produced it — so the boss dashboard and the drill-down
+share the same math. All from a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Compass (Day 87)
+
+Every prior Credicrew surface answers a *local* question. Portfolio tells
+you how one role is doing. Calibration tells you whether one panel is
+noisy. Hindsight tells you whether the rubric predicted one quarter's
+hires. Peer Parity tells you if one offer is drifting. Verdict tells you
+whether one JD's rejection pile reads as JD tuning or as pool quality.
+Sources tells you which channel is producing hires per rupee.
+
+None of them answers the one question a Head of Talent opens their week
+with: **is the whole hiring loop healthy — or is it quietly leaking
+somewhere?**
+
+**Compass** is that answer. Six axes, each already earned by an upstream
+engine, each scored 0..100 by the same math the source surface already
+publishes:
+
+| # | Axis | Source engine | What it measures |
+|---|---|---|---|
+| 1 | Funnel | Portfolio | portfolioHealth, minus a stale-share penalty so ten dormant reqs don't hide behind one hot one |
+| 2 | Calibration | Calibration Studio | ICC (de-biased) blended with cross-cell consensus, penalised per flagged rater |
+| 3 | Predictiveness | Hindsight | Pearson(composite × performance) blended with hit-rate and (1−Brier), small-sample-penalised until n≥8 |
+| 4 | Pay parity | Peer Parity | Inverted drift z-score (`100 − (drift / 3) · 100`), plus penalties for inversions and out-of-band dims |
+| 5 | Signal | Verdict | signalHealth bucket, penalised outside the [35–65]% pass-share window and for funnel-waste over 60/100 |
+| 6 | Channel | Sources | Volume-weighted ROI, blended with Shannon-entropy diversification, less a cost-per-offer penalty above ₹500k |
+
+The **composite** is a weighted mean over axes with data — a fresh
+workspace with no hires won't crash to 20/100 just because Hindsight is
+empty. **Weights:** funnel 20 · calibration 15 · predictiveness 15 ·
+parity 10 · signal 15 · channel 10. **Band cut-offs:** 75+ strong ·
+55+ stable · 35+ warning · else critical.
+
+Every axis tile carries a one-sentence headline (*"panels are unreliable —
+one rater is deciding it"* / *"pool is fished out — open new channels"*),
+2-4 evidence bullets pulled straight from the source engine, and a deep
+link back to the surface that produced the score. The **weakest** axis
+gets called out with a specific recommended move; the **strongest** gets
+a bragging-rights chip. A Markdown brief is one click away, so the whole
+loop rolls up into a paste-able weekly update.
+
+The engine lives in `frontend/src/lib/compass.ts` (~14 kB, pure functions
+only). The page lives in `frontend/src/app/compass/page.tsx`. Both are
+byte-for-byte mirrorable in `backend/app/services/compass.py` on the day
+we need it.
 
 ---
 
@@ -1649,6 +1703,7 @@ Credicrew/
 │       ├── app/
 │       │   ├── page.tsx            # Discover (search + composition + roles)
 │       │   ├── hq/page.tsx         # Command Center (portfolio rollup)
+│       │   ├── compass/page.tsx    # Compass — Loop Health Radar (NEW)
 │       │   ├── sources/page.tsx    # Channel Studio (sourcing intelligence)
 │       │   ├── cadence/page.tsx    # Cadence Studio (stage aging + SLA — NEW)
 │       │   ├── pipeline/page.tsx   # Quick-saves
@@ -1696,6 +1751,7 @@ Credicrew/
 │           ├── peer_parity.ts      # regression · z-scores · inversions (parity w/ backend)
 │           ├── peer_seed.ts        # 8-peer realistic seed for fresh roles
 │           ├── portfolio.ts        # portfolio rollup · funnel · comp forecast · health
+│           ├── compass.ts          # loop-health radar · six axes · composite (NEW)
 │           ├── calibration.ts      # rater bias · consensus · ICC · de-biased ranking (parity w/ backend)
 │           ├── panel_seed.ts       # deterministic biased-panel seed for a role
 │           ├── sources.ts          # channel ROI · funnel · brief (parity w/ backend)

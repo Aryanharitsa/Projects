@@ -66,6 +66,14 @@ const FEATURES = [
     cta: "Simulate a change",
   },
   {
+    href: "/codex",
+    title: "Codex",
+    eyebrow: "SAR narrative composer",
+    body: "Every prior surface returns a number. Codex returns the paragraph you actually file with FinCEN — a FinCEN 5W skeleton assembled from the case snapshot, with every sentence cited back to typed evidence (transactions, factors, typologies, sanctions hits, counterparties). Ships with a filing-quality checklist that catches the mistakes that get SARs bounced.",
+    accent: "from-teal-400/30 via-violet-500/15 to-transparent",
+    cta: "Compose a draft",
+  },
+  {
     href: "/kyc",
     title: "KYC Pipeline",
     eyebrow: "Identity",

@@ -124,6 +124,14 @@ POST   /aml/horizon/simulate             replay any proposal — over fixture, s
 GET    /aml/horizon/case/{case_id}       per-case drill-down for a preset (?preset=)
 POST   /aml/horizon/explain              per-case drill-down for a caller-built proposal
 GET    /aml/horizon/export.md            paste-able impact memo (Slack / change ticket)
+
+Codex — evidence-cited SAR narrative composer (round-19, day-90)
+----------------------------------------------------------------
+GET    /aml/codex/rules                  section prompts + checklist + grade ladder
+GET    /aml/codex/sample                 bundled demo account report + composed codex
+POST   /aml/codex/compose                caller-supplied account report → cited narrative
+GET    /aml/codex/case/{case_id}         compose from a case's snapshot (redact toggle)
+GET    /aml/codex/export.md              paste-able markdown SAR draft (sample or case_id)
 """
 
 from __future__ import annotations
@@ -136,6 +144,7 @@ from pydantic import BaseModel, Field
 
 import backtest as backtest_engine
 import cases as case_store
+import codex as codex_engine
 import drift as drift_engine
 import horizon as horizon_engine
 import lineage as lineage_engine
@@ -152,7 +161,7 @@ import sar as sar_engine
 import triage as triage_engine
 import typology as typology_engine
 
-ENGINE_VERSION = "titan-aml/1.16.0"
+ENGINE_VERSION = "titan-aml/1.17.0"
 
 app = FastAPI(
     title="TITAN AML",
@@ -1745,5 +1754,138 @@ def horizon_export(preset: Optional[str] = Query(default=None)):
     report = horizon_engine.simulate(proposal, horizon_engine.demo_cases())
     return PlainTextResponse(
         horizon_engine.export_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Codex — evidence-cited SAR narrative composer (round-19, day-90)
+#
+# Every prior surface answers "what is the risk here?".  Codex answers
+# "what does the paragraph you're about to file with FinCEN / FIU-IND /
+# AUSTRAC look like, and does it pass the filing-quality checklist?".
+# Deterministic, per-sentence explainable — every claim in the narrative
+# links back to a typed piece of evidence.
+# ---------------------------------------------------------------------------
+
+
+class CodexComposeReq(BaseModel):
+    account_report: Dict[str, Any]
+    analyst: Optional[str] = "TITAN-AUTOMATED"
+    redact: bool = False
+    include_zero_factors: bool = False
+
+
+@app.get("/aml/codex/rules")
+def codex_rules() -> Dict[str, Any]:
+    """Auditor-facing dump — section prompts, checklist definition,
+    grade ladder, evidence-kind vocabulary.  Nothing hidden in code."""
+    return {"ok": True, "engine": ENGINE_VERSION, **codex_engine.get_rules()}
+
+
+@app.get("/aml/codex/sample")
+def codex_sample() -> Dict[str, Any]:
+    """Bundled demo — one composed publish-ready narrative + a redacted
+    twin, over a self-contained account report that exercises every
+    section, evidence kind, and checklist item."""
+    return {"ok": True, "engine": ENGINE_VERSION, **codex_engine.sample()}
+
+
+@app.post("/aml/codex/compose")
+def codex_compose(req: CodexComposeReq = Body(...)) -> Dict[str, Any]:
+    """Compose a fully cited narrative for a caller-supplied account
+    report.  Report shape follows ``risk.AccountReport.to_dict()``."""
+    if not (req.account_report or {}).get("account_id"):
+        raise HTTPException(status_code=400,
+                            detail="account_report.account_id required")
+    try:
+        codex = codex_engine.compose(
+            req.account_report,
+            analyst=req.analyst or "TITAN-AUTOMATED",
+            redact=bool(req.redact),
+            include_zero_factors=bool(req.include_zero_factors),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"ok": True, "engine": ENGINE_VERSION, "codex": codex}
+
+
+@app.get("/aml/codex/case/{case_id}")
+def codex_case(
+    case_id: str,
+    analyst: Optional[str] = Query(default="TITAN-AUTOMATED"),
+    redact: bool = Query(default=False),
+) -> Dict[str, Any]:
+    """Compose a narrative from a case's frozen snapshot.  The case
+    store owns the account report we saw at triage time — Codex composes
+    off that, not off any post-hoc mutation."""
+    case = case_store.get_case(case_id, with_events=False)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    snapshot = case.get("snapshot") or {}
+    account_report = snapshot.get("account_report") or snapshot
+    if not account_report.get("account_id"):
+        account_report["account_id"] = case.get("account_id", case_id)
+    if case.get("display_name") and not account_report.get("display_name"):
+        account_report["display_name"] = case["display_name"]
+    try:
+        codex = codex_engine.compose(
+            account_report,
+            analyst=analyst or "TITAN-AUTOMATED",
+            redact=bool(redact),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "case_id": case_id,
+        "case": {
+            "id": case["id"],
+            "status": case["status"],
+            "priority": case["priority"],
+            "risk_score": case["risk_score"],
+            "band": case["band"],
+            "assignee": case.get("assignee"),
+            "opened_at_iso": case.get("opened_at_iso"),
+        },
+        "codex": codex,
+    }
+
+
+@app.get("/aml/codex/export.md", response_class=None)
+def codex_export(
+    case_id: Optional[str] = Query(default=None),
+    analyst: Optional[str] = Query(default="TITAN-AUTOMATED"),
+    redact: bool = Query(default=False),
+):
+    """Paste-able markdown SAR draft.
+
+    Without ``case_id`` renders the bundled demo; with ``case_id``
+    composes off that case's snapshot.  Never hits the LLM; identical
+    inputs always yield identical output.
+    """
+    from fastapi.responses import PlainTextResponse
+
+    if case_id:
+        case = case_store.get_case(case_id, with_events=False)
+        if not case:
+            raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+        snapshot = case.get("snapshot") or {}
+        account_report = snapshot.get("account_report") or snapshot
+        if not account_report.get("account_id"):
+            account_report["account_id"] = case.get("account_id", case_id)
+        if case.get("display_name") and not account_report.get("display_name"):
+            account_report["display_name"] = case["display_name"]
+        codex = codex_engine.compose(
+            account_report,
+            analyst=analyst or "TITAN-AUTOMATED",
+            redact=bool(redact),
+        )
+    else:
+        codex = codex_engine.sample()["codex" if not redact else "codex_redacted"]
+
+    return PlainTextResponse(
+        codex_engine.to_markdown(codex),
         media_type="text/markdown; charset=utf-8",
     )

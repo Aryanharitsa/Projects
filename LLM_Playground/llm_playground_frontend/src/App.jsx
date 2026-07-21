@@ -59,6 +59,7 @@ import {
   Scissors,
   Compass,
   Radio,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -76,6 +77,7 @@ import SurgeonStudio from './components/SurgeonStudio';
 import FrontierStudio from './components/FrontierStudio';
 import RelayStudio from './components/RelayStudio';
 import SentinelStudio from './components/SentinelStudio';
+import CacheStudio from './components/CacheStudio';
 import './App.css';
 
 const App = () => {
@@ -1138,7 +1140,14 @@ const App = () => {
                       <RadioGroupItem value="sentinel" id="sentinel" />
                       <Label htmlFor="sentinel" className="cursor-pointer flex items-center gap-1">
                         <Shield className="w-3.5 h-3.5 text-rose-600" />
-                        Sentinel <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-rose-500 via-amber-500 to-sky-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Sentinel
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="cache" id="cache" />
+                      <Label htmlFor="cache" className="cursor-pointer flex items-center gap-1">
+                        <Database className="w-3.5 h-3.5 text-sky-600" />
+                        Cache <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-sky-500 via-emerald-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1428,6 +1437,10 @@ const App = () => {
           ) : selectedMode === 'sentinel' ? (
             <div className="lg:col-span-3">
               <SentinelStudio />
+            </div>
+          ) : selectedMode === 'cache' ? (
+            <div className="lg:col-span-3">
+              <CacheStudio />
             </div>
           ) : selectedMode === 'adversary' ? (
             <div className="lg:col-span-3">

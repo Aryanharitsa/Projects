@@ -1128,3 +1128,79 @@ async def aml_horizon_export(preset: Optional[str] = None):
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=r.text)
         return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Codex proxies — evidence-cited SAR narrative composer (round-19, day-90)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/aml/codex/rules")
+async def aml_codex_rules() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(f"{AML_SVC}/aml/codex/rules")
+        r.raise_for_status()
+        return r.json()
+
+
+@app.get("/aml/codex/sample")
+async def aml_codex_sample() -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/codex/sample")
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return r.json()
+
+
+@app.post("/aml/codex/compose")
+async def aml_codex_compose(payload: Dict[str, Any]) -> Dict[str, Any]:
+    async with httpx.AsyncClient(timeout=25) as client:
+        r = await client.post(f"{AML_SVC}/aml/codex/compose", json=payload)
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/codex/case/{case_id}")
+async def aml_codex_case(
+    case_id: str,
+    analyst: Optional[str] = None,
+    redact: bool = False,
+) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"redact": str(bool(redact)).lower()}
+    if analyst:
+        params["analyst"] = analyst
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(
+            f"{AML_SVC}/aml/codex/case/{case_id}", params=params
+        )
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            raise HTTPException(status_code=r.status_code, detail=detail)
+        return r.json()
+
+
+@app.get("/aml/codex/export.md")
+async def aml_codex_export(
+    case_id: Optional[str] = None,
+    analyst: Optional[str] = None,
+    redact: bool = False,
+):
+    from fastapi.responses import PlainTextResponse
+    params: Dict[str, Any] = {"redact": str(bool(redact)).lower()}
+    if case_id:
+        params["case_id"] = case_id
+    if analyst:
+        params["analyst"] = analyst
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(f"{AML_SVC}/aml/codex/export.md", params=params)
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=r.text)
+        return PlainTextResponse(r.text, media_type="text/markdown; charset=utf-8")

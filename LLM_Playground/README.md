@@ -18,19 +18,220 @@ critical / supporting / dead‑weight / harmful, ships a lean prompt +
 monthly $ savings), **Frontier** (cost / quality Pareto explorer that
 kneedles the elbow of a model roster), **Relay** (a cascade router
 designer that runs cheap models first and escalates to flagship only
-when a confidence gate fires) — and, new this round, **Sentinel**:
-the prompt‑injection defense studio every 2026 production deployment
-needs. 24 known attacks × 6 families × 7 defenses, a deterministic
-scanner, a live 24×7 catch matrix, and a policy compiler that ships
-JSON straight to your middleware — with weighted catch, false‑positive
-rate, latency, and monthly cost delta all moving in place as you
-toggle defenses on and off.
+when a confidence gate fires), **Sentinel** (the prompt‑injection
+defense studio with 24 attacks × 7 defenses, a deterministic scanner,
+a 24×7 catch matrix, and a JSON policy compiler) — and, new this
+round, **Cache**: the semantic response cache studio every 2026
+production LLM deployment reaches for after week two. Four eviction
+policies × eight thresholds simulated against your workload, three
+shippable picks (conservative / balanced / aggressive), a live
+threshold sensitivity curve, single‑link intent clusters, and a JSON
+config that a middleware layer can enforce byte‑for‑byte — with hit
+rate, quality risk, monthly savings and p95 latency all moving in
+place as you drag the threshold slider.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Sentinel: Prompt Injection Defense Studio (Day 83)
+## 🆕 What's new — Cache: Semantic Response Cache Studio (Day 88)
+
+> Every prior LLM_Playground surface answered *quality* (Arena, Rubrics,
+> Judge, Suites), *robustness* (Adversary, Drift, Surgeon), *cost/model
+> pick* (Frontier), *routing* (Relay), or *guarding* (Sentinel). None of
+> them ask the one question that every 2026 production LLM deployment
+> gets asked in the second week: **how much of this traffic could a
+> cache answer for free?**
+
+Real production LLM apps see 25–70 % semantic repetition — the same
+intent phrased differently. A semantic response cache maps *paraphrases*
+to the same cached answer, dropping cost + latency by a large factor.
+But the design is a knife‑edge: too loose and stale answers leak; too
+tight and the cache is empty. **Cache** is the deterministic studio for
+tuning that knife‑edge.
+
+Hit **Cache** in the sidebar. The studio opens on a real workload
+(**Customer Support Chatbot**, 137 requests over 8 canonical intents),
+with a live sky‑hued hit‑rate ring, an emerald cost‑saved ring, and
+four stat tiles that already read **~55 % hit rate**, **~$136 / mo
+savings** on 100 K requests, **~280 ms average latency** and **~1 %
+quality risk**. Three RecCards below (**Conservative** · **Balanced** ·
+**Aggressive**) show three shippable picks off one call: pick any one
+and the whole studio snaps to that (policy, threshold).
+
+Every number is deterministic, every number moves in place.
+
+### What it covers
+
+**Four eviction policies:**
+
+| Slug   | Name                   | Best for                          | Trade‑off                          |
+|--------|------------------------|-----------------------------------|-------------------------------------|
+| `lru`  | Least Recently Used    | Recency‑biased chat, session flows| Bursts flush out popular entries    |
+| `lfu`  | Least Frequently Used  | FAQ / KB, stable head             | Slow to adapt to new hot intents    |
+| `fifo` | First In, First Out    | Predictable retention             | Ignores popularity entirely         |
+| `sdiv` | Semantic Diversity     | Small capacities, diverse traffic | O(n) per eviction                   |
+
+**Three seed workloads** (fully perturbed — no exact duplicates):
+
+- **Customer Support** — 137 requests, 8 intents (refund status,
+  password reset, subscription cancel, shipping delay, …), high
+  paraphrase density.
+- **RAG FAQ Bot** — 108 requests, 7 KB intents (pricing, SAML SSO,
+  data retention, rate limits, GDPR, …). Heavy head, fewer paraphrase
+  families.
+- **Developer Code Help** — 84 requests, 7 debug patterns (null
+  pointer, regex, SQL joins, git conflict, React state, …). Broadest
+  lexical diversity.
+
+Each workload ships with per‑copy deterministic perturbations
+(fillers, synonym swaps, casing / punctuation drift) so the threshold
+curve actually shows the intent / paraphrase trade‑off it's meant to.
+
+### The math
+
+* **Hashing bag‑of‑tokens embedding** (128‑dim, deterministic, offline).
+  Tokens are hashed into 1 of 128 buckets with a bigram boost so
+  paraphrases with the same unigrams but different word order still
+  separate a little. L2‑normalised. Swap for a production embedder
+  (bge‑small at 384‑dim or text‑embedding‑3‑small at 1536‑dim) — the
+  simulator's cost / hit ratios carry over.
+* **Cache simulator** — for each request, cosine‑similar to every
+  cache entry. If `sim ≥ threshold`, hit → replay cached response
+  (cost `$0.0000075`, latency `~4 ms`); otherwise miss → insert and
+  evict per policy (cost `$0.0025`, latency `~620 ms`).
+* **Quality safety bar** — hits with `sim < 0.85` count as
+  *quality‑risky*. Below the bar the cached answer might miss intent
+  nuance; above it, you can ship. The bar is calibrated for the
+  hashing embedder; production embedders can push it toward 0.92.
+* **Compose over any workload** — the sweep returns 8 threshold
+  points × 4 policies (32 configurations) in one call, each carrying
+  hit rate, savings %, quality risk %, avg latency, evictions, and
+  final cache size.
+
+### Three shippable picks
+
+Ship policy = `(policy_id, threshold)`. Given a workload and a
+`quality_risk_ceiling`, the recommender enumerates every
+`(policy × threshold)` pair (32 candidates), scores them, and returns:
+
+| Pick            | Rule                                                          | Blurb                                                    |
+|-----------------|---------------------------------------------------------------|----------------------------------------------------------|
+| `conservative`  | max hit rate under **quality risk ≤ 3 %**                     | Cache only near‑identical paraphrases. Highest safety.   |
+| `balanced`      | max **monthly savings** under caller‑supplied ceiling         | Cheapest shape whose quality risk stays under the bar.   |
+| `aggressive`    | max **monthly savings** regardless of quality risk            | Maximum savings; accepts a wider quality‑risk window.    |
+
+On the Customer Support workload at 100 K req/mo and a 10 % ceiling:
+`conservative` = LRU @ 0.82, ~55 % hit, ~$136/mo, ~1 % risk;
+`balanced` = LRU @ 0.82 (same shape — ceiling wasn't binding);
+`aggressive` = LRU @ 0.65, ~74 % hit, ~$186/mo, ~30 % risk.
+
+### Threshold × policy grid
+
+A 4×8 heatmap: rows are the four eviction policies, columns are the
+eight sweep thresholds `(0.65 · 0.75 · 0.82 · 0.86 · 0.88 · 0.90 · 0.93
+· 0.96)`. Cell shade = savings %, subline = `hit % / risk %`. Click any
+cell to snap the whole studio to that `(policy, threshold)`. The active
+cell gets a white ring. Every studio metric — hit rate ring, savings
+ring, stat tiles, sweep curve, cluster count, compiled policy — updates
+in place.
+
+### The centerpiece: threshold sensitivity curve
+
+Three lines over the eight sweep thresholds:
+
+* **Sky** — hit rate (falls as threshold tightens).
+* **Emerald** — cost savings (tracks hit rate closely).
+* **Rose** — quality‑risk (collapses when the threshold crosses the
+  safety bar).
+
+The right pick is where the emerald savings line has fallen just
+enough to bring rose quality‑risk under your ceiling. Click any band
+along the x‑axis to snap the studio to that threshold.
+
+### Intent clusters (single‑link agglomerative)
+
+At the current threshold the studio runs single‑link agglomerative
+clustering over the workload and returns:
+
+* One cluster per family (`c000`, `c001`, …), with size, share % of
+  the workload, first prompt as representative, and the tags observed
+  in the cluster (`#refund_status`, `#reset_password`, …).
+* Head‑20 % share so you can see how *dominated* your workload is by
+  a few intents (a higher head share means a smaller cache can capture
+  more of the value).
+* Singleton count — the tail that no cache will ever help with.
+
+### The compiled cache
+
+Given the current `(policy, threshold, capacity, ttl_seconds,
+monthly_requests)`, the compiler returns a JSON blob a middleware layer
+can enforce byte‑for‑byte:
+
+```json
+{
+  "engine": "cache/1.0.0",
+  "cache_id": "96484427ada88dbb",
+  "policy": "lru",
+  "policy_name": "LRU — Least Recently Used",
+  "threshold": 0.82,
+  "capacity": 512,
+  "ttl_seconds": 604800,
+  "quality_risk_ceiling": 0.08,
+  "safe_similarity_bar": 0.85,
+  "embedding": { "kind": "hashing-bag-of-tokens-bigram", "dim": 128 },
+  "pipeline": [
+    { "step": 1, "action": "normalize", "notes": "NFKC, lowercase, whitespace collapse" },
+    { "step": 2, "action": "embed", "notes": "vector(128)" },
+    { "step": 3, "action": "search", "notes": "cosine >= 0.82" },
+    { "step": 4, "action": "policy", "notes": "LRU — Least Recently Used" },
+    { "step": 5, "action": "ttl_sweep", "notes": "expire > 604800s" },
+    { "step": 6, "action": "capacity_bound", "notes": "max 512 entries" }
+  ],
+  "expected": {
+    "hit_rate": 0.5474, "quality_risk_pct": 0.0133, "avg_latency_ms": 280.7,
+    "monthly_savings_usd": 136.45, "monthly_cost_usd": 113.55,
+    "monthly_baseline_usd": 250.00
+  }
+}
+```
+
+Same inputs → same `cache_id` byte‑for‑byte.
+
+### API surface
+
+Eight endpoints under `/api/cache`:
+
+| Route                | Method  | Purpose                                                        |
+|----------------------|---------|----------------------------------------------------------------|
+| `/defaults`          | GET     | Default threshold / capacity / TTL / policy / cost / latency   |
+| `/policies`          | GET     | 4 eviction policies with hue, strengths, weaknesses            |
+| `/workloads`         | GET     | 3 seed workloads with size, intents, sample prompts            |
+| `/simulate`          | POST    | Run one `(policy, threshold, capacity, ttl)` config            |
+| `/sweep`             | POST    | 8‑point curve + 4‑policy grid in one call                      |
+| `/recommend`         | POST    | 3 shippable picks + full 32‑candidate list                     |
+| `/cluster`           | POST    | Single‑link clusters at a chosen threshold                     |
+| `/compile`           | POST    | JSON config + Markdown export                                  |
+| `/seed`              | GET/POST| Deterministic first‑load bundle                                |
+
+### Verification
+
+* `py_compile` clean on `src/cache.py` and the modified
+  `src/routes/llm.py`.
+* Flask `TestClient` end‑to‑end over all 8 endpoints — happy path
+  200s, empty inline workload returns 400 with `workload is empty`,
+  unknown `workload_id` returns 400 with `unknown workload_id: …`.
+* On the customer_support seed the studio lands hit_rate `~55 %`,
+  savings `~54 %`, quality_risk `~1 %` at (`lru`, `0.82`); pushing the
+  threshold to `0.65` lifts hit_rate to `~74 %` at 30 % quality risk;
+  pushing to `0.96` drops hit_rate to `~2 %` at 0 % risk. Sweep curve
+  and policy grid recompute byte‑for‑byte across refreshes.
+* `pnpm build` clean — **1739 modules**, 999.6 KB JS / 217.1 KB CSS in
+  **7.1 s** (`+1 module`, `+~1 %` JS vs pre‑Cache Sentinel build).
+
+---
+
+## What's new — Sentinel: Prompt Injection Defense Studio (Day 83)
 
 > Every prior LLM_Playground surface has been about **quality** or
 > **cost**. None of them ask the one question that every 2026 deployed
