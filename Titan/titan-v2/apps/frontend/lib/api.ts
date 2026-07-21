@@ -2996,3 +2996,196 @@ export function horizonExportUrl(preset?: string): string {
   const q = qs.toString();
   return `${API_BASE}/aml/horizon/export.md${q ? `?${q}` : ""}`;
 }
+
+// ---------------------------------------------------------------------------
+// Codex — evidence-cited SAR narrative composer (round-19, day-90)
+// ---------------------------------------------------------------------------
+
+export type CodexEvidenceKind =
+  | "subject"
+  | "counterparty"
+  | "transaction"
+  | "factor"
+  | "typology"
+  | "sanctions"
+  | "media"
+  | "period"
+  | "geo"
+  | "channel"
+  | "totals"
+  | "band";
+
+export type CodexCitation = {
+  kind: CodexEvidenceKind | string;
+  ref: string;
+  label: string;
+  detail?: string;
+};
+
+export type CodexBlock = {
+  text: string;
+  citations: CodexCitation[];
+  kind: "para" | "bullet_list" | "table" | string;
+  items: string[];
+  columns: string[];
+  rows: string[][];
+};
+
+export type CodexSection = {
+  id: "who" | "what" | "when" | "where" | "why" | "how" | "action" | string;
+  number: number;
+  title: string;
+  prompt: string;
+  blocks: CodexBlock[];
+  citation_count: number;
+  word_count: number;
+};
+
+export type CodexQualityCheck = {
+  id: string;
+  section: string;
+  label: string;
+  passed: boolean;
+  weight: number;
+  detail: string;
+  hint: string;
+};
+
+export type CodexQualityGrade =
+  | "publish_ready"
+  | "acceptable"
+  | "needs_work"
+  | "unfilable"
+  | string;
+
+export type CodexQuality = {
+  score: number;
+  grade: CodexQualityGrade;
+  grade_label: string;
+  grade_accent: string;
+  grade_action: string;
+  grade_detail: string;
+  passed: number;
+  failed: number;
+  checks: CodexQualityCheck[];
+  missing_evidence_kinds: string[];
+};
+
+export type CodexNarrative = {
+  codex_id: string;
+  engine: string;
+  generated_at: string;
+  analyst: string;
+  account_id: string;
+  display_name: string;
+  risk_score: number;
+  band: string;
+  redacted: boolean;
+  sections: CodexSection[];
+  quality: CodexQuality;
+  evidence_index: CodexCitation[];
+  totals: {
+    inbound: number;
+    outbound: number;
+    counterparty_count: number;
+    transactions_in_scope: number;
+  };
+  period: { start: string; end: string };
+};
+
+export type CodexRules = {
+  ok: boolean;
+  engine: string;
+  typology_confidence_floor: number;
+  factor_point_floor: number;
+  max_transactions_cited: number;
+  max_counterparties_cited: number;
+  max_typology_evidence: number;
+  grade_ladder: Array<{
+    min_score: number;
+    grade: CodexQualityGrade;
+    label: string;
+    accent: string;
+    action: string;
+    detail: string;
+  }>;
+  sections: Array<{
+    id: string;
+    number: number;
+    title: string;
+    prompt: string;
+  }>;
+  evidence_kinds: Array<{ kind: string; label: string }>;
+  checks: Array<{
+    id: string;
+    label: string;
+    weight: number;
+    section: string;
+  }>;
+};
+
+export type CodexSampleResponse = {
+  ok: boolean;
+  engine: string;
+  account_report: Record<string, unknown>;
+  codex: CodexNarrative;
+  codex_redacted: CodexNarrative;
+};
+
+export type CodexComposeResponse = {
+  ok: boolean;
+  engine: string;
+  codex: CodexNarrative;
+};
+
+export async function getCodexRules(): Promise<CodexRules> {
+  const r = await fetch(`${API_BASE}/aml/codex/rules`);
+  return jsonOrThrow(r);
+}
+
+export async function getCodexSample(): Promise<CodexSampleResponse> {
+  const r = await fetch(`${API_BASE}/aml/codex/sample`);
+  return jsonOrThrow(r);
+}
+
+export async function composeCodex(
+  account_report: Record<string, unknown>,
+  opts: { analyst?: string; redact?: boolean; include_zero_factors?: boolean } = {},
+): Promise<CodexComposeResponse> {
+  const r = await fetch(`${API_BASE}/aml/codex/compose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      account_report,
+      analyst: opts.analyst || "TITAN-AUTOMATED",
+      redact: !!opts.redact,
+      include_zero_factors: !!opts.include_zero_factors,
+    }),
+  });
+  return jsonOrThrow(r);
+}
+
+export async function getCodexForCase(
+  case_id: string,
+  opts: { analyst?: string; redact?: boolean } = {},
+): Promise<CodexComposeResponse & { case_id: string; case: Record<string, unknown> }> {
+  const qs = new URLSearchParams();
+  if (opts.analyst) qs.set("analyst", opts.analyst);
+  qs.set("redact", opts.redact ? "true" : "false");
+  const r = await fetch(
+    `${API_BASE}/aml/codex/case/${encodeURIComponent(case_id)}?${qs.toString()}`,
+  );
+  return jsonOrThrow(r);
+}
+
+export function codexExportUrl(opts: {
+  case_id?: string;
+  redact?: boolean;
+  analyst?: string;
+} = {}): string {
+  const qs = new URLSearchParams();
+  if (opts.case_id) qs.set("case_id", opts.case_id);
+  if (opts.analyst) qs.set("analyst", opts.analyst);
+  qs.set("redact", opts.redact ? "true" : "false");
+  return `${API_BASE}/aml/codex/export.md?${qs.toString()}`;
+}
