@@ -4,16 +4,18 @@ WaySafe is a **safety-first navigation & incident-response system** for tourists
 It scores any location 0–100, plans risk-aware routes (with a temporal-forecast
 mode), composes multi-day trips through the **Odyssey** composer, reflows the
 remaining days of a live trip through the **Nomad** engine the moment signals
-shift, and — new in Round-19 — **lifts the entire stack from single-actor
-to group-consensus through the `Convoy` engine**.  A four-member family loop
-that Nomad recommends `TIME_SHIFT` on is a *fine* move for the two adults,
-a *bad* move for the nine-year-old whose bedtime crosses 22:30, and a
-*worse* move for the 68-year-old on 21:00 heart medication.  Convoy
-re-scores every Nomad strategy as a ballot across the members, honours
-vulnerable-member vetoes and per-member day locks, and picks the
-admissible strategy that maximises **0.60·mean_uplift + 0.40·worst_uplift**
-across the convoy.  Same physics, zero new measurements, deterministic
-to the byte.
+shift, socialises every reflow across a **`Convoy`** of members with their own
+risk-tolerance / curfew / mobility / medical stacks, and — new in Round-20 —
+**closes the equity loop across the *arc* of the trip through the `Ledger`
+engine**.  Convoy protects against a single crushing move; Ledger tracks the
+cumulative compromise-debt so the same member doesn't quietly absorb every
+negative-uplift day of a 7-day trip.  A vulnerability-amplified,
+recency-decayed running tally per member, a Gini coefficient of the
+distribution, and a two-signal rebalance rule (top-holder relief OR
+concentration reduction, within a bounded consensus-uplift trade window)
+pick the admissible strategy that best *levels* the pile — even when it
+means overriding the current Convoy consensus.  Same physics, zero new
+measurements, deterministic to the byte.
 
 Built on Streamlit + pure-Python physics (no external maps API, no XGBoost,
 no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
@@ -22,7 +24,97 @@ no LLM dependency). Runs on a laptop, ships in a single `streamlit run`.
 
 ## ✨ Headline features
 
-- **🆕 Convoy — Group Consensus Reflow** *(Day 86)* — Odyssey (Day 76)
+- **🆕 Ledger — Cumulative Equity Rebalance** *(Day 91)* — Convoy
+  (Day 86) picks the fairest strategy for **one** decision; the
+  admissible strategy that maximises `0.60·mean_uplift +
+  0.40·worst_uplift` with no vulnerable-member veto.  That is right
+  for one reflow and quietly wrong across a seven-day trip that
+  reflows five times.  The pattern we watched on every real convoy:
+  Day 2 → `TIME_SHIFT` picked; adults +2.4 pt, Aunt Mira −2.1 pt.
+  Day 3 → `MODE_UPGRADE` picked; adults +1.8 pt, Rohan −1.1 pt,
+  Mira −1.9 pt.  Day 4 → `STOP_DROP` picked; adults +2.2 pt,
+  Mira −1.2 pt.  Every ballot admissible in isolation.  By Day 4
+  Mira has been the *only* member absorbing cost on every reflow,
+  the convoy mean has gained +12 pt of trip score, and she has
+  personally lost −7.  Nothing on the Convoy surface *notices* —
+  each ballot is scored in isolation.  New `ledger.py` (~1,050 LOC,
+  pure stdlib, **zero new deps**, deterministic — same
+  ConvoyReport+history bytes always yield the same equity verdict)
+  is the accounting engine.  (1) **Per-member cumulative debt** — a
+  weighted running sum of *negative personal uplifts absorbed*
+  across every historical Convoy pick, with two multipliers:
+  vulnerability amplification (`1 + W_VULN_DEBT_MULT × V(m)`, so a
+  −2 pt day on Aunt Mira counts as −2.66 debt units and a −2 pt day
+  on Aarav counts as exactly −2) and recency decay
+  (`W_ABSORPTION_DECAY = 0.85 ^ age_days`, floored at 0.05 past a
+  21-day horizon, so recent absorptions dominate but ancient ones
+  don't disappear).  Positive uplift days are recorded as *credit*
+  and reduce prior absorbed debt (net_debt = max(0, absorbed − credited))
+  — a member who eats cost early and gets compensated later trends
+  back to zero.  (2) **Distribution Gini + top-holder share** — the
+  equity metrics.  Gini = 0 is perfect equity; Gini → 1 is one
+  member holding everything.  Displayed against a
+  `GINI_LEVEL_TARGET = 0.20` threshold on a hero gauge with a target
+  tick mark.  A single member holding ≥ `DEBT_SHARE_HOT_FLOOR = 0.40`
+  of net debt trips a `hot_flag` on their row — the "who's been
+  quietly carrying it" signal a tour lead should never have to
+  hand-compute.  (3) **Two-signal rebalance rule** — every admissible
+  ballot in the current Convoy report is projected forward: what
+  does the debt vector look like *after* this pick?  The rule fires
+  when EITHER signal-A (top-holder net debt drops by ≥
+  `REBALANCE_MIN_TOP_DELTA = 0.50` units — the human-intuitive
+  "did Mira's carrying-cost actually go down?" signal, robust to
+  the case where she's at ~100% share and a rebalance won't move the
+  Gini needle) OR signal-B (Gini improves by ≥
+  `REBALANCE_MIN_GINI_DELTA = 0.05` — the concentration-reduction
+  signal for the case where debt is spread across multiple members)
+  clears its floor, AND consensus_uplift is sacrificed by no more
+  than `EQUITY_TRADE_FLOOR_PTS = 2.0` pt vs. Convoy's original pick.
+  Winner is the admissible candidate that maximises a bounded
+  composite equity score (`0.5 · norm(Δtop) + 0.5 · Δgini`).  (4)
+  **Three verdict paths** — `pass_through` (history < 2 entries;
+  Ledger endorses Convoy verbatim), `endorse` (no admissible
+  alternative clears the equity floors; Convoy stands and the reason
+  explains why), `rebalance` (Ledger overrides; the verdict names
+  the swap, the pt trade, and the debt-distribution improvement).
+  Because the equity rule can unlock strategies that Convoy passed
+  on for being below CONSENSUS_FLOOR_PTS (a +1.0 pt REST_DAY is
+  Convoy-inadmissible in isolation but Ledger-admissible when
+  it relieves the top holder by +1.0 debt units), Ledger sometimes
+  picks a move that Convoy explicitly rejected — and the reason
+  string surfaces exactly why.  (5) **Personalised equity advisories**
+  — one card per member, prioritized by cumulative position: a
+  hot-flagged member gets a `🎯` opener with their share%, days
+  absorbed, and worst single hit, followed by whether today's move
+  is picked to lean toward them or whether they're still holding
+  the bag; a net beneficiary gets a `🌤` "eyes on the hot-flagged
+  members" line; a vulnerable member with any absorption gets a
+  `🩺` "single heavy absorption crosses veto threshold" tail.  (6)
+  **Ledger append preview** — the exact row that would be committed
+  to the trip's equity ledger if the tour lead adopts the picked
+  strategy (day_index, age_days=0, kind, label, per-member uplift
+  chips).  Renders as a dashed-border card below the strategy panel
+  so the analyst sees the write before pressing Adopt.  (7) **Full
+  JSON / Markdown round-trip** under `waysafe.ledger.v1` — same
+  input bytes → same output bytes; includes the constants block for
+  audit.  Lives at `tabs[22]`, immediately after Convoy, because
+  Ledger is what a tour lead opens the moment Convoy hands back a
+  consensus and they realise three reflows in that the same member
+  has been eating cost every time.  Ships with a **3-entry seed
+  history** that exercises the rebalance rule end-to-end (Aunt Mira
+  holds 97% of debt after 3 historical picks; Ledger flips the
+  Convoy STAY_COURSE consensus to REST_DAY that lifts Mira +1.00
+  debt units for a +1.0 pt consensus trade).  Frontend: 4-column
+  hero band (equity grade tint + Gini gauge with target tick + net
+  debt + hot-flag count), verdict banner (rebalance-green /
+  endorse-blue / pass-through-grey), 4-column member debt cards
+  (share%, net debt, absorbed / credited split, vulnerability bar,
+  trend reason italics), strategy projection cards (5-metric row
+  per candidate — consensus / Top→ / ΔTop / ΔGini / ΔConsensus,
+  green ring around the picked candidate), personalised equity
+  advisory strip, dashed-border append-preview, JSON + Markdown
+  export + reset-to-demo-seed button.
+- **Convoy — Group Consensus Reflow** *(Day 86)* — Odyssey (Day 76)
   composes a trip.  Nomad (Day 81) reflows what remains of that trip
   live.  Both assume the trip is being lived by **one** person with
   **one** risk profile.  Every real trip has a **convoy**: 2+ people
