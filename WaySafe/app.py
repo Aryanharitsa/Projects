@@ -49,6 +49,7 @@ import prism as pr
 import odyssey as ody
 import nomad as nmd
 import convoy as cvy
+import ledger as ldg
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -342,7 +343,7 @@ if role == "Tourist App":
         "Pulse", "Beacon", "Map", "Plan Route", "Itinerary", "Live Trip", "Forecast",
         "Advisory", "Compass", "StaySafe", "Sentinel", "Refuge", "Tempo",
         "Report Hazard", "Alerts", "SOS", "Trip Log", "Echo", "Prism", "Odyssey",
-        "Nomad", "Convoy",
+        "Nomad", "Convoy", "Ledger",
     ]
     tabs = st.tabs(tab_labels)
 
@@ -3743,6 +3744,395 @@ if role == "Tourist App":
                     st.markdown(cvy.to_markdown(convoy_report))
                 with t_cvy_json:
                     st.code(cvy.to_json(convoy_report, indent=2), language="json")
+
+                # Stash the composed convoy report so the Ledger tab can
+                # reuse it verbatim instead of recomposing.
+                st.session_state["cvy_last_report"] = convoy_report
+                st.session_state["cvy_last_convoy"] = convoy_obj
+
+    # ---------------- Ledger — Cumulative Equity Rebalance (Day 91)
+    # Convoy (Day 86) scores ONE decision fairly across the group. Ledger
+    # tracks the running compromise-debt across the *entire* trip so the
+    # same member doesn't quietly absorb every negative-uplift day.
+    # Every historical Convoy pick contributes vulnerability-amplified,
+    # recency-decayed debt; today's admissible ballots are re-scored on
+    # the equity axis; the winner is the strategy that best relieves the
+    # top-holder or tightens the debt distribution, within a small
+    # consensus-uplift trade window.
+    with tabs[22]:
+        st.subheader("Ledger — Cumulative Equity Rebalance")
+        st.caption(
+            "Convoy protects against a single crushing move. Ledger closes the loop "
+            "*across* moves — track cumulative compromise-debt per member, "
+            "override today's consensus pick when a fairer admissible alternative "
+            "exists, and surface the member who's been quietly carrying the trip."
+        )
+
+        cvy_report = st.session_state.get("cvy_last_report")
+        convoy_obj = st.session_state.get("cvy_last_convoy")
+
+        if cvy_report is None or convoy_obj is None:
+            st.info(
+                "Ledger runs on top of a Convoy ballot. Open the **Convoy** tab, "
+                "let it compose a consensus, then come back here — Ledger will "
+                "pick up the same convoy + ballot vector automatically."
+            )
+        else:
+            member_ids = [m.id for m in convoy_obj.members]
+            id_to_name = {m.id: m.name for m in convoy_obj.members}
+
+            # ---- Ledger history editor -----------------------------
+            if "ledger_history_rows" not in st.session_state:
+                seed = ldg.default_seed_history(convoy_obj)
+                st.session_state.ledger_history_rows = [
+                    {
+                        "day_index": e.day_index,
+                        "age_days": e.age_days,
+                        "strategy_kind": e.strategy_kind,
+                        "strategy_label": e.strategy_label,
+                        **{mid: float(e.member_uplifts.get(mid, 0.0)) for mid in member_ids},
+                    }
+                    for e in seed
+                ]
+            # Rebuild any missing member columns if the roster changed.
+            for r in st.session_state.ledger_history_rows:
+                for mid in member_ids:
+                    r.setdefault(mid, 0.0)
+
+            with st.expander(
+                "Ledger history — one row per past Convoy pick already executed",
+                expanded=False,
+            ):
+                st.caption(
+                    "`day_index` — trip day of the pick · `age_days` — how many "
+                    "days ago (0 = today) · `strategy_kind` — the ballot the tour "
+                    "lead adopted · one column per convoy member — the personal "
+                    "uplift each absorbed under that pick."
+                )
+                hist_df = pd.DataFrame(st.session_state.ledger_history_rows)
+                # Guarantee column order: day_index / age_days / kind / label / members.
+                col_order = ["day_index", "age_days", "strategy_kind", "strategy_label"] + member_ids
+                for c in col_order:
+                    if c not in hist_df.columns:
+                        hist_df[c] = 0 if c in ("day_index", "age_days") else ""
+                hist_df = hist_df[col_order]
+
+                col_cfg = {
+                    "day_index": st.column_config.NumberColumn("day_index", min_value=0, step=1, format="%d"),
+                    "age_days": st.column_config.NumberColumn("age_days", min_value=0, step=1, format="%d"),
+                    "strategy_kind": st.column_config.TextColumn("strategy_kind", width="small"),
+                    "strategy_label": st.column_config.TextColumn("strategy_label", width="medium"),
+                }
+                for mid in member_ids:
+                    col_cfg[mid] = st.column_config.NumberColumn(
+                        f"{id_to_name.get(mid, mid)} Δ", step=0.1, format="%.2f",
+                    )
+                edited_hist = st.data_editor(
+                    hist_df, key="ledger_history_editor",
+                    use_container_width=True, num_rows="dynamic",
+                    column_config=col_cfg,
+                )
+                st.session_state.ledger_history_rows = edited_hist.to_dict("records")
+
+            # ---- Compose --------------------------------------------
+            history = tuple(
+                filter(
+                    None,
+                    (
+                        ldg.entry_from_editor_row(row, member_ids)
+                        for row in st.session_state.ledger_history_rows
+                    ),
+                )
+            )
+            today_day = int(cvy_report.consensus_ballot.strategy_day_index) or int(
+                len(history)
+            )
+            ledger_report = ldg.compose_ledger_report(
+                convoy=convoy_obj,
+                convoy_report=cvy_report,
+                history=history,
+                today_day_index=today_day,
+            )
+
+            # ---- Hue palette ---------------------------------------
+            _grade_hues = {
+                "equitable":   "#53E3A6",
+                "watch":       "#7BC5F1",
+                "tilted":      "#F9C440",
+                "inequitable": "#FF3D60",
+            }
+            grade_hue = _grade_hues.get(ledger_report.equity_grade, "#94a3b8")
+            verdict_hues = {
+                "endorse":      "#7BC5F1",
+                "rebalance":    "#53E3A6",
+                "pass_through": "#94a3b8",
+            }
+            v_hue = verdict_hues.get(ledger_report.verdict.kind, "#94a3b8")
+
+            # ---- Hero band -----------------------------------------
+            gini_pct = int(min(100, max(0, ledger_report.gini_current * 100)))
+            gini_target_pct = int(ledger_report.gini_target * 100)
+            n_hot = sum(1 for d in ledger_report.member_debts if d.hot_flag)
+            st.markdown(
+                f"""
+                <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:14px;align-items:stretch;margin:16px 0;padding:18px;border-radius:14px;background:rgba(15,23,42,0.4);border:1px solid {grade_hue}44;">
+                  <div>
+                    <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Equity grade</div>
+                    <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px;">
+                      <div style="font-size:30px;font-weight:800;color:{grade_hue};line-height:1;text-transform:capitalize;">{ledger_report.equity_grade}</div>
+                      <span style="font-size:10px;letter-spacing:1px;padding:2px 8px;border-radius:999px;background:{grade_hue}22;color:{grade_hue};font-weight:700;">{ledger_report.verdict.kind.upper()}</span>
+                    </div>
+                    <div style="font-size:12px;color:#cbd5e1;margin-top:8px;line-height:1.5;">{ledger_report.equity_grade_detail}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Gini</div>
+                    <div style="font-size:36px;font-weight:800;color:{grade_hue};line-height:1;margin-top:8px;">{ledger_report.gini_current:.2f}</div>
+                    <div style="height:6px;margin-top:10px;background:rgba(148,163,184,0.15);border-radius:3px;overflow:hidden;position:relative;">
+                      <div style="height:100%;width:{gini_pct}%;background:linear-gradient(90deg,#53E3A6,#F9C440,#FF3D60);"></div>
+                      <div style="position:absolute;top:-2px;left:{gini_target_pct}%;height:10px;width:2px;background:#e2e8f0;"></div>
+                    </div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px;">target ≤ {ledger_report.gini_target:.2f}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Net debt</div>
+                    <div style="font-size:36px;font-weight:800;color:#e2e8f0;line-height:1;margin-top:8px;">{ledger_report.total_net_debt:.2f}</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">absorbed {ledger_report.total_absorbed_debt:.2f} · credited {ledger_report.total_credited:.2f}</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;letter-spacing:1.4px;color:#94a3b8;text-transform:uppercase;">Hot flags</div>
+                    <div style="font-size:36px;font-weight:800;color:{'#FF3D60' if n_hot else '#53E3A6'};line-height:1;margin-top:8px;">{n_hot}<span style='font-size:14px;color:#94a3b8;font-weight:600;'>/{ledger_report.n_members}</span></div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">history {ledger_report.n_history_entries} pick(s)</div>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ---- Verdict banner -----------------------------------
+            v = ledger_report.verdict
+            if v.kind == "rebalance":
+                banner = (
+                    f"<b>REBALANCE</b> · {v.original_consensus_kind} → "
+                    f"<b style='color:#53E3A6;'>{v.equity_winner_kind}</b> · "
+                    f"Δconsensus {v.consensus_uplift_delta:+.1f} pt · "
+                    f"Δgini {v.gini_delta:+.2f}"
+                )
+            elif v.kind == "endorse":
+                banner = (
+                    f"<b>ENDORSE</b> · Convoy consensus "
+                    f"<b>{v.equity_winner_kind}</b> stands"
+                )
+            else:
+                banner = (
+                    f"<b>PASS-THROUGH</b> · history short, endorsing "
+                    f"<b>{v.equity_winner_kind}</b>"
+                )
+            st.markdown(
+                f"""
+                <div style="padding:14px 18px;margin:8px 0 4px 0;border-radius:12px;background:{v_hue}18;border-left:4px solid {v_hue};">
+                  <div style="font-size:14px;color:#f8fafc;font-weight:600;letter-spacing:0.3px;">{banner}</div>
+                  <div style="font-size:12.5px;color:#cbd5e1;margin-top:6px;line-height:1.55;">{v.reason}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            for L in ledger_report.summary_lines:
+                st.markdown(
+                    f"<div style='padding:8px 14px;margin:4px 0;border-radius:8px;background:rgba(15,23,42,0.3);border-left:3px solid {v_hue};font-size:13.5px;color:#e2e8f0;line-height:1.5;'>{L}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ---- Debt distribution cards --------------------------
+            st.markdown(
+                '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:20px 0 8px 0;">Per-member cumulative debt</div>',
+                unsafe_allow_html=True,
+            )
+            max_net = max((d.net_debt for d in ledger_report.member_debts), default=1.0) or 1.0
+            d_cols = st.columns(min(4, max(1, len(ledger_report.member_debts))))
+            for j, d in enumerate(ledger_report.member_debts):
+                with d_cols[j % len(d_cols)]:
+                    bar_pct = int((d.net_debt / max_net) * 100) if max_net else 0
+                    row_hue = "#FF3D60" if d.hot_flag else (
+                        "#F9C440" if d.debt_share >= 0.25 else (
+                            "#7BC5F1" if d.days_absorbed > 0 else "#53E3A6"
+                        )
+                    )
+                    flame = "🔥" if d.hot_flag else ""
+                    vuln_pct = int(d.vulnerability * 100)
+                    st.markdown(
+                        f"""
+                        <div style="padding:14px;border-radius:12px;background:rgba(15,23,42,0.5);border:1px solid {row_hue}44;">
+                          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                            <div style="font-size:14px;font-weight:700;color:#f8fafc;">{d.member_name} {flame}</div>
+                            <span style="font-size:10px;letter-spacing:1px;padding:2px 8px;border-radius:999px;background:{row_hue}22;color:{row_hue};font-weight:700;">{d.debt_share*100:.0f}%</span>
+                          </div>
+                          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">V(m) {d.vulnerability:.2f} · abs {d.days_absorbed} · cred {d.days_credited}</div>
+                          <div style="font-size:36px;font-weight:800;color:{row_hue};line-height:1;margin-top:10px;">{d.net_debt:.2f}<span style='font-size:11px;color:#94a3b8;font-weight:600;'> net</span></div>
+                          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">absorbed {d.absorbed_debt:.2f} · credited {d.credited:.2f}</div>
+                          <div style="height:6px;margin-top:10px;background:rgba(148,163,184,0.12);border-radius:3px;overflow:hidden;">
+                            <div style="height:100%;width:{bar_pct}%;background:{row_hue};"></div>
+                          </div>
+                          <div style="height:3px;margin-top:6px;background:rgba(148,163,184,0.12);border-radius:2px;overflow:hidden;">
+                            <div style="height:100%;width:{vuln_pct}%;background:linear-gradient(90deg,#F9C44088,#FF9F43);"></div>
+                          </div>
+                          <div style="font-size:10.5px;color:#cbd5e1;margin-top:8px;font-style:italic;line-height:1.45;">{d.trend_reason}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            # ---- Strategy projection panel ------------------------
+            st.markdown(
+                '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:22px 0 8px 0;">Strategy projections — equity axis</div>',
+                unsafe_allow_html=True,
+            )
+            for p in ledger_report.projections:
+                p_hue = (
+                    "#94a3b8" if not p.is_admissible
+                    else ("#53E3A6" if p.rebalance_pick else "#7BC5F1")
+                )
+                ring = (
+                    f"box-shadow:0 0 22px {p_hue}55;border:2px solid {p_hue};"
+                    if p.rebalance_pick
+                    else "border:1px solid rgba(148,163,184,0.15);"
+                )
+                pick_chip = (
+                    "<span style='font-size:10px;letter-spacing:1px;padding:2px 8px;"
+                    "border-radius:999px;background:#53E3A622;color:#53E3A6;font-weight:800;"
+                    "text-transform:uppercase;'>🏆 PICK</span>"
+                    if p.rebalance_pick else ""
+                )
+                adm_chip = (
+                    "" if p.is_admissible
+                    else "<span style='font-size:10px;letter-spacing:1px;padding:2px 8px;"
+                         "border-radius:999px;background:#FF3D6022;color:#FF3D60;font-weight:800;"
+                         "text-transform:uppercase;'>INADMISSIBLE</span>"
+                )
+                st.markdown(
+                    f"""
+                    <div style="padding:12px 16px;margin:8px 0;border-radius:10px;background:rgba(15,23,42,0.4);{ring}">
+                      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                        <span style="font-size:10px;letter-spacing:1.4px;padding:2px 8px;border-radius:999px;background:{p_hue}22;color:{p_hue};font-weight:800;text-transform:uppercase;">{p.strategy_kind}</span>
+                        <span style="font-size:14px;font-weight:600;color:#e2e8f0;">{p.strategy_label}</span>
+                        {pick_chip}{adm_chip}
+                        <span style="margin-left:auto;font-size:20px;font-weight:800;color:{p_hue};">
+                          {p.equity_score:+.2f}<span style='font-size:11px;color:#94a3b8;font-weight:600;'> score</span>
+                        </span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:10px;margin-top:10px;">
+                        <div>
+                          <div style='font-size:10px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;'>Consensus</div>
+                          <div style='font-size:16px;font-weight:700;color:#e2e8f0;margin-top:2px;'>{p.consensus_uplift:+.2f}</div>
+                        </div>
+                        <div>
+                          <div style='font-size:10px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;'>Top→</div>
+                          <div style='font-size:16px;font-weight:700;color:#e2e8f0;margin-top:2px;'>{p.projected_top_debt:.2f}</div>
+                        </div>
+                        <div>
+                          <div style='font-size:10px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;'>Δ Top</div>
+                          <div style='font-size:16px;font-weight:700;color:{"#53E3A6" if p.equity_delta_top > 0 else ("#FF3D60" if p.equity_delta_top < 0 else "#94a3b8")};margin-top:2px;'>{p.equity_delta_top:+.2f}</div>
+                        </div>
+                        <div>
+                          <div style='font-size:10px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;'>Δ Gini</div>
+                          <div style='font-size:16px;font-weight:700;color:{"#53E3A6" if p.equity_delta_gini > 0 else ("#FF3D60" if p.equity_delta_gini < 0 else "#94a3b8")};margin-top:2px;'>{p.equity_delta_gini:+.2f}</div>
+                        </div>
+                        <div>
+                          <div style='font-size:10px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;'>Δ Consensus</div>
+                          <div style='font-size:16px;font-weight:700;color:{"#53E3A6" if p.equity_delta_consensus >= -0.5 else "#FF3D60"};margin-top:2px;'>{p.equity_delta_consensus:+.2f}</div>
+                        </div>
+                      </div>
+                      <div style="margin-top:10px;font-size:12.5px;color:#cbd5e1;line-height:1.45;">{p.reason}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ---- Per-member advisories -----------------------------
+            st.markdown(
+                '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:22px 0 8px 0;">Personalised equity advisories</div>',
+                unsafe_allow_html=True,
+            )
+            debt_by_id = {d.member_id: d for d in ledger_report.member_debts}
+            for mid, adv_lines in ledger_report.member_advisories:
+                d = debt_by_id.get(mid)
+                a_hue = (
+                    "#FF3D60" if (d and d.hot_flag)
+                    else ("#F9C440" if (d and d.debt_share >= 0.25) else "#7BC5F1")
+                )
+                body = "".join(
+                    f"<div style='padding:6px 0;font-size:13px;color:#e2e8f0;line-height:1.5;'>{L}</div>"
+                    for L in adv_lines
+                )
+                st.markdown(
+                    f"""
+                    <div style="padding:12px 16px;margin:6px 0;border-radius:10px;background:rgba(15,23,42,0.35);border-left:3px solid {a_hue};">
+                      <div style="font-size:11px;letter-spacing:1px;color:#94a3b8;text-transform:uppercase;">{id_to_name.get(mid, mid)}</div>
+                      {body}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ---- Append preview -----------------------------------
+            st.markdown(
+                '<div style="font-size:15px;font-weight:700;color:#e2e8f0;margin:22px 0 8px 0;">Next ledger entry — preview</div>',
+                unsafe_allow_html=True,
+            )
+            ap = ledger_report.ledger_append_preview
+            up_chips = " ".join(
+                f"<span style='display:inline-block;padding:3px 8px;margin:2px 3px 2px 0;"
+                f"border-radius:999px;font-size:11px;font-weight:700;"
+                f"background:{('#53E3A6' if v >= 1 else ('#FF3D60' if v <= -1 else '#7BC5F1'))}22;"
+                f"color:{('#53E3A6' if v >= 1 else ('#FF3D60' if v <= -1 else '#7BC5F1'))};"
+                f"border:1px solid {('#53E3A6' if v >= 1 else ('#FF3D60' if v <= -1 else '#7BC5F1'))}55;'>"
+                f"{id_to_name.get(mid, mid)} {v:+.1f}</span>"
+                for mid, v in ap.member_uplifts.items()
+            )
+            st.markdown(
+                f"""
+                <div style="padding:14px 18px;margin:8px 0;border-radius:12px;background:rgba(15,23,42,0.5);border:1px dashed {v_hue}88;">
+                  <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:10px;letter-spacing:1.4px;padding:2px 8px;border-radius:999px;background:{v_hue}22;color:{v_hue};font-weight:800;text-transform:uppercase;">Day {ap.day_index}</span>
+                    <span style="font-size:14px;font-weight:600;color:#e2e8f0;">{ap.strategy_kind} · {ap.strategy_label}</span>
+                    <span style="margin-left:auto;font-size:11px;color:#94a3b8;">age_days = {ap.age_days}</span>
+                  </div>
+                  <div style="margin-top:8px;">{up_chips}</div>
+                  <div style="margin-top:6px;font-size:11.5px;color:#94a3b8;font-style:italic;">If the tour lead adopts the Ledger pick, this row is what the trip's equity ledger will record for next time.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ---- Export -------------------------------------------
+            st.markdown("---")
+            l_c1, l_c2, l_c3 = st.columns([1, 1, 1])
+            with l_c1:
+                st.download_button(
+                    "Download JSON (waysafe.ledger.v1)",
+                    data=ldg.to_json(ledger_report),
+                    file_name="waysafe_ledger.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with l_c2:
+                st.download_button(
+                    "Download Markdown equity brief",
+                    data=ldg.to_markdown(ledger_report),
+                    file_name="waysafe_ledger.md",
+                    mime="text/markdown",
+                    use_container_width=True,
+                )
+            with l_c3:
+                if st.button("Reset history to demo seed", use_container_width=True):
+                    st.session_state.pop("ledger_history_rows", None)
+                    st.rerun()
+
+            t_ldg_md, t_ldg_json = st.tabs(["Markdown preview", "JSON preview"])
+            with t_ldg_md:
+                st.markdown(ldg.to_markdown(ledger_report))
+            with t_ldg_json:
+                st.code(ldg.to_json(ledger_report, indent=2), language="json")
 
 elif role == "Authority Dashboard":
     st.title("Authority Dashboard")
