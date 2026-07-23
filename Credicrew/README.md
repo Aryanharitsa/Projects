@@ -67,13 +67,89 @@ channel ROI) on a 0–100 axis each, composites them into a single number
 your Head of Talent can glance at on a Monday morning, calls out the
 weakest axis with a specific move to make, and links every tile back to
 the surface that produced it — so the boss dashboard and the drill-down
-share the same math. All from a dark, fast, single-page workspace.
+share the same math, and now **puts a radar on the ghost problem itself**
+with **Anchor** — every active candidate in the pipeline is scored on
+six momentum axes (recency, reply cadence, reliability, stage pace,
+sentiment, competing offers), inverted into a 0..100 risk score, mapped
+through a stage-conditioned Bayesian ghost probability onto a five-rung
+recovery ladder (hold · soft ping · warm re-engage · executive touch ·
+concede & release), with a copy-paste nudge script pre-written for the
+top driver, a half-life-in-days estimate for how long the momentum
+lasts if left untouched, and a portfolio-wide ₹ exposure roll-up so the
+Tuesday-morning question — *which candidates am I about to lose, and
+what do I say now?* — has an answer before the second coffee. All from
+a dark, fast, single-page workspace.
 
 The same scoring + email + interview + decision + offer logic runs in
 the browser (for instant UI feedback) and on the FastAPI backend (for
 programmatic / agentic use), so plans, drafts, composite scores, ranked
 verdicts, and comp benchmarks are byte-for-byte identical wherever
 they're generated.
+
+---
+
+## What's new — Anchor (Day 92)
+
+Every other Credicrew surface answers *who should I hire?* — Match ranks
+fit, Decision aggregates the loop, Offer benchmarks comp, Peer Parity
+audits fairness, Compass rolls the whole shop up. **Anchor** answers the
+question every recruiter opens their inbox with on a Tuesday morning:
+*which of the people already in my pipeline are about to ghost me, and
+what should I do about it in the next hour?*
+
+That question is not paranoia — it is the single biggest waste in modern
+hiring. A candidate you sourced, screened, and loved on the phone
+disappears between the second and third interview because a competing
+offer landed on Friday, calendar-tag slipped twice, and by the time
+*"just circling back!"* hits their inbox they've already accepted. The
+signals were there for a week. Nobody was looking at them together.
+
+Anchor (`/anchor`) puts a radar on it. Given each active candidate + their
+pipeline state + a signal packet (recency, cadence, reschedules,
+sentiment, competing pipelines, external offer, note keyphrase), it
+computes:
+
+| # | Axis | Weight | What it measures |
+|---|---|---|---|
+| 1 | Recency | 0.25 | Days since last touch, +8 pts if the candidate replied last. Dies at 12 days of silence. |
+| 2 | Reply cadence | 0.20 | Median hours to reply. Dies at 50h latency. |
+| 3 | Reliability | 0.15 | Per-reschedule −15 pts, no-show −30. Floored at 20 so a messy calendar can't null-out reliable email. |
+| 4 | Stage pace | 0.20 | Days in current stage vs the stage budget (`new` 4d · `outreach` 6d · `screening` 8d · `interview` 10d · `offer` 7d). Decays −6 pts per over-budget day. |
+| 5 | Sentiment | 0.10 | Warm 90 · neutral 60 · cool 30, harvested from last-note keyphrase. |
+| 6 | Competing offers | 0.10 | −25 pts per concurrent process (cap 3). |
+
+**Momentum** = weighted mean, **risk** = `100 − momentum` (+15 if an
+external offer is confirmed, ceiling 98). **Ghost probability** =
+`σ(logit(prior_stage) + (risk − 50)/20)`, with stage priors
+`{new:0.35 · outreach:0.30 · screening:0.22 · interview:0.15 · offer:0.10}`
+— an offer-stage ghost is much rarer than a screening-stage drop, and
+the risk score has to bend the prior, not replace it. **Half-life days**
+= how long until momentum decays past the recover-floor (30) if untouched
+— low-care candidates decay 2× faster (we watch them less).
+
+Every candidate gets a **recovery tier** from the ladder — `hold` (< 25
+risk) · `ping` (25) · `reengage` (45) · `exec` (65) · `release` (82) —
+and a **copy-paste nudge script** tailored to `(tier × top driver)`. The
+scripts are opinionated on tone: no *"I hope this email finds you well,"*
+a specific ask, a concrete next-step commitment, and — for `release` — a
+graceful close that hands the candidate off to Revive for future roles.
+
+Rolled up: **at-risk queue** (risk ≥ 45), **critical queue** (`exec` +
+`release`), a **salvage queue** ranked by
+`care × (1 − ghost_probability) × 100` so the recruiter's next hour of
+attention lands on the highest-recovery-value candidates first, a
+**stage risk heatmap** showing which stages leak most, a **driver
+histogram** showing which signal dominates the leak, and a portfolio
+**₹ exposure at risk** — drafted-offer year-1 total cash × ghost
+probability across the drift pool, split from a "pre-offer sunk cost"
+line for candidates you've already spent time on but haven't drafted yet.
+
+Signals are deterministic per `(candidateId, roleId, status)` for demo
+state, so the same pipeline always produces the same board — swap in a
+real message-log later and the engine won't move. Every physics constant
+is inline in `frontend/src/lib/anchor.ts`; a byte-for-byte Python mirror
+lives at `backend/app/services/anchor.py` served over `POST
+/anchor/summary` / `POST /anchor/markdown` / `GET /anchor/defaults`.
 
 ---
 
