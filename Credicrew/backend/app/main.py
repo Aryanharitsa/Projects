@@ -21,8 +21,9 @@ from app.routers.hindsight import router as hindsight_router
 from app.routers.verdict import router as verdict_router
 from app.routers.brief import router as brief_router
 from app.routers.reference import router as reference_router
+from app.routers.anchor import router as anchor_router
 
-app = FastAPI(title="Credicrew API", version="0.18.0")
+app = FastAPI(title="Credicrew API", version="0.19.0")
 
 # Allow local dev UI
 app.add_middleware(
@@ -53,6 +54,7 @@ app.include_router(hindsight_router)
 app.include_router(verdict_router)
 app.include_router(brief_router)
 app.include_router(reference_router)
+app.include_router(anchor_router)
 
 
 @app.get("/")
@@ -101,5 +103,8 @@ async def root() -> dict[str, str]:
         "reference_score": "POST /reference/score",
         "reference_markdown": "POST /reference/markdown",
         "reference_defaults": "GET /reference/defaults",
+        "anchor_summary": "POST /anchor/summary",
+        "anchor_markdown": "POST /anchor/markdown",
+        "anchor_defaults": "GET /anchor/defaults",
         "docs": "/docs",
     }

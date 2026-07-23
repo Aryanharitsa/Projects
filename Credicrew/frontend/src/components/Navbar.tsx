@@ -15,12 +15,13 @@ export default function Navbar() {
           <Link href="/" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Discover</Link>
           <Link href="/roles" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Roles</Link>
           <Link href="/hq" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Command Center</Link>
+          <Link href="/compass" className="rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white">Compass</Link>
           <Link
-            href="/compass"
+            href="/anchor"
             className="relative rounded-lg px-3 py-1.5 text-sm text-white/70 hover:bg-white/5 hover:text-white"
           >
-            Compass
-            <span className="ml-1 inline-block rounded-full bg-gradient-to-br from-emerald-400 via-cyan-400 to-indigo-400 px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-widest text-neutral-950">
+            Anchor
+            <span className="ml-1 inline-block rounded-full bg-gradient-to-br from-fuchsia-400 via-rose-400 to-amber-400 px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-widest text-neutral-950">
               NEW
             </span>
           </Link>
