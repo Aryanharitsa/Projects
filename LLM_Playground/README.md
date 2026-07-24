@@ -20,21 +20,153 @@ kneedles the elbow of a model roster), **Relay** (a cascade router
 designer that runs cheap models first and escalates to flagship only
 when a confidence gate fires), **Sentinel** (the prompt‑injection
 defense studio with 24 attacks × 7 defenses, a deterministic scanner,
-a 24×7 catch matrix, and a JSON policy compiler) — and, new this
-round, **Cache**: the semantic response cache studio every 2026
-production LLM deployment reaches for after week two. Four eviction
-policies × eight thresholds simulated against your workload, three
-shippable picks (conservative / balanced / aggressive), a live
-threshold sensitivity curve, single‑link intent clusters, and a JSON
-config that a middleware layer can enforce byte‑for‑byte — with hit
-rate, quality risk, monthly savings and p95 latency all moving in
-place as you drag the threshold slider.
+a 24×7 catch matrix, and a JSON policy compiler), **Cache** (the
+semantic response cache studio every 2026 production LLM deployment
+reaches for after week two — four eviction policies × eight
+thresholds, three shippable picks, a live threshold curve, and a JSON
+config a middleware can enforce byte‑for‑byte) — and, new this round,
+**Curtain**: the two‑sided data‑egress studio. Fourteen entity
+detectors (email · phone · SSN · Luhn‑valid credit card · mod‑97 IBAN
+· IPv4 · UUID · OpenAI/Anthropic/AWS/generic keys · JWT · URL‑with‑
+token · DOB · MAC · geo coord · person name) fed into five redaction
+strategies (mask · tag · hash · pseudonymize · drop). Live scanner
+highlights every span in your input; a policy composer lets you cycle
+per‑entity strategies with three canonical picks (strict / balanced /
+permissive), each carrying a stable `policy_id` and a live monthly
+`$`‑exposure delta. Output‑side detector re‑scans the model's response
+for entities that were **not** in your input — the leak surface every
+LLM in prod eventually gets caught on.
 
 Built with a Flask backend and a React + Tailwind + shadcn/ui frontend.
 
 ---
 
-## 🆕 What's new — Cache: Semantic Response Cache Studio (Day 88)
+## 🆕 What's new — Curtain: PII/Secret Redaction & Egress Policy Studio (Day 93)
+
+> Every prior LLM_Playground surface answered *quality* (Arena, Rubrics, Judge,
+> Suites), *robustness* (Adversary, Drift, Surgeon), *cost/routing* (Frontier,
+> Relay), *guarding against adversarial input* (Sentinel), or *saving repeated
+> calls* (Cache). None of them answer the one question every LLM product gets
+> asked in week two of production: **what personal or confidential data are we
+> shipping to third‑party providers, and are we shipping it back to the user
+> in the response too?**
+
+**Curtain** is that surface, end to end. Deterministic, two‑sided, zero third‑
+party deps, zero persistence — same request body yields the same response
+body byte‑for‑byte, which means the demo lights up on first page load without
+any provider credentials and stays byte‑identical across refreshes.
+
+### The physics
+
+**14 entity families** across four regulatory buckets:
+
+| Bucket | Entities |
+|---|---|
+| pii     | `EMAIL` · `PHONE` · `IPV4` · `UUID` · `MAC_ADDR` · `GEO_COORD` · `PERSON_NAME` · `SSN` |
+| pci     | `CREDIT_CARD` (Luhn‑valid) · `IBAN` (mod‑97‑valid) |
+| hipaa   | `DOB` |
+| secret  | `API_KEY_OPENAI` · `API_KEY_ANTHROPIC` · `API_KEY_AWS` · `API_KEY_GENERIC` · `JWT` · `URL_WITH_TOKEN` |
+
+Each entity carries a hand‑set severity (1..5) and a sanitised industry‑
+report breach cost per record ($/rec). The scanner normalises input (NFKC,
+strips zero‑width), runs all patterns in one pass, then does a longest‑first
+sweep‑line dedup so a structured 36‑char UUID always beats a naked digit run
+inside it.
+
+**5 redaction strategies** with a per‑strategy residual‑leak factor from the
+provider's perspective:
+
+| Strategy | What it does | Residual | Reversible |
+|---|---|---:|---|
+| `drop`          | remove entirely                       | 0.00 | no |
+| `mask`          | replace alphanumerics with `▓`, keep separators — preserves length so token counters stay honest | 0.00 | no |
+| `hash`          | `[EMAIL#a5f92b1c8d]` — 10‑char SHA‑256 prefix, salt‑stable | 0.05 | no |
+| `pseudonymize`  | plausible fake of the *same shape*, drawn deterministically from a curated pool | 0.05 | yes |
+| `tag`           | `[EMAIL_1]` — numbered semantic placeholder, model still knows *what* was there | 0.25 | yes |
+
+### The compiler
+
+Given a per‑entity policy, `compile_policy` returns a byte‑stable JSON blob:
+
+```json
+{
+  "policy_id": "9dac9730a4fb82b6",
+  "policy": { "EMAIL": "pseudonymize", "CREDIT_CARD": "drop", ... },
+  "salt": "curtain",
+  "engine_version": "curtain/1.0.0",
+  "stats": {
+    "reversibility_pct": 41.2,
+    "utility_loss": 0.548,
+    "strategy_histogram": { "drop": 5, "mask": 2, "tag": 7, "pseudonymize": 1 },
+    "family_coverage": { "pii": { "protected": 6, "total": 8 }, ... }
+  }
+}
+```
+
+`policy_id = SHA-256(sorted(policy) + engine + salt)[:16]`. **Same policy →
+same id, forever.** A CI check can pin its compliance stance to a specific
+`policy_id` and fail the build the moment a rule silently drifts.
+
+### The traffic simulator
+
+Given a workload sample + a policy:
+
+- **exposure_score** = `min(100, 10 · Σ_e sev(e) · (1 − 0.55^n(e)))` — saturating per‑entity, sev‑weighted
+- **breach_exposure_post** = `Σ_e count(e) · $breach(e) · residual(strategy_e)`
+- **reduction_pct** = `1 − post / pre`
+- **compliance_verdict** = per‑family lean over `{compliant, borderline, non_compliant}`
+
+At 100 K req/mo against the 8‑prompt seed workload the three canonical picks land:
+
+| Preset | Reduction | $ post/mo | Verdict (gdpr · hipaa · pci · secret) |
+|---|---:|---:|---|
+| strict     | 99.8 % | $3,344   | compliant · compliant · compliant · compliant |
+| balanced   | 99.1 % | $12,062  | non_compliant · non_compliant · compliant · compliant |
+| permissive | 97.0 % | $42,156  | non_compliant · non_compliant · non_compliant · compliant |
+
+(pre‑redaction baseline: **$1,400,625/mo** in dollar‑weighted breach exposure)
+
+### The two‑sided guarantee
+
+`redact_text` returns a `mapping` for every reversible strategy (`tag` and
+`pseudonymize`) so downstream code can `rehydrate_text(response, mapping)`
+and get the originals back after the model call. `scan_output` re‑scans the
+model's response and flags any entity **not** in the input as a *leak
+candidate* — the case where a model regurgitated training‑data PII or
+fabricated new sensitive‑looking data.
+
+### API surface
+
+| Endpoint | Method | Body | Returns |
+|---|---|---|---|
+| `/api/curtain/defaults`    | GET  | –                                                    | entities, strategies, preset map, workload catalog |
+| `/api/curtain/scan`        | POST | `{ text }`                                           | `{ spans, histogram, exposure_score, exposure_band, unique_entities, total_hits }` |
+| `/api/curtain/redact`      | POST | `{ text, preset } \| { text, policy }`                | `{ redacted, spans, mapping, delta_chars, ... }` |
+| `/api/curtain/rehydrate`   | POST | `{ text, mapping }`                                  | `{ rehydrated }` |
+| `/api/curtain/output-scan` | POST | `{ output, input_scan? }`                            | `{ leaks, leak_count, leak_score, leak_band, spans, ... }` |
+| `/api/curtain/simulate`    | POST | `{ workload_id \| workload, preset \| policy, monthly_requests }` | `{ entities_pre/post, breach_exposure_pre/post_usd, reduction_pct, compliance_verdict }` |
+| `/api/curtain/recommend`   | POST | `{ workload_id \| workload, monthly_requests }`      | three canonical policies with per‑preset stats + simulation |
+| `/api/curtain/compile`     | POST | `{ preset \| policy, sample_text? }`                  | `{ compiled: {policy_id, policy, stats}, markdown }` |
+| `/api/curtain/seed`        | GET  | –                                                    | one‑call demo payload (used by the frontend on first paint) |
+
+### The frontend
+
+Emerald‑to‑fuchsia gradient hero with a live 176‑px conic exposure ring bound
+to the scanner's current score; a 4‑tile metric strip (entities found ·
+compliance verdict · post‑redaction $/mo · output leaks); three preset cards
+(strict / balanced / permissive) with reduction %, $/mo, utility‑keep %,
+reversibility %, and per‑family verdict chips. Below: a **live scanner** with
+`<mark>` highlights on every entity span, an entity histogram, a
+**redaction preview** showing what the provider actually sees, a
+**policy composer** where every row is a click to cycle the strategy chip
+(and a slider for req/mo), and an **output‑side leak panel** that
+re‑scans a mock model response for entities not in the input. The
+**compiled policy** panel ships copy‑to‑clipboard buttons and .json / .md
+downloads keyed on the deterministic `policy_id`.
+
+---
+
+## What's new — Cache: Semantic Response Cache Studio (Day 88)
 
 > Every prior LLM_Playground surface answered *quality* (Arena, Rubrics,
 > Judge, Suites), *robustness* (Adversary, Drift, Surgeon), *cost/model

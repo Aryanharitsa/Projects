@@ -27,6 +27,7 @@ from src import frontier as frontier_lib
 from src import relay as relay_lib
 from src import sentinel as sentinel_lib
 from src import cache as cache_lib
+from src import curtain as curtain_lib
 
 llm_bp = Blueprint('llm', __name__)
 
@@ -2483,6 +2484,178 @@ def cache_compile():
 def cache_seed():
     try:
         return jsonify({'success': True, 'seed': cache_lib.seed_demo()})
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Curtain — PII / Secret Redaction & Egress Policy Studio (Day 93)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _curtain_resolve_workload(data: Dict[str, Any]) -> List[str]:
+    """Resolve a workload from a request body: inline list or workload_id."""
+    if 'workload' in data:
+        w = data.get('workload') or []
+        if not isinstance(w, list):
+            raise ValueError('workload must be a list of strings')
+        return [str(x) for x in w]
+    wid = str(data.get('workload_id') or 'default')
+    return curtain_lib.load_workload(wid)
+
+
+@llm_bp.route('/curtain/defaults', methods=['GET'])
+def curtain_defaults():
+    try:
+        return jsonify({
+            'success': True,
+            'defaults': curtain_lib.defaults(),
+            'entities': curtain_lib.list_entities(),
+            'strategies': curtain_lib.list_strategies(),
+            'presets': {k: dict(v) for k, v in curtain_lib.POLICY_PRESETS.items()},
+            'workloads': curtain_lib.list_workloads(),
+        })
+    except Exception as e:  # pragma: no cover - defensive
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/scan', methods=['POST'])
+def curtain_scan():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = data.get('text') or ''
+        if not isinstance(text, str):
+            return jsonify({'success': False, 'error': 'text must be a string'}), 400
+        return jsonify({'success': True, 'scan': curtain_lib.scan_text(text)})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _resolve_policy(data: Dict[str, Any]) -> Dict[str, str]:
+    """Resolve a policy from a request body: inline dict, preset name, or default."""
+    if 'policy' in data and isinstance(data['policy'], dict):
+        return {str(k): str(v) for k, v in data['policy'].items()}
+    preset = str(data.get('preset') or curtain_lib.DEFAULT_POLICY)
+    if preset not in curtain_lib.POLICY_PRESETS:
+        raise ValueError(f'unknown preset {preset!r}')
+    return dict(curtain_lib.POLICY_PRESETS[preset])
+
+
+@llm_bp.route('/curtain/redact', methods=['POST'])
+def curtain_redact():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = data.get('text') or ''
+        if not isinstance(text, str) or not text.strip():
+            return jsonify({'success': False, 'error': 'text is required'}), 400
+        policy = _resolve_policy(data)
+        salt = str(data.get('salt') or curtain_lib.DEFAULT_SALT)
+        result = curtain_lib.redact_text(text, policy, salt)
+        return jsonify({'success': True, 'result': result})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/rehydrate', methods=['POST'])
+def curtain_rehydrate():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = data.get('text') or ''
+        mapping = data.get('mapping') or []
+        if not isinstance(text, str):
+            return jsonify({'success': False, 'error': 'text must be a string'}), 400
+        if not isinstance(mapping, list):
+            return jsonify({'success': False, 'error': 'mapping must be a list'}), 400
+        return jsonify({
+            'success': True,
+            'rehydrated': curtain_lib.rehydrate_text(text, mapping),
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/output-scan', methods=['POST'])
+def curtain_output_scan():
+    try:
+        data = request.get_json(silent=True) or {}
+        output_text = data.get('output') or ''
+        input_scan = data.get('input_scan')  # optional prior input scan
+        if not isinstance(output_text, str):
+            return jsonify({'success': False, 'error': 'output must be a string'}), 400
+        result = curtain_lib.scan_output(output_text, input_scan=input_scan)
+        return jsonify({'success': True, 'result': result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/simulate', methods=['POST'])
+def curtain_simulate():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _curtain_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        policy = _resolve_policy(data)
+        monthly = int(data.get('monthly_requests', curtain_lib.DEFAULT_MONTHLY_REQUESTS))
+        salt = str(data.get('salt') or curtain_lib.DEFAULT_SALT)
+        sim = curtain_lib.simulate_traffic(workload, policy, monthly, salt)
+        return jsonify({'success': True, 'simulation': sim})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/recommend', methods=['POST'])
+def curtain_recommend():
+    try:
+        data = request.get_json(silent=True) or {}
+        workload = _curtain_resolve_workload(data)
+        if not workload:
+            return jsonify({'success': False, 'error': 'workload is empty'}), 400
+        monthly = int(data.get('monthly_requests', curtain_lib.DEFAULT_MONTHLY_REQUESTS))
+        salt = str(data.get('salt') or curtain_lib.DEFAULT_SALT)
+        recs = curtain_lib.recommend_policies(workload, monthly, salt)
+        return jsonify({'success': True, 'recommendations': recs})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/compile', methods=['POST'])
+def curtain_compile():
+    try:
+        data = request.get_json(silent=True) or {}
+        policy = _resolve_policy(data)
+        salt = str(data.get('salt') or curtain_lib.DEFAULT_SALT)
+        sample_text = data.get('sample_text')
+        compiled = curtain_lib.compile_policy(policy, salt, sample_text)
+        return jsonify({
+            'success': True,
+            'compiled': compiled,
+            'markdown': curtain_lib.policy_markdown(compiled),
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/curtain/seed', methods=['GET', 'POST'])
+def curtain_seed():
+    try:
+        return jsonify({'success': True, 'seed': curtain_lib.seed_demo()})
     except Exception as e:  # pragma: no cover - defensive
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
