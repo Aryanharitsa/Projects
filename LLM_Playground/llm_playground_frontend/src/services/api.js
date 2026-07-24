@@ -912,6 +912,56 @@ class ApiService {
     return this.request('/cache/seed');
   }
 
+  // ─── Studio Curtain — PII/Secret Redaction & Egress Policy (Day 93) ──────
+  async curtainDefaults() {
+    return this.request('/curtain/defaults');
+  }
+  async curtainScan(text) {
+    return this.request('/curtain/scan', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+  async curtainRedact(payload) {
+    return this.request('/curtain/redact', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainRehydrate(payload) {
+    return this.request('/curtain/rehydrate', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainOutputScan(payload) {
+    return this.request('/curtain/output-scan', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainSimulate(payload) {
+    return this.request('/curtain/simulate', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainRecommend(payload) {
+    return this.request('/curtain/recommend', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainCompile(payload) {
+    return this.request('/curtain/compile', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async curtainSeed() {
+    return this.request('/curtain/seed');
+  }
+
   // ─── Studio Insights ───────────────────────────────────────────────────────
   // Cross-cutting analytics over the whole run history: model scorecards, the
   // quality/cost efficiency frontier, spend timeline, and provider roll-up.

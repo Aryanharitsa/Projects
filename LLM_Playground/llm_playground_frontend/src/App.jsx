@@ -60,6 +60,7 @@ import {
   Compass,
   Radio,
   Database,
+  EyeClosed,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApiService from './services/api';
@@ -78,6 +79,7 @@ import FrontierStudio from './components/FrontierStudio';
 import RelayStudio from './components/RelayStudio';
 import SentinelStudio from './components/SentinelStudio';
 import CacheStudio from './components/CacheStudio';
+import CurtainStudio from './components/CurtainStudio';
 import './App.css';
 
 const App = () => {
@@ -1147,7 +1149,14 @@ const App = () => {
                       <RadioGroupItem value="cache" id="cache" />
                       <Label htmlFor="cache" className="cursor-pointer flex items-center gap-1">
                         <Database className="w-3.5 h-3.5 text-sky-600" />
-                        Cache <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-sky-500 via-emerald-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
+                        Cache
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="curtain" id="curtain" />
+                      <Label htmlFor="curtain" className="cursor-pointer flex items-center gap-1">
+                        <EyeClosed className="w-3.5 h-3.5 text-emerald-600" />
+                        Curtain <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-sky-500 to-fuchsia-500 text-white px-1.5 py-0.5 rounded">new</span>
                       </Label>
                     </div>
                   </RadioGroup>
@@ -1441,6 +1450,10 @@ const App = () => {
           ) : selectedMode === 'cache' ? (
             <div className="lg:col-span-3">
               <CacheStudio />
+            </div>
+          ) : selectedMode === 'curtain' ? (
+            <div className="lg:col-span-3">
+              <CurtainStudio />
             </div>
           ) : selectedMode === 'adversary' ? (
             <div className="lg:col-span-3">
